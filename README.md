@@ -43,7 +43,16 @@ A full list of dependencies and recommended setup steps are included in [env_cre
 
 The starting point for the `infer-subc` analysis pipeline is to perform instance segmentation on single or multichannel confocal microscopy images, where each channel labels a different intracellular component. Each organelle will be segmented from a single intensity channel. The subsequent analysis is performed at a single-cell level, so we have also developed several workflows to segement the cell area.
 
-We recommend that you use our `infer-subc` implementation for Napari called [`organelle-segmenter-plugin`](https://github.com/ndcn/organelle-segmenter-plugin) for segmentation. This will allow users to systematically test segmentation settings for each organelles, then batch process all organelles of interest across multiple cells. Alternatively, you can utilize the included set of Jupter Notebooks or your own python script calling functions from the infer_subc module to work through the segmentation process step by step for each cell.
+We recommend that you use our `infer-subc` implementation for Napari called [`organelle-segmenter-plugin`](https://github.com/ndcn/organelle-segmenter-plugin) if you will be using this package for segmentation. This will allow users to systematically test segmentation settings for each organelles, then batch process all organelles of interest across multiple cells. If you do not wish to use the GUI, you can utilize the included set of Jupter Notebooks or your own python script calling functions from the infer_subc module to work through the segmentation process step by step for each cell. Alternatively, you can use your preferred segmentation method outside of infer-subc (e.g., CellProfiler, Imaris, ImageJ, etc.).
+
+> ### Input image formatting:
+>
+> We have tested the following file formats as input in both the Napari plugin and the notesbooks:
+> 
+> - Single or multi-channel ".tiff"/".tif" or ".czi" files
+> - Compatable with 2D (single Z-plane) or 3D (Z-stack) images
+> - Dimension order: CZYX
+
 
 ### <ins>Option A:</ins> [Napari Plugin](https://github.com/ndcn/organelle-segmenter-plugin) 🔌
 
@@ -101,6 +110,10 @@ After processing all cells in your dataset, we recommend you quality check your 
 
 🚧 *In a future verions, this notebook will also include quality checks for assumptions made during quantification (i.e., only one nucleus and ER per cell, etc.).*
 
+> ### Segmentation output formatting: 
+> 
+> Segmentation outputs from the Napari plugin during batch processing or the notebooks will be saved as ".tiff" files. All organelle segmentations will include a single channel. The "masks" (e.g., cell, cytoplasm, nucleus) from the Napari plugin will stacked into a multichannel image.
+
 ## Organelle Quantification 🧮📐
 
 After each of the organelles of interest are segmented, single or multi-organelle analysis can be carried out using Jupyter Notebook-based pipeline(s). Each of the following analysis types are modular and can be used in combination or separately.
@@ -131,7 +144,7 @@ A quick note on tools and resources used...
 - [`scikit-image`](https://scikit-image.org/) -- Image analysis
 - [`itk`](https://itkpythonpackage.readthedocs.io/en/master/Quick_start_guide.html) -- Image analysis
 - [`numpy`](https://numpy.org/) -- Under the hood computation
-- ['pandas'](https://pandas.pydata.org/) -- Quantitative data manipulation
+- [`pandas`](https://pandas.pydata.org/) -- Quantitative data manipulation
 
 ### Segmentation workflow & Napari plugin design:
 Early in the develepmont we chose to leverage methods created in the `Allen Cell & Structure Segmenter` and [`napari plugin`](https://www.napari-hub.org/plugins/napari-allencell-segmenter). Although the logic of our **multi-channel** organelle segmentations required us to fork and modify their code, we hope it porvides a stable, but evolving base which will help manage accumulation of technical debt. In addition to the overall logic, we particulary leverage their *workflow* paradigm which is integral in the use of the napari plugin interface. Implementation of `infer-subc` as a Napari plugin using this framework is called [`organelle-segmenter-plugin`](https://github.com/ndcn/organelle-segmenter-plugin).
