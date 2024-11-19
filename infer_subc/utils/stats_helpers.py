@@ -425,6 +425,11 @@ def batch_summary_stats(csv_path_list: List[str],
     dist_tabs = []
     region_tabs = []
 
+    org = "_organelles"
+    contacts = "_contacts"
+    dist = "_distributions"
+    regions = "_regions"
+
     for loc in csv_path_list:
         ds_count = ds_count + 1
         loc=Path(loc)
@@ -432,11 +437,6 @@ def batch_summary_stats(csv_path_list: List[str],
         for file in files_store:
             fl_count = fl_count + 1
             stem = file.stem
-
-            org = "organelles"
-            contacts = "contacts"
-            dist = "distributions"
-            regions = "_regions"
 
             if org in stem:
                 test_orgs = pd.read_csv(file, index_col=0)
