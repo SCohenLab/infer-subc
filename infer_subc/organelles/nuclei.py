@@ -26,29 +26,27 @@ from infer_subc.core.img import (
 #  infer_nuclei_fromlabel
 ##########################
 def infer_nuclei_fromlabel(in_img: np.ndarray, 
-                           nuc_ch: Union[int,None],
-                           median_size: int, 
-                           gauss_sigma: float,
-                           thresh_factor: float,
-                           thresh_min: float,
-                           thresh_max: float,
-                           min_hole_width: int,
-                           max_hole_width: int,
-                           small_obj_width: int,
-                           fill_filter_method: str
-                           ) -> np.ndarray:
+                            nuc_ch: Union[int,None],
+                            median_sz: int, 
+                            gauss_sig: float,
+                            thresh_factor: float,
+                            thresh_min: float,
+                            thresh_max: float,
+                            min_hole_w: int,
+                            max_hole_w: int,
+                            small_obj_w: int,
+                            fill_filter_method: str
+                            ) -> np.ndarray:
     """
-    Procedure to infer nuclei from linearly unmixed input.
+    Procedure to infer nuclei from linear unmixed input.
 
     Parameters
     ------------
     in_img: np.ndarray
-        a 3d image containing all the channels (CZYX)
-    nuc_ch:
-        index of the nuc channel in the input image
-    median_size: int
+        a 3d image containing all the channels
+    median_sz: int
         width of median filter for signal
-    gauss_sigma: float
+    gauss_sig: float
         sigma for gaussian smoothing of  signal
     thresh_factor: float
         adjustment factor for log Li threholding
@@ -56,14 +54,10 @@ def infer_nuclei_fromlabel(in_img: np.ndarray,
         abs min threhold for log Li threholding
     thresh_max: float
         abs max threhold for log Li threholding
-    min_hole_w: 
-        minimum size for hole filling for cellmask signal post-processing
-    max_hole_w: 
-        hole filling cutoff for nuclei signal post-processing
-    small_obj_w: 
-        minimum object size cutoff for nuclei signal post-processing
-    fill_filter_method:
-        determines if small hole filling and small object removal should be run 'sice-by-slice' or in '3D'
+    max_hole_w: int
+        hole filling cutoff for nuclei post-processing
+    small_obj_w: int
+        minimu object size cutoff for nuclei post-processing
 
     Returns
     -------------
@@ -80,8 +74,8 @@ def infer_nuclei_fromlabel(in_img: np.ndarray,
     # PRE_PROCESSING
     ###################                
     nuclei =  scale_and_smooth(nuclei,
-                        median_size = median_size, 
-                        gauss_sigma = gauss_sigma)
+                        median_size = median_sz, 
+                        gauss_sigma = gauss_sig)
 
     ###################
     # CORE_PROCESSING
@@ -95,56 +89,56 @@ def infer_nuclei_fromlabel(in_img: np.ndarray,
     # POST_PROCESSING
     ###################
     nuclei_object = fill_and_filter_linear_size(nuclei_object, 
-                                                hole_min=min_hole_width, 
-                                                hole_max=max_hole_width, 
-                                                min_size=small_obj_width,
+                                                hole_min=min_hole_w, 
+                                                hole_max=max_hole_w, 
+                                                min_size=small_obj_w,
                                                 method=fill_filter_method)
 
     nuclei_labels = label_uint16(nuclei_object)
- 
+
     return nuclei_labels
 
 
 ##########################
 #  fixed_infer_nuclei
 ##########################
-def fixed_infer_nuclei_fromlabel(in_img: np.ndarray) -> np.ndarray:
-    """
-    Procedure to infer cellmask from linearly unmixed input, with a *fixed* set of parameters for each step in the procedure.  i.e. "hard coded"
+# def fixed_infer_nuclei_fromlabel(in_img: np.ndarray) -> np.ndarray:
+#     """
+#     Procedure to infer cellmask from linearly unmixed input, with a *fixed* set of parameters for each step in the procedure.  i.e. "hard coded"
 
-    Parameters
-    ------------
-    in_img: np.ndarray
-        a 3d image containing all the channels
+#     Parameters
+#     ------------
+#     in_img: np.ndarray
+#         a 3d image containing all the channels
  
-    Returns
-    -------------
-    nuclei_object
-        inferred nuclei
-    nap
-    """
-    nuc_ch = NUC_CH
-    median_size = 4   
-    gauss_sigma = 1.34
-    thresh_factor = 0.9
-    thresh_min = 0.1
-    thresh_max = 1.0
-    min_hole_width = 0
-    max_hole_width = 25
-    small_obj_width = 15
-    fill_filter_method = '3D'
+#     Returns
+#     -------------
+#     nuclei_object
+#         inferred nuclei
+#     nap
+#     """
+#     nuc_ch = NUC_CH
+#     median_size = 4   
+#     gauss_sigma = 1.34
+#     thresh_factor = 0.9
+#     thresh_min = 0.1
+#     thresh_max = 1.0
+#     min_hole_width = 0
+#     max_hole_width = 25
+#     small_obj_width = 15
+#     fill_filter_method = '3D'
 
-    return infer_nuclei_fromlabel( in_img,
-                                    nuc_ch,
-                                    median_size,
-                                    gauss_sigma,
-                                    thresh_factor,
-                                    thresh_min,
-                                    thresh_max,
-                                    min_hole_width,
-                                    max_hole_width,
-                                    small_obj_width,
-                                    fill_filter_method)
+#     return infer_nuclei_fromlabel( in_img,
+#                                     nuc_ch,
+#                                     median_size,
+#                                     gauss_sigma,
+#                                     thresh_factor,
+#                                     thresh_min,
+#                                     thresh_max,
+#                                     min_hole_width,
+#                                     max_hole_width,
+#                                     small_obj_width,
+#                                     fill_filter_method)
 
 ### USED ###
 ##########################
@@ -212,121 +206,121 @@ def infer_nuclei_fromcytoplasm(cytoplasm_mask: np.ndarray,
 ##########################
 #  fixed_infer_nuclei_fromcytoplasm
 ##########################
-def fixed_infer_nuclei_fromcytoplasm(cytoplasm_mask: np.ndarray) -> np.ndarray:
-    """
-    Procedure to infer cellmask from linearly unmixed input, with a *fixed* set of parameters for each step in the procedure.  i.e. "hard coded"
+# def fixed_infer_nuclei_fromcytoplasm(cytoplasm_mask: np.ndarray) -> np.ndarray:
+#     """
+#     Procedure to infer cellmask from linearly unmixed input, with a *fixed* set of parameters for each step in the procedure.  i.e. "hard coded"
 
-    Parameters
-    ------------
-    in_img: np.ndarray
-        a 3d image containing cytoplasm segmentation
+#     Parameters
+#     ------------
+#     in_img: np.ndarray
+#         a 3d image containing cytoplasm segmentation
  
-    Returns
-    -------------
-    nuclei_object
-        inferred nuclei
+#     Returns
+#     -------------
+#     nuclei_object
+#         inferred nuclei
     
-    """
-    nuc_min_hole_w = 0
-    nuc_max_hole_w = 500
-    fill_filter_method = "3D"
-    small_obj_w = 20
+#     """
+#     nuc_min_hole_w = 0
+#     nuc_max_hole_w = 500
+#     fill_filter_method = "3D"
+#     small_obj_w = 20
 
-    return infer_nuclei_fromcytoplasm(cytoplasm_mask,
-                                    nuc_min_hole_w,
-                                    nuc_max_hole_w,
-                                    fill_filter_method,
-                                    small_obj_w)
-
-
-
-def infer_and_export_nuclei(in_img: np.ndarray, meta_dict: Dict, out_data_path: Path) -> np.ndarray:
-    """
-    infer nuclei and write inferred nuclei to ome.tif file
-
-    Parameters
-    ------------
-    in_img:
-        a 3d  np.ndarray image of the inferred organelle (labels or boolean)
-    meta_dict:
-        dictionary of meta-data (ome)
-    out_data_path:
-        Path object where tiffs are written to
-
-    Returns
-    -------------
-    exported file name
-
-    """
-    nuclei = fixed_infer_nuclei_fromlabel(in_img)
-
-    out_file_n = export_inferred_organelle(nuclei, "nuclei", meta_dict, out_data_path)
-    print(f"inferred nuclei. wrote {out_file_n}")
-    return nuclei
+#     return infer_nuclei_fromcytoplasm(cytoplasm_mask,
+#                                     nuc_min_hole_w,
+#                                     nuc_max_hole_w,
+#                                     fill_filter_method,
+#                                     small_obj_w)
 
 
-def get_nuclei(in_img: np.ndarray, meta_dict: Dict, out_data_path: Path) -> np.ndarray:
-    """
-    load nucleus if it exists, otherwise calculate and write to ome.tif file
 
-    Parameters
-    ------------
-    in_img:
-        a 3d  np.ndarray image of the inferred organelle (labels or boolean)
+# def infer_and_export_nuclei(in_img: np.ndarray, meta_dict: Dict, out_data_path: Path) -> np.ndarray:
+#     """
+#     infer nuclei and write inferred nuclei to ome.tif file
 
-    meta_dict:
-        dictionary of meta-data (ome)
-    out_data_path:
-        Path object where tiffs are written to
+#     Parameters
+#     ------------
+#     in_img:
+#         a 3d  np.ndarray image of the inferred organelle (labels or boolean)
+#     meta_dict:
+#         dictionary of meta-data (ome)
+#     out_data_path:
+#         Path object where tiffs are written to
 
-    Returns
-    -------------
-    exported file name
+#     Returns
+#     -------------
+#     exported file name
 
-    """
+#     """
+#     nuclei = fixed_infer_nuclei_fromlabel(in_img)
 
-    try:
-        nuclei = import_inferred_organelle("nuclei", meta_dict, out_data_path)
-    except:
-        start = time.time()
-        print("starting segmentation...")
-        nuclei = infer_and_export_nuclei(in_img, meta_dict, out_data_path)
-        end = time.time()
-        print(f"inferred nuclei in ({(end - start):0.2f}) sec")
-
-    return nuclei
+#     out_file_n = export_inferred_organelle(nuclei, "nuclei", meta_dict, out_data_path)
+#     print(f"inferred nuclei. wrote {out_file_n}")
+#    return nuclei
 
 
-def get_nucleus(in_img: np.ndarray, meta_dict: Dict, out_data_path: Path) -> np.ndarray:
-    """
-    load nucleus if it exists, otherwise calculate and write to ome.tif file
+# def get_nuclei(in_img: np.ndarray, meta_dict: Dict, out_data_path: Path) -> np.ndarray:
+#     """
+#     load nucleus if it exists, otherwise calculate and write to ome.tif file
 
-    Parameters
-    ------------
-    in_img:
-        a 3d  np.ndarray image of the inferred organelle (labels or boolean)
+#     Parameters
+#     ------------
+#     in_img:
+#         a 3d  np.ndarray image of the inferred organelle (labels or boolean)
 
-    meta_dict:
-        dictionary of meta-data (ome)
-    out_data_path:
-        Path object where tiffs are written to
+#     meta_dict:
+#         dictionary of meta-data (ome)
+#     out_data_path:
+#         Path object where tiffs are written to
 
-    Returns
-    -------------
-    exported file name
+#     Returns
+#     -------------
+#     exported file name
 
-    """
+#     """
 
-    try:
-        nucleus = import_inferred_organelle("nuc", meta_dict, out_data_path)
-    except:
-        start = time.time()
-        print("starting segmentation...")
-        nucleus = infer_and_export_nuclei(in_img, meta_dict, out_data_path)
-        end = time.time()
-        print(f"inferred nucleus in ({(end - start):0.2f}) sec")
+#     try:
+#         nuclei = import_inferred_organelle("nuclei", meta_dict, out_data_path)
+#     except:
+#         start = time.time()
+#         print("starting segmentation...")
+#         nuclei = infer_and_export_nuclei(in_img, meta_dict, out_data_path)
+#         end = time.time()
+#         print(f"inferred nuclei in ({(end - start):0.2f}) sec")
 
-    return nucleus
+#     return nuclei
+
+
+# def get_nucleus(in_img: np.ndarray, meta_dict: Dict, out_data_path: Path) -> np.ndarray:
+#     """
+#     load nucleus if it exists, otherwise calculate and write to ome.tif file
+
+#     Parameters
+#     ------------
+#     in_img:
+#         a 3d  np.ndarray image of the inferred organelle (labels or boolean)
+
+#     meta_dict:
+#         dictionary of meta-data (ome)
+#     out_data_path:
+#         Path object where tiffs are written to
+
+#     Returns
+#     -------------
+#     exported file name
+
+#     """
+
+#     try:
+#         nucleus = import_inferred_organelle("nuc", meta_dict, out_data_path)
+#     except:
+#         start = time.time()
+#         print("starting segmentation...")
+#         nucleus = infer_and_export_nuclei(in_img, meta_dict, out_data_path)
+#         end = time.time()
+#         print(f"inferred nucleus in ({(end - start):0.2f}) sec")
+
+#     return nucleus
 
 # def infer_nuclei_fromlabel_AICS(in_img: np.ndarray, meta_dict: Dict, out_data_path: Path) -> np.ndarray:
 #     """

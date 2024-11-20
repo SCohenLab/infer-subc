@@ -5,7 +5,7 @@ import numpy as np
 
 from skimage.filters import scharr
 
-from infer_subc.core.img import label_bool_as_uint16
+from infer_subc.core.img import label_bool_as_uint16, make_aggregate
 from infer_subc.core.file_io import export_inferred_organelle, import_inferred_organelle
 from infer_subc.core.img import (
     masked_object_thresh,
@@ -107,29 +107,36 @@ def choose_max_label_cellmask_union_nucleus(cellmask_img: np.ndarray,
 ##########################
 # 1. infer_cellmask
 ##########################
+##########################
+# infer_cellmask_fromaggr
+##########################
 def infer_cellmask_fromcomposite(in_img: np.ndarray,
-                                 weights: list[int],
-                                 nuclei_labels: np.ndarray,
-                                 median_sz: int,
-                                 gauss_sig: float,
-                                 mo_method: str,
-                                 mo_adjust: float,
-                                 mo_cutoff_size: int,
-                                 min_hole_w: int,
-                                 max_hole_w: int,
-                                 small_obj_w: int,
-                                 fill_filter_method: str,
-                                 watershed_method: str
-                                 ) -> np.ndarray:
+                                  weights: list[int],
+                                  rescale: bool,
+                                  nuclei_labels: np.ndarray,
+                                  median_sz: int,
+                                  gauss_sig: float,
+                                  mo_method: str,
+                                  mo_adjust: float,
+                                  mo_cutoff_size: int,
+                                  min_hole_w: int,
+                                  max_hole_w: int,
+                                  small_obj_w: int,
+                                  fill_filter_method: str,
+                                  watershed_method: str
+                                  ) -> np.ndarray:
     """
     Procedure to infer cellmask from linear unmixed input.
 
     Parameters
     ------------
     in_img: 
-        a 3d image containing all the channels (CZYX)
+        a 3d image containing all the channels
     weights:
         a list of int that corresond to the weights for each channel in the composite; use 0 if a channel should not be included in the composite image
+    rescale:
+        True - rescale composite image
+        False - don't rescale composite image
     nuclei_labels: 
         a 3d image containing the inferred nuclei labels
     median_sz: 
@@ -144,14 +151,12 @@ def infer_cellmask_fromcomposite(in_img: np.ndarray,
         Masked Object threshold `local_adjust`
     mo_cutoff_size: 
         Masked Object threshold `size_min`
-    min_hole_w: 
-        minimum size for hole filling for cellmask signal post-processing
     max_hole_w: 
         hole filling cutoff for cellmask signal post-processing
     small_obj_w: 
-        minimum object size cutoff for cellmask signal post-processing
+        minimu object size cutoff for cellmask signal post-processing
     fill_filter_method:
-        determines if small hole filling and small object removal should be run 'sice-by-slice' or in '3D'
+        determines if the fill and filter function should be run 'sice-by-slice' or in '3D' 
     watershed_method:
         determines if the watershed should be run 'sice-by-slice' or in '3D' 
 
@@ -164,12 +169,12 @@ def infer_cellmask_fromcomposite(in_img: np.ndarray,
     ###################
     # EXTRACT
     ###################
-    struct_img = weighted_aggregate(in_img, *weights)
+    struct_img = make_aggregate(in_img, *weights, rescale)
 
     ###################
     # PRE_PROCESSING
     ###################                         
-    struct_img =  scale_and_smooth(struct_img,
+    struct_img = scale_and_smooth(struct_img,
                                    median_size = median_sz, 
                                    gauss_sigma = gauss_sig)
     
@@ -314,97 +319,97 @@ def infer_cellmask_fromcytoplasm(cytoplasm_mask: np.ndarray,
 ##########################
 #  fixed_infer_cellmask_fromcytoplasm
 ##########################
-def fixed_infer_cellmask_fromcytoplasm(cytoplasm_mask: np.ndarray,
-                                        nucleus_mask:np.ndarray) -> np.ndarray:
-    """
-    Procedure to infer cellmask from the cytoplasm mask
+# def fixed_infer_cellmask_fromcytoplasm(cytoplasm_mask: np.ndarray,
+#                                         nucleus_mask:np.ndarray) -> np.ndarray:
+#     """
+#     Procedure to infer cellmask from the cytoplasm mask
 
-    Parameters
-    ------------
-    in_img: np.ndarray
-        a 3d image containing cytoplasm segmentation
+#     Parameters
+#     ------------
+#     in_img: np.ndarray
+#         a 3d image containing cytoplasm segmentation
  
-    Returns
-    -------------
-    nuclei_object
-        inferred nuclei
+#     Returns
+#     -------------
+#     nuclei_object
+#         inferred nuclei
     
-    """
-    min_hole_w = 0
-    max_hole_w = 30
-    small_obj_w = 0
-    fill_filter_method = "3D"
+#     """
+#     min_hole_w = 0
+#     max_hole_w = 30
+#     small_obj_w = 0
+#     fill_filter_method = "3D"
 
-    return infer_cellmask_fromcytoplasm(cytoplasm_mask,
-                                         nucleus_mask,
-                                         min_hole_w,
-                                         max_hole_w,
-                                         small_obj_w,
-                                         fill_filter_method)
-
-
+#     return infer_cellmask_fromcytoplasm(cytoplasm_mask,
+#                                          nucleus_mask,
+#                                          min_hole_w,
+#                                          max_hole_w,
+#                                          small_obj_w,
+#                                          fill_filter_method)
 
 
-def infer_and_export_cellmask(
-    in_img: np.ndarray, nuclei_obj: np.ndarray, meta_dict: Dict, out_data_path: Path
-) -> np.ndarray:
-    """
-    infer cellmask and write inferred cellmask to ome.tif file
-
-    Parameters
-    ------------
-    in_img:
-        a 3d  np.ndarray image of the inferred organelle (labels or boolean)
-    nuclei_obj:
-        a 3d image containing the inferred nuclei
-    meta_dict:
-        dictionary of meta-data (ome)
-    out_data_path:
-        Path object where tiffs are written to
-
-    Returns
-    -------------
-    exported file name
-
-    """
-    cellmask = fixed_infer_cellmask_fromcomposite(in_img, nuclei_obj)
-    out_file_n = export_inferred_organelle(cellmask, "cell", meta_dict, out_data_path)
-    print(f"inferred cellmask. wrote {out_file_n}")
-    return cellmask>0
 
 
-def get_cellmask(in_img: np.ndarray, nuclei_obj: np.ndarray, meta_dict: Dict, out_data_path: Path) -> np.ndarray:
-    """
-    load cellmask if it exists, otherwise calculate and write inferred cellmask to ome.tif file
+# def infer_and_export_cellmask(
+#     in_img: np.ndarray, nuclei_obj: np.ndarray, meta_dict: Dict, out_data_path: Path
+# ) -> np.ndarray:
+#     """
+#     infer cellmask and write inferred cellmask to ome.tif file
 
-    Parameters
-    ------------
-    in_img:
-        a 3d  np.ndarray image of the inferred organelle (labels or boolean)
-    nuclei_obj:
-        a 3d image containing the inferred nuclei
-    meta_dict:
-        dictionary of meta-data (ome)
-    out_data_path:
-        Path object where tiffs are written to
+#     Parameters
+#     ------------
+#     in_img:
+#         a 3d  np.ndarray image of the inferred organelle (labels or boolean)
+#     nuclei_obj:
+#         a 3d image containing the inferred nuclei
+#     meta_dict:
+#         dictionary of meta-data (ome)
+#     out_data_path:
+#         Path object where tiffs are written to
 
-    Returns
-    -------------
-    exported file name
+#     Returns
+#     -------------
+#     exported file name
 
-    """
+#     """
+#     cellmask = fixed_infer_cellmask_fromcomposite(in_img, nuclei_obj)
+#     out_file_n = export_inferred_organelle(cellmask, "cell", meta_dict, out_data_path)
+#     print(f"inferred cellmask. wrote {out_file_n}")
+#     return cellmask>0
 
-    try:
-        cellmask = import_inferred_organelle("cell", meta_dict, out_data_path)
-    except:
-        start = time.time()
-        print("starting segmentation...")
-        cellmask = fixed_infer_cellmask_fromcomposite(in_img, nuclei_obj)
-        out_file_n = export_inferred_organelle(cellmask, "cell", meta_dict, out_data_path)
-        end = time.time()
-        print(f"inferred (and exported) cellmask in ({(end - start):0.2f}) sec")
 
-    return cellmask
+# def get_cellmask(in_img: np.ndarray, nuclei_obj: np.ndarray, meta_dict: Dict, out_data_path: Path) -> np.ndarray:
+#     """
+#     load cellmask if it exists, otherwise calculate and write inferred cellmask to ome.tif file
+
+#     Parameters
+#     ------------
+#     in_img:
+#         a 3d  np.ndarray image of the inferred organelle (labels or boolean)
+#     nuclei_obj:
+#         a 3d image containing the inferred nuclei
+#     meta_dict:
+#         dictionary of meta-data (ome)
+#     out_data_path:
+#         Path object where tiffs are written to
+
+#     Returns
+#     -------------
+#     exported file name
+
+#     """
+
+#     try:
+#         cellmask = import_inferred_organelle("cell", meta_dict, out_data_path)
+#     except:
+#         start = time.time()
+#         print("starting segmentation...")
+#         cellmask = fixed_infer_cellmask_fromcomposite(in_img, nuclei_obj)
+#         out_file_n = export_inferred_organelle(cellmask, "cell", meta_dict, out_data_path)
+#         end = time.time()
+#         print(f"inferred (and exported) cellmask in ({(end - start):0.2f}) sec")
+
+    # return cellmask
 
 ### USED ###
 ##########################

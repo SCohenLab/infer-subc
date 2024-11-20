@@ -2,17 +2,13 @@
 
 from .nuclei import (
     infer_nuclei_fromlabel,
-    infer_and_export_nuclei,
     infer_nuclei_fromlabel,
-    get_nuclei,
 )
 from .cellmask import (
     infer_cellmask_fromcomposite,
     non_linear_cellmask_transform,
     raw_cellmask_fromaggr,
     choose_max_label_cellmask_union_nucleus,
-    infer_and_export_cellmask,
-    get_cellmask,
 )
 
 # from .cellmask import infer_cellmask, fixed_infer_cellmask
