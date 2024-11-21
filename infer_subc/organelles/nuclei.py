@@ -145,11 +145,12 @@ def infer_nuclei_fromlabel(in_img: np.ndarray,
 #  infer_nuclei_fromcytoplasm
 ##########################
 def infer_nuclei_fromcytoplasm(cytoplasm_mask: np.ndarray, 
-                               nuc_min_width: int,
-                               nuc_max_width: int,
-                               fill_filter_method: str,
-                               small_obj_width: int
-                               ) -> np.ndarray:
+                                nuc_min_hole_w: int,
+                                nuc_max_hole_w: int,
+                                nuc_fill_method: str,
+                                small_obj_w: int,
+                                fill_filter_method: str
+                                ) -> np.ndarray:
     """
     Procedure to infer nuclei from linear unmixed input.
 
@@ -177,10 +178,10 @@ def infer_nuclei_fromcytoplasm(cytoplasm_mask: np.ndarray,
     cytoplasm_dilated = binary_dilation(cytoplasm_mask)
 
     cytoplasm_filled = fill_and_filter_linear_size(cytoplasm_dilated, 
-                                                   hole_min=nuc_min_width, 
-                                                   hole_max=nuc_max_width, 
+                                                   hole_min=nuc_min_hole_w, 
+                                                   hole_max=nuc_max_hole_w, 
                                                    min_size=0, 
-                                                   method=fill_filter_method)
+                                                   method=nuc_fill_method)
 
     cytoplasm_eroded = binary_erosion(cytoplasm_filled)
 
@@ -195,13 +196,12 @@ def infer_nuclei_fromcytoplasm(cytoplasm_mask: np.ndarray,
     nuclei_object = fill_and_filter_linear_size(nuclei_xor, 
                                                 hole_min=0, 
                                                 hole_max=0, 
-                                                min_size=small_obj_width,
+                                                min_size=small_obj_w,
                                                 method=fill_filter_method)
 
     nuclei_labels = label_uint16(nuclei_object)
 
     return nuclei_labels
-
 
 ##########################
 #  fixed_infer_nuclei_fromcytoplasm

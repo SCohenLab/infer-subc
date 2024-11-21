@@ -7,7 +7,7 @@ from skimage.morphology import binary_erosion
 from infer_subc.core.file_io import export_inferred_organelle, import_inferred_organelle
 from infer_subc.core.img import (apply_mask, 
                                  label_bool_as_uint16, 
-                                 weighted_aggregate, 
+                                 make_aggregate, 
                                  scale_and_smooth, 
                                  masked_object_thresh, 
                                  fill_and_filter_linear_size,
@@ -110,11 +110,12 @@ def get_cytoplasm(nuclei_obj: np.ndarray, cellmask: np.ndarray, meta_dict: Dict,
 ### USED ###
 ##########################
 # infer_cytoplasm_fromcomposite
-# alternative workflow "a" 
+# alternative workflow "a & b" 
 # for cells without nuclei labels
 ##########################
 def infer_cytoplasm_fromcomposite(in_img: np.ndarray,
                                   weights: list[int],
+                                  rescale: bool,
                                   median_sz: int,
                                   gauss_sig: float,
                                   mo_method: str,
@@ -126,7 +127,7 @@ def infer_cytoplasm_fromcomposite(in_img: np.ndarray,
                                   fill_filter_method: str
                                   ) -> np.ndarray:
     """
-    Procedure to infer cytoplasm from linear unmixed input.
+    Procedure to infer cellmask from linear unmixed input.
 
     Parameters
     ------------
@@ -134,10 +135,15 @@ def infer_cytoplasm_fromcomposite(in_img: np.ndarray,
         a 3d image containing all the channels
     weights:
         a list of int that corresond to the weights for each channel in the composite; use 0 if a channel should not be included in the composite image
+    rescale:
+        True = rescale composite
+        False = don't rescale composite
+    nuclei_labels: 
+        a 3d image containing the inferred nuclei labels
     median_sz: 
-        width of median filter for cytoplasm signal
+        width of median filter for _cellmask_ signal
     gauss_sig: 
-        sigma for gaussian smoothing of cytoplasm signal
+        sigma for gaussian smoothing of _cellmask_ signal
     mo_method: 
          which method to use for calculating global threshold. Options include:
          "triangle" (or "tri"), "median" (or "med"), and "ave_tri_med" (or "ave").
@@ -147,22 +153,22 @@ def infer_cytoplasm_fromcomposite(in_img: np.ndarray,
     mo_cutoff_size: 
         Masked Object threshold `size_min`
     max_hole_w: 
-        hole filling cutoff for cytoplasm signal post-processing
+        hole filling cutoff for cellmask signal post-processing
     small_obj_w: 
-        minimu object size cutoff for cytoplasm signal post-processing
+        minimu object size cutoff for cellmask signal post-processing
     fill_filter_method:
-        determines if hole filling and small object removal should be run 'sice-by-slice' or in '3D' 
+        determines if fill and filter should be run 'sice-by-slice' or in '3D' 
 
     Returns
     -------------
-    ccytoplasm_mask:
-        a logical/labels object defining boundaries of cytoplasm
+    cellmask_mask:
+        a logical/labels object defining boundaries of cellmask
 
     """
     ###################
     # EXTRACT
     ###################
-    struct_img = weighted_aggregate(in_img, *weights)
+    struct_img = make_aggregate(in_img, *weights, rescale)
 
     ###################
     # PRE_PROCESSING
