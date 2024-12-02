@@ -167,51 +167,31 @@ def make_all_metrics_tables(source_file: str,
     #######################################
     # collect non-redundant contact metrics 
     #######################################
-    # list the non-redundant organelle pairs
-    contact_combos = list(itertools.combinations(list_obj_names, 2))
-
-    # container to keep contact data in
-    contact_tabs = []
-
-    # loop through each pair and measure contacts
-    for pair in contact_combos:
-        # pair names
-        a_name = pair[0]
-        b_name = pair[1]
-
-        # segmentations to measure
-        if a_name == 'ER':
-            # ensure ER is only one object
-            a = (list_obj_segs[list_obj_names.index(a_name)] > 0).astype(np.uint16)
+    if len(list_obj_names>2):
+        if include_contact_dist:
+            contact_tabs, contact_dist_tabs = get_contact_metrics_3D(list_obj_names=list_obj_names,
+                                                                     list_obj_segs=list_obj_segs,
+                                                                     mask=mask,
+                                                                     scale=scale,
+                                                                     include_dist=include_contact_dist, 
+                                                                     dist_centering_obj=dist_centering_obj,
+                                                                     dist_num_bins=dist_num_bins,
+                                                                     dist_zernike_degrees=dist_zernike_degrees,
+                                                                     dist_center_on=dist_center_on,
+                                                                     dist_keep_center_as_bin=dist_keep_center_as_bin)
+            for tab in contact_dist_tabs:
+                dist_tabs.append(tab)
         else:
-            a = list_obj_segs[list_obj_names.index(a_name)]
-        
-        if b_name == 'ER':
-            # ensure ER is only one object
-            b = (list_obj_segs[list_obj_names.index(b_name)] > 0).astype(np.uint16)
-        else:
-            b = list_obj_segs[list_obj_names.index(b_name)]
-        
-
-        if include_contact_dist == True:
-            contact_tab, contact_dist_tab = get_contact_metrics_3D(a, a_name, 
-                                                                   b, b_name, 
-                                                                   mask, 
-                                                                   scale, 
-                                                                   include_dist=include_contact_dist,
-                                                                   dist_centering_obj=centering,
-                                                                   dist_num_bins=dist_num_bins,
-                                                                   dist_zernike_degrees=dist_zernike_degrees,
-                                                                   dist_center_on=dist_center_on,
-                                                                   dist_keep_center_as_bin=dist_keep_center_as_bin)
-            dist_tabs.append(contact_dist_tab)
-        else:
-            contact_tab = get_contact_metrics_3D(a, a_name, 
-                                                 b, b_name, 
-                                                 mask, 
-                                                 scale, 
-                                                 include_dist=include_contact_dist)
-        contact_tabs.append(contact_tab)
+            contact_tabs = get_contact_metrics_3D(list_obj_names=list_obj_names,
+                                                  list_obj_segs=list_obj_segs,
+                                                  mask=mask,
+                                                  scale=scale,
+                                                  include_dist=include_contact_dist, 
+                                                  dist_centering_obj=dist_centering_obj,
+                                                  dist_num_bins=dist_num_bins,
+                                                  dist_zernike_degrees=dist_zernike_degrees,
+                                                  dist_center_on=dist_center_on,
+                                                  dist_keep_center_as_bin=dist_keep_center_as_bin)
 
 
     ###########################################

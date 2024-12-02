@@ -745,9 +745,7 @@ def get_contact_metrics_3D(list_obj_names: list[str],
                                                          dist_keep_center_as_bin=dist_keep_center_as_bin)
             cont_tabs.append(cont_tab)
             dist_tabs.append(dist_tab)
-        cont_tables = pd.concat(cont_tabs)
-        dist_tables = pd.concat(dist_tabs)
-        return cont_tables, dist_tables
+        return cont_tabs, dist_tabs
     else:
         for cont in possib:
             cont_tab = contact_metric_analysis(contact_ID=cont,
@@ -756,8 +754,8 @@ def get_contact_metrics_3D(list_obj_names: list[str],
                                                splitter=splitter,
                                                scale=scale,
                                                include_dist=False)
-        cont_tables = pd.concat(cont_tabs)
-        return cont_tables
+            cont_tabs.append(cont_tab)
+        return cont_tabs
 
 # def get_aXb_stats_3D(a, b, mask, use_shell_a=False):
 #     """
