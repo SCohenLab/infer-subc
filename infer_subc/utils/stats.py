@@ -642,17 +642,17 @@ def contact_metric_analysis(contact_ID: str,
         return props_table
 
 ### USED ###
-def _get_contact_metrics_3D(list_obj_names: list[str],
-                            list_obj_segs: list[np.ndarray],
-                            mask: np.ndarray,
-                            splitter: str="X",
-                            scale: Union[tuple, None]=None,
-                            include_dist:bool=False, 
-                            dist_centering_obj: Union[np.ndarray, None]=None,
-                            dist_num_bins: Union[int, None]=None,
-                            dist_zernike_degrees: Union[int, None]=None,
-                            dist_center_on: Union[bool, None]=None,
-                            dist_keep_center_as_bin: Union[bool, None]=None):
+def get_contact_metrics_3D(list_obj_names: list[str],
+                           list_obj_segs: list[np.ndarray],
+                           mask: np.ndarray,
+                           splitter: str="X",
+                           scale: Union[tuple, None]=None,
+                           include_dist:bool=False, 
+                           dist_centering_obj: Union[np.ndarray, None]=None,
+                           dist_num_bins: Union[int, None]=None,
+                           dist_zernike_degrees: Union[int, None]=None,
+                           dist_center_on: Union[bool, None]=None,
+                           dist_keep_center_as_bin: Union[bool, None]=None):
     """
     collect volumentric measurements of intersection between n, n+1, n+2... organelle types for an entire cell
 
