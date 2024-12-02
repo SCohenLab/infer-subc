@@ -396,12 +396,64 @@ def get_region_morphology_3D(region_seg: np.ndarray,
 
     return props_table
 
-### USED ###
-def get_contact_metrics_3D(a: np.ndarray,
-                            a_name: str, 
-                            b: np.ndarray, 
-                            b_name:str, 
-                            mask: np.ndarray, 
+def make_dict(list_obj_names: list[str],
+               list_obj_segs: list[np.ndarray]):
+    organelle_segs = {}                                                     
+    for idx, name in enumerate(list_obj_names):                                  
+        if name == 'ER':                                                    
+            organelle_segs[name]=(list_obj_segs[idx]>0).astype(np.uint16)        
+        else:                                                       
+            organelle_segs[name]=list_obj_segs[idx]
+    return organelle_segs
+
+def all_combo(list_obj_names: list[str], splitter: str="X"):
+    all_pos = []
+    for n in list(map(lambda x:x+2, (range(len(list_obj_names)-1)))):
+        all_pos += itertools.combinations(list_obj_names, n)
+    possib = [splitter.join(cont) for cont in all_pos]
+    return possib
+
+def create_contact(orgs:str,
+                    organelle_segs: dict[str:np.ndarray],
+                    splitter: str="X") -> tuple[np.ndarray, np.ndarray]: 
+    ##########################################
+    ## CREATE CONTACT
+    ##########################################
+    site = np.ones_like(organelle_segs[orgs.split(splitter)[0]])
+    for org in orgs.split(splitter):
+        b = organelle_segs[org]             
+        valid = (b>0)*(site>0)
+        digit = len(str(np.max(site)))      
+        site = (b*(10**(digit)))+site       
+        site[valid.astype(bool)==False]=0   
+        site = label(site)             
+        
+             
+    ##########################################
+    ## DETERMINE REDUNDANT CONTACTS
+    ##########################################
+    LOc_NR = site.copy()                         
+    for org, val in organelle_segs.items():         
+        if (org not in orgs.split(splitter)
+            and np.any(site*val)):
+            print(f"Examining {orgs} Higher Order Contacts With {org}...", end="\r")               
+            digit = len(str(np.max(val)))           
+            valid = (LOc_NR>0)*(val>0)              
+            HOc = (LOc_NR*(10**(digit)))+val        
+            HOc[valid.astype(bool)==False]=0        
+            HOc = label(HOc) 
+            maxi = len(np.unique(LOc_NR[HOc>0]))                       
+            for num, id in enumerate(np.unique(site[HOc > 0])):
+                per = round((100*((num+1)/maxi)), 2)   
+                LOc_NR[LOc_NR==id] = 0
+                print(f"Examining {orgs} Higher Order Contacts With {org}: {per}% complete", end="\r")
+            print(f"Examining {orgs} Higher Order Contacts With {org}: {per}% complete")     
+    return site, LOc_NR
+
+def contact_metric_analysis(contact_ID: str,
+                            org_dict: dict,
+                            mask: np.ndarray,
+                            splitter: str="X",
                             scale: Union[tuple, None]=None,
                             include_dist:bool=False, 
                             dist_centering_obj: Union[np.ndarray, None]=None,
@@ -410,20 +462,20 @@ def get_contact_metrics_3D(a: np.ndarray,
                             dist_center_on: Union[bool, None]=None,
                             dist_keep_center_as_bin: Union[bool, None]=None):
     """
-    collect volumentric measurements of organelle `a` intersect organelle `b`
+    collect volumentric measurements of intersection between n organelle types
 
     Parameters
     ------------
-    a: np.ndarray
-        3D (ZYX) np.ndarray of one set of objects that will be assessed as part of a "contact"
-    a_name: str
-        the name or nickname of object a; this will be used for record keeping purposed in the output dataframe 
-    b: np.ndarray
-        3D (ZYX) np.ndarray of one set of objects that will be assessed as part of a "contact"
-    b_name: str
-        the name or nickname of object b; this will be used for record keeping purposed in the output dataframe 
+    contact_ID: str
+        a value used to describe the organelles present in the overlap that can be divided by the splitter value
+    org_dict: dict
+        a dictionary of all object segmentations assigned to keys with their objects
     mask: np.ndarray
         3D (ZYX) binary mask of the area to measure contacts from
+    splitter: str
+        a value used to separate the contact_ID to determine objects present in overlap
+    scale: tuple
+        a value present in the metadata determining the scale of the (ZYX) axis
     include_dist:bool=False
         *optional*
         True = include the XY and Z distribution measurements of the contact sites within the masked region 
@@ -469,19 +521,21 @@ def get_contact_metrics_3D(a: np.ndarray,
     
     Returns
     -------------
-    pandas dataframe of containing regionprops measurements (columns) for each overlap region between a and b (rows)
+    pandas dataframe of containing regionprops measurements (columns) for each overlap region (rows)
     
     """
-    
     #########################
     ## CREATE OVERLAP REGIONS
     #########################
-    a = _assert_uint16_labels(a)
-    b = _assert_uint16_labels(b)
+    # run create contact function
+    site, LOc_NR = create_contact(contact_ID, org_dict, splitter)
 
-    a_int_b = np.logical_and(a > 0, b > 0)
+    #assert the nth order contact to within the cellmask
+    labels = label(apply_mask(site, mask)).astype(int)
 
-    labels = label(apply_mask(a_int_b, mask)).astype("int")
+    #assert the nth order contacts present in n+1 order contacts to within the cellmask
+    para_labels = apply_mask((LOc_NR>0), mask).astype(int) * labels
+
 
     ##########################################
     ## CREATE LIST OF REGIONPROPS MEASUREMENTS
@@ -490,78 +544,83 @@ def get_contact_metrics_3D(a: np.ndarray,
     properties = ["label"]
 
     # add position
-    properties = properties + ["centroid", "bbox"]
+    properties += ["centroid", "bbox"]
 
     # add area
-    properties = properties + ["area", "equivalent_diameter"] # "num_pixels", 
+    properties += ["area", "equivalent_diameter"] # "num_pixels", 
 
-    # add shape measurements
-    properties = properties + ["extent", "euler_number", "solidity", "axis_major_length", "slice"] # "feret_diameter_max", "axis_minor_length", 
+    # add shape measurements - NOTE: can't include minor axis measure because some of the contact sites are only one pixel
+    properties += ["extent", "euler_number", "solidity", "axis_major_length", "slice"] # "feret_diameter_max",  , "axis_minor_length"
+    
 
     ##################
     ## RUN REGIONPROPS
     ##################
-    props = regionprops_table(labels, intensity_image=None, properties=properties, extra_properties=None, spacing=scale)
+    props = regionprops_table(labels, 
+                              intensity_image=None, 
+                              properties=properties, 
+                              extra_properties=None, 
+                              spacing=scale)
 
     ##################################################################
     ## RUN SURFACE AREA FUNCTION SEPARATELY AND APPEND THE PROPS_TABLE
     ##################################################################
     surface_area_tab = pd.DataFrame(surface_area_from_props(labels, props, scale))
 
-    ######################################################
-    ## LIST WHICH ORGANELLES ARE INVOLVED IN THE CONTACTS
-    ######################################################
-    label_a = []
-    index_ab = []
-    label_b = []
-    for index, lab in enumerate(props["label"]):
-        # this seems less elegant than you might wish, given that regionprops returns a slice,
-        # but we need to expand the slice out by one voxel in each direction, or surface area freaks out
-        volume = labels[props["slice"][index]]
-        la = a[props["slice"][index]]
-        lb = b[props["slice"][index]]
-        volume = volume == lab
-        la = la[volume]
-        lb = lb[volume]
+    ####################################################
+    ## LIST WHICH ORGANELLES ARE INVOLVED IN THE CONTACT
+    ####################################################
+    cont_inv = []
+    involved = contact_ID.split(splitter)
+    indexes = dict.fromkeys(involved, [])
+    indexes[contact_ID] = []
 
-        all_as = np.unique(la[la>0]).tolist()
-        all_bs = np.unique(lb[lb>0]).tolist()
-        if len(all_as) != 1:
-            print(f"we have an error.  as-> {all_as}")
-        if len(all_bs) != 1:
-            print(f"we have an error.  bs-> {all_bs}")
+    redundancy = []
+    for index, l in enumerate(props["label"]):
+        cont_inv.clear()
+        present = para_labels[props["slice"][index]]
+        present = present==l
+        redundant = not np.any(present)
+        redundancy.append(redundant)
+        for org in involved:
+            volume = labels[props["slice"][index]]
+            lorg = org_dict[org][props["slice"][index]]
+            volume = volume==l
+            lorg = lorg[volume]                                 
+            all_inv = np.unique(lorg[lorg>0]).tolist()          
+            if len(all_inv) != 1:
+                print(f"we have an error.  as-> {all_inv}")
+            indexes[org].append(all_inv[0])
+            cont_inv.append(f"{all_inv[0]}")
+        indexes[contact_ID].append('_'.join(cont_inv))
 
-        label_a.append(f"{all_as[0]}" )
-        label_b.append(f"{all_bs[0]}" )
-        index_ab.append(f"{all_as[0]}_{all_bs[0]}")
-
-
-    ######################################################
+        
+    ##################################################
     ## CREATE COMBINED DATAFRAME OF THE QUANTIFICATION
-    ######################################################
+    ##################################################
     props_table = pd.DataFrame(props)
     props_table.drop(columns=['slice', 'label'], inplace=True)
-    props_table.insert(0, 'label',value=index_ab)
-    props_table.insert(0, "object", f"{a_name}X{b_name}")
+    props_table.insert(0, 'label',value=indexes[contact_ID])
+    props_table.insert(0, "object", contact_ID)
     props_table.rename(columns={"area": "volume"}, inplace=True)
-
     props_table.insert(11, "surface_area", surface_area_tab)
-    props_table.insert(13, "SA_to_volume_ratio", props_table["surface_area"].div(props_table["volume"]))
-
+    props_table.insert(13, "SA_to_volume_ratio", 
+    props_table["surface_area"].div(props_table["volume"]))
     if scale is not None:
         round_scale = (round(scale[0], 4), round(scale[1], 4), round(scale[2], 4))
         props_table.insert(loc=2, column="scale", value=f"{round_scale}")
     else: 
-        props_table.insert(loc=2, column="scale", value=f"{tuple(np.ones(labels.ndim))}") 
+        props_table.insert(loc=2, column="scale", value=f"{tuple(np.ones(labels.ndim))}")
+    props_table.insert(2, "in_higher_order", list(map(bool, redundancy)))
 
 
     ######################################################
     ## optional: DISTRIBUTION OF CONTACTS MEASUREMENTS
     ######################################################
-    if include_dist is True:
+    if include_dist:
         XY_contact_dist, XY_bins, XY_wedges = get_XY_distribution(mask=mask, 
-                                                                  obj=a_int_b,
-                                                                  obj_name=f"{a_name}X{b_name}",
+                                                                  obj=site,
+                                                                  obj_name=contact_ID,
                                                                   centering_obj=dist_centering_obj,
                                                                   scale=scale,
                                                                   center_on=dist_center_on,
@@ -570,16 +629,135 @@ def get_contact_metrics_3D(a: np.ndarray,
                                                                   zernike_degrees=dist_zernike_degrees)
         
         Z_contact_dist = get_Z_distribution(mask=mask,
-                                            obj=a_int_b,
-                                            obj_name=f"{a_name}X{b_name}",
+                                            obj=site,
+                                            obj_name=contact_ID,
                                             center_obj=dist_centering_obj,
                                             scale=scale)
-        
         contact_dist_tab = pd.merge(XY_contact_dist, Z_contact_dist, on=["object", "scale"])
 
+        indexes.clear()
         return props_table, contact_dist_tab
     else:
+        indexes.clear()
         return props_table
+
+### USED ###
+def _get_contact_metrics_3D(list_obj_names: list[str],
+                            list_obj_segs: list[np.ndarray],
+                            mask: np.ndarray,
+                            splitter: str="X",
+                            scale: Union[tuple, None]=None,
+                            include_dist:bool=False, 
+                            dist_centering_obj: Union[np.ndarray, None]=None,
+                            dist_num_bins: Union[int, None]=None,
+                            dist_zernike_degrees: Union[int, None]=None,
+                            dist_center_on: Union[bool, None]=None,
+                            dist_keep_center_as_bin: Union[bool, None]=None):
+    """
+    collect volumentric measurements of intersection between n, n+1, n+2... organelle types for an entire cell
+
+    Parameters
+    ------------
+    list_obj_names: list
+        a list of the names of objects used in making contacts
+    list_obj_segs: list
+        a list of the segmentations of the objects used in making contacts
+    mask: np.ndarray
+        3D (ZYX) binary mask of the area to measure contacts from
+    splitter: str="X"
+        a value used to separate the organelles in their IDs
+    scale: tuple
+        3D (ZYX) assignment for the scaling of each axis
+        include_dist:bool=False
+        *optional*
+        True = include the XY and Z distribution measurements of the contact sites within the masked region 
+        (utilizing the functions get_XY_distribution() and get_Z_distribution() from Infer-subc)
+        False = do not include distirbution measurements
+    dist_centering_obj: Union[np.ndarray, None]=None
+        ONLY NEEDED IF include_dist=True; if None, the center of the mask will be used
+        3D (ZYX) np.ndarray containing the object to use for centering the XY distribution mask
+    dist_num_bins: Union[int, None]=None
+        ONLY NEEDED IF include_dist=True; if None, the default is 5
+    dist_zernike_degrees: Unions[int, None]=None,
+        ONLY NEEDED IF include_dist=True; if None, the zernike share measurements will not be included in the distribution
+        the number of zernike degrees to include for the zernike shape descriptors
+    dist_center_on: Union[bool, None]=None
+        ONLY NEEDED IF include_dist=True; if None, the default is False
+        True = distribute the bins from the center of the centering object
+        False = distribute the bins from the edge of the centering object
+    dist_keep_center_as_bin: Union[bool, None]=None
+        ONLY NEEDED IF include_dist=True; if None, the default is True
+        True = include the centering object area when creating the bins
+        False = do not include the centering object area when creating the bins
+
+    Regionprops measurements:
+    ------------------------
+    ['label',
+    'centroid',
+    'bbox',
+    'area',
+    'equivalent_diameter',
+    'extent',
+    'feret_diameter_max',
+    'euler_number',
+    'convex_area',
+    'solidity',
+    'axis_major_length',
+    'axis_minor_length']
+
+    Additional measurements:
+    ----------------------
+    ['surface_area']
+
+    
+    Returns
+    -------------
+    pandas dataframe of containing regionprops measurements (columns) for each overlap region (rows)
+    """
+
+    ########################
+    ## CREATE ORGANELLE DICT
+    ########################
+    organelle_segs = make_dict(list_obj_names, list_obj_segs)                                                 
+    
+    #########################
+    ## LIST POSSIBLE OVERLAPS
+    #########################
+    possib = all_combo(list_obj_names, splitter)
+
+    #######################
+    ## ANALYZE ALL OVERLAPS
+    #######################
+    cont_tabs=[]
+    dist_tabs=[]
+    if include_dist:
+        for cont in possib:
+            cont_tab, dist_tab = contact_metric_analysis(contact_ID=cont,
+                                                         org_dict=organelle_segs,
+                                                         mask=mask,
+                                                         splitter=splitter,
+                                                         scale=scale,
+                                                         include_dist=True,
+                                                         dist_centering_obj=dist_centering_obj,
+                                                         dist_num_bins=dist_num_bins,
+                                                         dist_zernike_degrees=dist_zernike_degrees,
+                                                         dist_center_on=dist_center_on,
+                                                         dist_keep_center_as_bin=dist_keep_center_as_bin)
+            cont_tabs.append(cont_tab)
+            dist_tabs.append(dist_tab)
+        cont_tables = pd.concat(cont_tabs)
+        dist_tables = pd.concat(dist_tabs)
+        return cont_tables, dist_tables
+    else:
+        for cont in possib:
+            cont_tab = contact_metric_analysis(contact_ID=cont,
+                                               org_dict=organelle_segs,
+                                               mask=mask,
+                                               splitter=splitter,
+                                               scale=scale,
+                                               include_dist=False)
+        cont_tables = pd.concat(cont_tabs)
+        return cont_tables
 
 # def get_aXb_stats_3D(a, b, mask, use_shell_a=False):
 #     """
