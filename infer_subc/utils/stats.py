@@ -41,6 +41,109 @@ def _my_props_to_dict(
 
     return _props_to_dict(rp, properties=properties, separator="-")
 
+def get_morphology_metrics(segmentation_img: np.ndarray, 
+                           seg_name: str, 
+                           intensity_img, 
+                           mask: np.ndarray, 
+                           scale: Union[tuple, None]=None):
+    """
+    Parameters
+    ------------
+    segmentation_img:
+        an np.ndarray of segmented objects 
+    seg_name: str
+        a name or nickname (usually the segmentation file suffix) of the object being measured; this will be used for record keeping in the output table
+    intensity_img:
+        a single-channel np.ndarray contain gray scale values from the "raw" image the segmentation is based on; this image should be the same shape as the segmentation file
+    mask:
+        a binary np.ndarray mask of the area to measure from; this image should be the same shape as the segmentation file
+    scale: tuple, optional
+        a tuple that contains the real world dimensions for each dimension in the image (Z, Y, X)
+
+
+    Regionprops measurements:
+    ------------------------
+    'label',
+    'centroid',
+    'bbox',
+    'area',
+    'equivalent_diameter',
+    'extent',
+    'euler_number',
+    'solidity',
+    'axis_major_length',
+    'min_intensity',
+    'max_intensity',
+    'mean_intensity'
+
+    Additional measurements:
+    -----------------------
+    'standard_deviation_intensity',
+    'surface_area',
+    'SA_to_volume_ratio`
+
+
+    Returns
+    -------------
+    pandas dataframe of containing regionprops measurements (columns) for each object in the segmentation image (rows) and the regionprops object
+    
+    """
+    ###################################################
+    ## MASK THE ORGANELLE OBJECTS THAT WILL BE MEASURED
+    ###################################################
+    input_labels = _assert_uint16_labels(segmentation_img)
+    input_labels = apply_mask(input_labels, mask)
+
+    ##########################################
+    ## CREATE LIST OF REGIONPROPS MEASUREMENTS
+    ##########################################
+    # start with LABEL
+    properties = ["label", "centroid", "bbox", "area", 
+                  "equivalent_diameter", "extent", "euler_number", "solidity", "axis_major_length",
+                  "min_intensity", "max_intensity", "mean_intensity"]
+
+    #######################
+    ## ADD EXTRA PROPERTIES
+    #######################
+    def standard_deviation_intensity(region, intensities):
+        return np.std(intensities[region])
+
+    extra_properties = [standard_deviation_intensity]
+
+    ##################
+    ## RUN REGIONPROPS
+    ##################
+    props = regionprops_table(input_labels, 
+                           intensity_image=intensity_img, 
+                           properties=properties,
+                           extra_properties=extra_properties,
+                           spacing=scale)
+
+    props_table = pd.DataFrame(props)
+
+    ##################################################################
+    ## RUN SURFACE AREA FUNCTION SEPARATELY AND APPEND THE PROPS_TABLE
+    ##################################################################
+    surface_area_tab = pd.DataFrame(surface_area_from_props(input_labels, props, scale))
+
+    #############################################
+    ## RENAME AND ADD ADDITIONAL METADATA COLUMNS
+    #############################################
+    props_table.insert(0, "object", seg_name)
+    props_table.rename(columns={"area": "volume"}, inplace=True)
+
+    if scale is not None:
+        round_scale = (round(scale[0], 4), round(scale[1], 4), round(scale[2], 4))
+        props_table.insert(loc=2, column="scale", value=f"{round_scale}")
+    else: 
+        props_table.insert(loc=2, column="scale", value=f"{tuple(np.ones(segmentation_img.ndim))}") 
+
+    props_table.insert(12, "surface_area", surface_area_tab)
+    props_table.insert(14, "SA_to_volume_ratio", props_table["surface_area"].div(props_table["volume"]))
+
+
+    return props_table
+
 ### USED ###
 def get_org_morphology_3D(segmentation_img: np.ndarray, 
                            seg_name: str, 
