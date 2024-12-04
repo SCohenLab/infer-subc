@@ -6,6 +6,7 @@ from skimage.measure import regionprops_table, regionprops, mesh_surface_area, m
 from skimage.measure._regionprops import _props_to_dict
 from typing import Tuple, Any, Union
 import itertools
+import warnings
 
 # from scipy.ndimage import maximum_position, center_of_mass
 from scipy.ndimage import sum as ndi_sum
@@ -88,6 +89,9 @@ def get_morphology_metrics(segmentation_img: np.ndarray,
     pandas dataframe of containing regionprops measurements (columns) for each object in the segmentation image (rows) and the regionprops object
     
     """
+    # dealing with numerous solidity warning from regionprops
+    warnings.simplefilter("ignore")
+
     ###################################################
     ## MASK THE ORGANELLE OBJECTS THAT WILL BE MEASURED
     ###################################################
@@ -140,6 +144,9 @@ def get_morphology_metrics(segmentation_img: np.ndarray,
 
     props_table.insert(12, "surface_area", surface_area_tab)
     props_table.insert(14, "SA_to_volume_ratio", props_table["surface_area"].div(props_table["volume"]))
+
+    # print this statement to let user known of suppressed warnings
+    if Warning: print(f"Warning(s) suppressed while quantifying {seg_name}.")
 
 
     return props_table
