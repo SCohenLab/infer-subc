@@ -1,3 +1,4 @@
+### Annotated on 29-12-24
 import json
 
 from pathlib import Path
@@ -15,6 +16,8 @@ class ConfigurationException(Exception):
 
     pass
 
+### I am not exactly sure what an non-exit exception is, but it appears that this stops the workflow
+### from crashing when there is an error from reading the config files, it just executes a pass
 
 class WorkflowConfig:
     """
@@ -32,6 +35,9 @@ class WorkflowConfig:
         if self._available_workflow_names is None:
             json_list = sorted(Directories.get_structure_config_dir().glob("conf_*.json"))
             self._available_workflow_names = [p.stem[5:] for p in json_list]
+
+            ### searches in the infer_subc\organelles_config folder and lists the names of the workflows
+            ### if the worflow name is a derivation of 'conf_*workflow name*.json'
 
         return self._available_workflow_names
 
