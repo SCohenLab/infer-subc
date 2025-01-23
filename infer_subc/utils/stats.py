@@ -415,7 +415,7 @@ def all_combo(list_obj_names: list[str], splitter: str="X"):
 
 def create_contact(orgs:str,
                    organelle_segs: dict[str:np.ndarray],
-                   splitter: str="X"): 
+                   splitter: str="X") -> tuple[np.ndarray, np.ndarray]: 
     ##########################################
     ## CREATE CONTACT
     ##########################################
