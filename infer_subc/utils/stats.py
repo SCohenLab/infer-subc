@@ -410,14 +410,14 @@ def all_combo(list_obj_names: list[str], splitter: str="X"):
     all_pos = []
     for n in list(map(lambda x:x+2, (range(len(list_obj_names)-1)))):
         all_pos += itertools.combinations(list_obj_names, n)
-    possib = [splitter.join(cont) for cont in all_pos]
+    possib = [splitter.join(inter) for inter in all_pos]
     return possib
 
-def create_contact(orgs:str,
+def create_overlap(orgs:str,
                    organelle_segs: dict[str:np.ndarray],
                    splitter: str="X") -> tuple[np.ndarray, np.ndarray]: 
     ##########################################
-    ## CREATE CONTACT
+    ## CREATE OVERLAP
     ##########################################
     site = np.ones_like(organelle_segs[orgs.split(splitter)[0]])
     for org in orgs.split(splitter):
@@ -429,18 +429,18 @@ def create_contact(orgs:str,
         site = label(site)             
     return site
 
-def find_non_redundant_contacts(site: np.ndarray,
+def find_non_redundant_overlaps(site: np.ndarray,
                                 orgs: str,
                                 organelle_segs: dict[str:np.ndarray],
                                 splitter: str="X"):
     ##########################################
-    ## DETERMINE REDUNDANT CONTACTS
+    ## DETERMINE REDUNDANT OVERLAPS
     ##########################################
     LOc_NR = site.copy()                         
     for org, val in organelle_segs.items():         
         if (org not in orgs.split(splitter)
             and np.any(site*val)):
-            print(f"Examining {orgs} Higher Order Contacts With {org}...", end="\r")               
+            print(f"Examining {orgs} Higher Order Interactions With {org}...", end="\r")               
             digit = len(str(np.max(val)))           
             valid = (LOc_NR>0)*(val>0)              
             HOc = (LOc_NR*(10**(digit)))+val        
@@ -450,23 +450,23 @@ def find_non_redundant_contacts(site: np.ndarray,
             for num, id in enumerate(np.unique(site[HOc > 0])):
                 per = round((100*((num+1)/maxi)), 2)   
                 LOc_NR[LOc_NR==id] = 0
-                print(f"Examining {orgs} Higher Order Contacts With {org}: {per}% complete", end="\r")
-            print(f"Examining {orgs} Higher Order Contacts With {org}: {per}% complete")     
+                print(f"Examining {orgs} Higher Order Interactions With {org}: {per}% complete", end="\r")
+            print(f"Examining {orgs} Higher Order Interactions With {org}: {per}% complete")     
     return LOc_NR
 
-def contact_metric_analysis(contact_ID: str,
-                            list_obj_names: list[str],
-                            list_obj_segs: list[np.ndarray],
-                            mask: np.ndarray,
-                            splitter: str="X",
-                            scale: Union[tuple, None]=None,
-                            include_dist:bool=False, 
-                            dist_centering_obj: Union[np.ndarray, None]=None,
-                            dist_num_bins: Union[int, None]=None,
-                            dist_zernike_degrees: Union[int, None]=None,
-                            dist_center_on: Union[bool, None]=None,
-                            dist_keep_center_as_bin: Union[bool, None]=None,
-                            return_site: bool=False):
+def interaction_metric_analysis(overlap_ID: str,
+                                list_obj_names: list[str],
+                                list_obj_segs: list[np.ndarray],
+                                mask: np.ndarray,
+                                splitter: str="X",
+                                scale: Union[tuple, None]=None,
+                                include_dist:bool=False, 
+                                dist_centering_obj: Union[np.ndarray, None]=None,
+                                dist_num_bins: Union[int, None]=None,
+                                dist_zernike_degrees: Union[int, None]=None,
+                                dist_center_on: Union[bool, None]=None,
+                                dist_keep_center_as_bin: Union[bool, None]=None,
+                                return_site: bool=False):
     """
     collect volumentric measurements of intersection between n organelle types
 
@@ -540,7 +540,7 @@ def contact_metric_analysis(contact_ID: str,
     ## CREATE OVERLAP REGIONS
     #########################
     # run create contact function
-    site = create_contact(contact_ID, org_dict, splitter)
+    site = create_overlap(overlap_ID, org_dict, splitter)
 
     #assert the nth order contact to within the cellmask
     labels = label(apply_mask(site, mask)).astype(int)
@@ -581,9 +581,9 @@ def contact_metric_analysis(contact_ID: str,
     ## LIST WHICH ORGANELLES ARE INVOLVED IN THE CONTACT
     ####################################################
     cont_inv = []
-    involved = contact_ID.split(splitter)
+    involved = overlap_ID.split(splitter)
     indexes = dict.fromkeys(involved, [])
-    indexes[contact_ID] = []
+    indexes[overlap_ID] = []
 
     for index, l in enumerate(props["label"]):
         cont_inv.clear()
@@ -597,7 +597,7 @@ def contact_metric_analysis(contact_ID: str,
                 print(f"we have an error.  as-> {all_inv}")
             indexes[org].append(all_inv[0])
             cont_inv.append(f"{all_inv[0]}")
-        indexes[contact_ID].append('_'.join(cont_inv))
+        indexes[overlap_ID].append('_'.join(cont_inv))
 
         
     ##################################################
@@ -606,8 +606,8 @@ def contact_metric_analysis(contact_ID: str,
     props_table = pd.DataFrame(props)
     props_table.rename(columns={'label': 'idx'}, inplace=True)
     props_table.drop(columns=['slice'], inplace=True)
-    props_table.insert(0, 'label',value=indexes[contact_ID])
-    props_table.insert(0, "object", contact_ID)
+    props_table.insert(0, 'label',value=indexes[overlap_ID])
+    props_table.insert(0, "object", overlap_ID)
     props_table.rename(columns={"area": "volume"}, inplace=True)
     props_table.insert(11, "surface_area", surface_area_tab)
     props_table.insert(13, "SA_to_volume_ratio", 
@@ -625,7 +625,7 @@ def contact_metric_analysis(contact_ID: str,
     if include_dist:
         XY_contact_dist, XY_bins, XY_wedges = get_XY_distribution(mask=mask, 
                                                                   obj=site,
-                                                                  obj_name=contact_ID,
+                                                                  obj_name=overlap_ID,
                                                                   centering_obj=dist_centering_obj,
                                                                   scale=scale,
                                                                   center_on=dist_center_on,
@@ -635,7 +635,7 @@ def contact_metric_analysis(contact_ID: str,
         
         Z_contact_dist = get_Z_distribution(mask=mask,
                                             obj=site,
-                                            obj_name=contact_ID,
+                                            obj_name=overlap_ID,
                                             center_obj=dist_centering_obj,
                                             scale=scale)
         contact_dist_tab = pd.merge(XY_contact_dist, Z_contact_dist, on=["object", "scale"])
@@ -653,17 +653,17 @@ def contact_metric_analysis(contact_ID: str,
             return props_table
         
 ### USED ###
-def get_contact_metrics_3D(list_obj_names: list[str],
-                           list_obj_segs: list[np.ndarray],
-                           mask: np.ndarray,
-                           splitter: str="X",
-                           scale: Union[tuple, None]=None,
-                           include_dist:bool=False, 
-                           dist_centering_obj: Union[np.ndarray, None]=None,
-                           dist_num_bins: Union[int, None]=None,
-                           dist_zernike_degrees: Union[int, None]=None,
-                           dist_center_on: Union[bool, None]=None,
-                           dist_keep_center_as_bin: Union[bool, None]=None):
+def get_interaction_metrics_3D(list_obj_names: list[str],
+                               list_obj_segs: list[np.ndarray],
+                               mask: np.ndarray,
+                               splitter: str="X",
+                               scale: Union[tuple, None]=None,
+                               include_dist:bool=False, 
+                               dist_centering_obj: Union[np.ndarray, None]=None,
+                               dist_num_bins: Union[int, None]=None,
+                               dist_zernike_degrees: Union[int, None]=None,
+                               dist_center_on: Union[bool, None]=None,
+                               dist_keep_center_as_bin: Union[bool, None]=None):
     """
     collect volumentric measurements of intersection between n, n+1, n+2... organelle types for an entire cell
 
@@ -743,21 +743,21 @@ def get_contact_metrics_3D(list_obj_names: list[str],
     dist_tabs=[]
     if include_dist:
         for cont in possib:
-            cont_tab, dist_tab, site = contact_metric_analysis(contact_ID=cont,
-                                                                list_obj_names=list_obj_names,
-                                                                list_obj_segs=list_obj_segs,
-                                                                org_dict=organelle_segs,
-                                                                mask=mask,
-                                                                splitter=splitter,
-                                                                scale=scale,
-                                                                include_dist=True,
-                                                                dist_centering_obj=dist_centering_obj,
-                                                                dist_num_bins=dist_num_bins,
-                                                                dist_zernike_degrees=dist_zernike_degrees,
-                                                                dist_center_on=dist_center_on,
-                                                                dist_keep_center_as_bin=dist_keep_center_as_bin,
-                                                                return_site=True)
-            LOc_NR = find_non_redundant_contacts(site, cont, organelle_segs, splitter)
+            cont_tab, dist_tab, site = interaction_metric_analysis(contact_ID=cont,
+                                                                   list_obj_names=list_obj_names,
+                                                                   list_obj_segs=list_obj_segs,
+                                                                   org_dict=organelle_segs,
+                                                                   mask=mask,
+                                                                   splitter=splitter,
+                                                                   scale=scale,
+                                                                   include_dist=True,
+                                                                   dist_centering_obj=dist_centering_obj,
+                                                                   dist_num_bins=dist_num_bins,
+                                                                   dist_zernike_degrees=dist_zernike_degrees,
+                                                                   dist_center_on=dist_center_on,
+                                                                   dist_keep_center_as_bin=dist_keep_center_as_bin,
+                                                                   return_site=True)
+            LOc_NR = find_non_redundant_overlaps(site, cont, organelle_segs, splitter)
             LOc_NR = apply_mask((LOc_NR>0), mask).astype(int) * site
             redundancy = cont_tab['idx'].isin(np.unique(LOc_NR[LOc_NR>0]).tolist())
             cont_tab.insert(2, "in_higher_order", list(map(bool, ~redundancy)))
@@ -767,14 +767,14 @@ def get_contact_metrics_3D(list_obj_names: list[str],
         return cont_tabs, dist_tabs
     else:
         for cont in possib:
-            cont_tab, site = contact_metric_analysis(contact_ID=cont,
-                                                      org_dict=organelle_segs,
-                                                      mask=mask,
-                                                      splitter=splitter,
-                                                      scale=scale,
-                                                      include_dist=False,
-                                                      return_site=True)
-            LOc_NR = find_non_redundant_contacts(site, cont, organelle_segs, splitter)
+            cont_tab, site = interaction_metric_analysis(contact_ID=cont,
+                                                         org_dict=organelle_segs,
+                                                         mask=mask,
+                                                         splitter=splitter,
+                                                         scale=scale,
+                                                         include_dist=False,
+                                                         return_site=True)
+            LOc_NR = find_non_redundant_overlaps(site, cont, organelle_segs, splitter)
             LOc_NR = apply_mask((LOc_NR>0), mask).astype(int) * site
             redundancy = cont_tab['idx'].isin(np.unique(LOc_NR[LOc_NR>0]).tolist())
             cont_tab.insert(2, "in_higher_order", list(map(bool, ~redundancy)))
