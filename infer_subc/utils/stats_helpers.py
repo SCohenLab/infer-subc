@@ -6,7 +6,7 @@ import time
 
 import pandas as pd
 
-from infer_subc.utils.stats import (get_contact_metrics_3D, 
+from infer_subc.utils.stats import (get_interaction_metrics_3D, 
                     get_org_morphology_3D, 
                     get_XY_distribution, 
                     get_Z_distribution, 
@@ -29,9 +29,9 @@ def make_all_metrics_tables(source_file: str,
                              dist_keep_center_as_bin: bool=True,
                              dist_zernike_degrees: Union[int, None]=None,
                              scale: Union[tuple,None] = None,
-                             include_contact_dist:bool=True):
+                             include_interaction_dist:bool=True):
     """
-    Measure the composition, morphology, distribution, and contacts of multiple organelles in a cell
+    Measure the composition, morphology, distribution, and interactions of multiple organelles in a cell
 
     Parameters:
     ----------
@@ -71,12 +71,12 @@ def make_all_metrics_tables(source_file: str,
         be included in the output
     scale: Union[tuple,None] = None
         a tuple that contains the real world dimensions for each dimension in the image (Z, Y, X)
-    include_contact_dist:bool=True
-        whether to include the distribution of contact sites in get_contact_metrics_3d(); True = include contact distribution
+    include_interaction_dist:bool=True
+        whether to include the distribution of overlap sites in get_interaction_metrics_3d(); True = include interaction distribution
 
     Returns:
     ----------
-    4 Dataframes of measurements of organelle morphology, region morphology, contact morphology, and organelle/contact distributions
+    4 Dataframes of measurements of organelle morphology, region morphology, overlap morphology, and organelle/interaction distributions
 
     """
     start = time.time()
@@ -124,7 +124,7 @@ def make_all_metrics_tables(source_file: str,
             org_obj = list_obj_segs[j]
 
         ##########################################################
-        # measure organelle morphology & number of objs contacting
+        # measure organelle morphology & number of objs overlapping
         ##########################################################
         org_metrics = get_org_morphology_3D(segmentation_img=org_obj, 
                                             seg_name=target,
@@ -164,29 +164,29 @@ def make_all_metrics_tables(source_file: str,
         XY_bins.append(XY_bin_masks)
         XY_wedges.append(XY_wedge_masks)
 
-    #######################################
-    # collect non-redundant contact metrics 
-    #######################################
+    ###########################################
+    # collect non-redundant interaction metrics 
+    ###########################################
     if len(list_obj_names>2):
-        if include_contact_dist:
-            contact_tabs, contact_dist_tabs = get_contact_metrics_3D(list_obj_names=list_obj_names,
+        if include_interaction_dist:
+            interaction_tabs, interaction_dist_tabs = get_interaction_metrics_3D(list_obj_names=list_obj_names,
                                                                      list_obj_segs=list_obj_segs,
                                                                      mask=mask,
                                                                      scale=scale,
-                                                                     include_dist=include_contact_dist, 
+                                                                     include_dist=include_interaction_dist, 
                                                                      dist_centering_obj=dist_centering_obj,
                                                                      dist_num_bins=dist_num_bins,
                                                                      dist_zernike_degrees=dist_zernike_degrees,
                                                                      dist_center_on=dist_center_on,
                                                                      dist_keep_center_as_bin=dist_keep_center_as_bin)
-            for tab in contact_dist_tabs:
+            for tab in interaction_dist_tabs:
                 dist_tabs.append(tab)
         else:
-            contact_tabs = get_contact_metrics_3D(list_obj_names=list_obj_names,
+            interaction_tabs = get_interaction_metrics_3D(list_obj_names=list_obj_names,
                                                   list_obj_segs=list_obj_segs,
                                                   mask=mask,
                                                   scale=scale,
-                                                  include_dist=include_contact_dist, 
+                                                  include_dist=include_interaction_dist, 
                                                   dist_centering_obj=dist_centering_obj,
                                                   dist_num_bins=dist_num_bins,
                                                   dist_zernike_degrees=dist_zernike_degrees,
@@ -200,8 +200,8 @@ def make_all_metrics_tables(source_file: str,
     final_org_tab = pd.concat(org_tabs, ignore_index=True)
     final_org_tab.insert(loc=0,column='image_name',value=source_file.stem)
 
-    final_contact_tab = pd.concat(contact_tabs, ignore_index=True)
-    final_contact_tab.insert(loc=0,column='image_name',value=source_file.stem)
+    final_interaction_tab = pd.concat(interaction_tabs, ignore_index=True)
+    final_interaction_tab.insert(loc=0,column='image_name',value=source_file.stem)
 
     combined_dist_tab = pd.concat(dist_tabs, ignore_index=True)
     combined_dist_tab.insert(loc=0,column='image_name',value=source_file.stem)
@@ -211,7 +211,7 @@ def make_all_metrics_tables(source_file: str,
 
     end = time.time()
     print(f"It took {(end-start)/60} minutes to quantify one image.")
-    return final_org_tab, final_contact_tab, combined_dist_tab, final_region_tab
+    return final_org_tab, final_interaction_tab, combined_dist_tab, final_region_tab
 
 ### USED ###
 def batch_process_quantification(out_file_name: str,

@@ -10,7 +10,7 @@ import matplotlib.gridspec as gridspec
 import numpy as np
 
 # infer-subc
-from infer_subc.utils.stats import create_contact, find_non_redundant_contacts
+from infer_subc.utils.stats import create_overlap, find_non_redundant_overlaps
 
 ##################
 ## Color Constants
@@ -42,12 +42,12 @@ def find_size(width: float, text: str, base_size:float, fig, multiplier:float=1.
 def plot_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, wspace: float=0.05, hspace: float=0.05, close: bool=True, holo: bool=True):
     viewer = napari.Viewer() 
 
-    rw = (len(orgs.split(splitter))+1)
+    #rw = (len(orgs.split(splitter))+1)
     rw = (math.comb(len(orgs.split(splitter)), 2)+1)
-    fig = plt.figure(figsize=(3,rw))
-    gs= gridspec.GridSpec(rw,3, wspace=wspace, hspace=hspace)
+    fig = plt.figure(figsize=(4,rw))
+    gs= gridspec.GridSpec(rw,4, wspace=wspace, hspace=hspace)
 
-    for i in range(rw*3):
+    for i in range(rw*4):
         ax = plt.subplot(gs[i])
         ax.set_aspect('equal')
 
@@ -65,44 +65,55 @@ def plot_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, ws
     pos_overlaps = itertools.combinations(orgs.split(splitter), 2)
     overlaps = [splitter.join(inter) for inter in pos_overlaps]
     if holo:
-        titles = ['Not In Higher Order', 'All', 'In Higher Order', 'Organelle A', 'Overlap', 'Organelle B']
+        titles = ['Merge', 'Overlap Only', 'Not In Higher Order', 'In Higher Order', 'Organelle A', 'Organelle B']
         legend_ele = [Patch(facecolor=BOPBLUE, edgecolor=BLACK, label="Organelle A"),
                       Patch(facecolor=ORANGE, edgecolor=BLACK, label="Organelle B"),
-                      Patch(facecolor=MAROON, edgecolor=BLACK, label="Highlighted Overlap"),
-                      Patch(facecolor=WHITE, edgecolor=BLACK, label="Unhighlighted Overlap")]
+                      Patch(facecolor=MAROON, edgecolor=BLACK, label="Higher/Lower Order Overlap"),
+                      Patch(facecolor=WHITE, edgecolor=BLACK, label="Overlap Region")]
         for row, inter in enumerate(overlaps):
-            LOc = find_non_redundant_contacts(create_contact(inter, organelle_segs, splitter), 
+            LOi = find_non_redundant_overlaps(create_overlap(inter, organelle_segs, splitter), 
                                             inter, organelle_segs, splitter)
-            viewer.add_labels(LOc>0, colormap={1:MAROON}, blending='translucent', 
-                            opacity=1.00, scale=scale,visible=False, name=f"{overlaps} Not In Higher Order")
-            viewer.add_labels((np.invert(LOc>0)*create_contact(inter, organelle_segs, splitter))>0, 
-                            colormap={1:MAROON}, blending='translucent', opacity=1.00, 
-                            scale=scale,visible=False, name=f"{overlaps} In Higher Order")
+            viewer.add_labels((create_overlap(inter, organelle_segs, splitter)>0),
+                              colormap={1:WHITE}, blending='translucent', opacity=1.00, 
+                              scale=scale,visible=False, name=f"{overlaps} Overlap Only")
+            viewer.add_labels(LOi>0, colormap={1:MAROON}, blending='translucent', 
+                              opacity=1.00, scale=scale,visible=False, name=f"{overlaps} Not In Higher Order")
+            viewer.add_labels((np.invert(LOi>0)*create_overlap(inter, organelle_segs, splitter))>0, 
+                              colormap={1:MAROON}, blending='translucent', opacity=1.00, 
+                              scale=scale,visible=False, name=f"{overlaps} In Higher Order")
+
             for org_num, org in enumerate(orgs.split(splitter)):
                 if org == inter.split(splitter)[0]:
                     viewer.layers[(org_num*2)].visible = True
                 elif org == inter.split(splitter)[1]:
                     viewer.layers[((org_num*2)+1)].visible = True
-            highlight_Ac = viewer.export_figure()
-            viewer.layers[((len(orgs.split(splitter))*2)+(row*2))].visible = True
-            highlight_HOc = viewer.export_figure()
-            viewer.layers[((len(orgs.split(splitter))*2)+(row*2))].visible = False
-            viewer.layers[((len(orgs.split(splitter))*2)+(row*2)+1)].visible = True
-            highlight_LOc = viewer.export_figure()
+            highlight_Ai = viewer.export_figure()
+            for layer in viewer.layers:
+                layer.visible= False
+            viewer.layers[((len(orgs.split(splitter))*2)+(row*3))].visible = True
+            highlight_O = viewer.export_figure()
+            viewer.layers[((len(orgs.split(splitter))*2)+(row*3)+1)].visible = True
+            highlight_HOi = viewer.export_figure()
+            viewer.layers[((len(orgs.split(splitter))*2)+(row*3)+1)].visible = False
+            viewer.layers[((len(orgs.split(splitter))*2)+(row*3)+2)].visible = True
+            highlight_LOi = viewer.export_figure()
 
-            # Leftmost Column
-            fig.axes[((row*3)+3)].imshow(highlight_LOc, interpolation='nearest')
+            # Column A (Merge)
+            fig.axes[((row*4)+4)].imshow(highlight_Ai, interpolation='nearest')
 
-            # Middle Column
-            fig.axes[((row*3)+4)].imshow(highlight_Ac, interpolation='nearest')
+            # Column B (Overlap Only)
+            fig.axes[((row*4)+5)].imshow(highlight_O, interpolation='nearest')
 
-            # Rightmost Column
-            fig.axes[((row*3)+5)].imshow(highlight_HOc, interpolation='nearest')
+            # Column C (Overlap + Not in Higher Order)
+            fig.axes[((row*4)+6)].imshow(highlight_LOi, interpolation='nearest')
+
+            # Column D (Overlap + In Higher Order)
+            fig.axes[((row*4)+7)].imshow(highlight_HOi, interpolation='nearest')
 
             for layer in viewer.layers:
                 layer.visible= False
     else:
-        titles = ['Organelle A', 'Overlap', 'Organelle B', 'Not In Higher Order', 'All', 'In Higher Order']
+        titles = ['Organelle A', 'Organelle B', 'Merge', 'Overlap Only', 'Not In Higher Order', 'All', 'In Higher Order']
         legend_ele = [Patch(facecolor=BOPBLUE, edgecolor=BLACK, label="Organelle A"),
                       Patch(facecolor=ORANGE, edgecolor=BLACK, label="Organelle B"),
                       Patch(facecolor=WHITE, edgecolor=BLACK, label="Overlap")]
@@ -112,7 +123,7 @@ def plot_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, ws
                     viewer.layers[(org_num*2)].visible = True
                 elif org == inter.split(splitter)[1]:
                     viewer.layers[((org_num*2)+1)].visible = True
-            highlight_Ac = viewer.export_figure()
+            highlight_Ai = viewer.export_figure()
 
             for layer in viewer.layers:
                 layer.visible= False
@@ -120,21 +131,29 @@ def plot_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, ws
             for org_num, org in enumerate(orgs.split(splitter)):
                 if org == inter.split(splitter)[0]:
                     viewer.layers[(org_num*2)].visible = True
-                    highlight_LOc = viewer.export_figure()
+                    highlight_LOi = viewer.export_figure()
                     viewer.layers[(org_num*2)].visible = False
                 elif org == inter.split(splitter)[1]:
                     viewer.layers[((org_num*2)+1)].visible = True
-                    highlight_HOc = viewer.export_figure()
-                    viewer.layers[(org_num*2)].visible = False
+                    highlight_HOi = viewer.export_figure()
+                    viewer.layers[((org_num*2)+1)].visible = False
 
-            # Leftmost Column
-            fig.axes[((row*3)+3)].imshow(highlight_LOc, interpolation='nearest')
+            viewer.add_labels((create_overlap(inter, organelle_segs, splitter)>0),
+                              colormap={1:WHITE}, blending='translucent', opacity=1.00, 
+                              scale=scale,visible=True, name=f"{overlaps} Overlap Only")
+            highlight_O = viewer.export_figure()
 
-            # Middle Column
-            fig.axes[((row*3)+4)].imshow(highlight_Ac, interpolation='nearest')
+            # Column A (Org A)
+            fig.axes[((row*4)+4)].imshow(highlight_LOi, interpolation='nearest')
 
-            # Rightmost Column
-            fig.axes[((row*3)+5)].imshow(highlight_HOc, interpolation='nearest')
+            # Column B (Org B)
+            fig.axes[((row*4)+5)].imshow(highlight_HOi, interpolation='nearest')
+
+            # Column C (Merge)
+            fig.axes[((row*4)+6)].imshow(highlight_Ai, interpolation='nearest')
+
+            # Column D (Only Overlapping Region)
+            fig.axes[((row*4)+7)].imshow(highlight_O, interpolation='nearest')
 
             for layer in viewer.layers:
                 layer.visible= False
@@ -162,22 +181,24 @@ def plot_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, ws
     ## Row Naming
     ##################################
     for row, inter in enumerate(overlaps):
-            fig.axes[((row*3)+3)].set_ylabel(f'{inter}', fontsize=fs)
+            fig.axes[((row*4)+4)].set_ylabel(f'{inter}', fontsize=fs)
 
     ##################################
     ## Column Naming
     ##################################
-    fig.axes[3].set_title(titles[0], fontsize=fs)
+    fig.axes[4].set_title(titles[0], fontsize=fs)
     fig.axes[0].set_facecolor(('white',0.0))
-    fig.axes[4].set_title(titles[1], fontsize=fs)
+    fig.axes[5].set_title(titles[1], fontsize=fs)
     fig.axes[1].set_facecolor(('white',0.0))
-    fig.axes[5].set_title(titles[2], fontsize=fs)
+    fig.axes[6].set_title(titles[2], fontsize=fs)
     fig.axes[2].set_facecolor(('white',0.0))
+    fig.axes[7].set_title(titles[3], fontsize=fs)
+    fig.axes[3].set_facecolor(('white',0.0))
 
     #################################
     ## Legend
     #################################
-    fig.axes[1].legend(handles=legend_ele, frameon=False, loc='center', fontsize=fs)
+    fig.axes[1].legend(handles=legend_ele, frameon=False, loc='center', fontsize=fs, bbox_to_anchor=(1, (0.5)))
 
     for ax in fig.axes:
         ax.spines['top'].set_visible(False)

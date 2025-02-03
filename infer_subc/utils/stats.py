@@ -472,19 +472,19 @@ def interaction_metric_analysis(overlap_ID: str,
 
     Parameters
     ------------
-    contact_ID: str
+    overlap_ID: str
         a value used to describe the organelles present in the overlap that can be divided by the splitter value
     org_dict: dict
         a dictionary of all object segmentations assigned to keys with their objects
     mask: np.ndarray
-        3D (ZYX) binary mask of the area to measure contacts from
+        3D (ZYX) binary mask of the area to measure interactions from
     splitter: str
-        a value used to separate the contact_ID to determine objects present in overlap
+        a value used to separate the overlap_ID to determine objects present in overlap
     scale: tuple
         a value present in the metadata determining the scale of the (ZYX) axis
     include_dist:bool=False
         *optional*
-        True = include the XY and Z distribution measurements of the contact sites within the masked region 
+        True = include the XY and Z distribution measurements of the overlap sites within the masked region 
         (utilizing the functions get_XY_distribution() and get_Z_distribution() from Infer-subc)
         False = do not include distirbution measurements
     dist_centering_obj: Union[np.ndarray, None]=None
@@ -539,10 +539,11 @@ def interaction_metric_analysis(overlap_ID: str,
     #########################
     ## CREATE OVERLAP REGIONS
     #########################
-    # run create contact function
+    # run create overlap function
     site = create_overlap(overlap_ID, org_dict, splitter)
 
-    #assert the nth order contact to within the cellmask
+    #############################################################################################
+    #assert the nth order overlap to within the cellmask
     labels = label(apply_mask(site, mask)).astype(int)
 
 
@@ -576,17 +577,19 @@ def interaction_metric_analysis(overlap_ID: str,
     ##################################################################
     surface_area_tab = pd.DataFrame(surface_area_from_props(labels, props, scale))
 
+    #################################################################################################
 
-    ####################################################
-    ## LIST WHICH ORGANELLES ARE INVOLVED IN THE CONTACT
-    ####################################################
-    cont_inv = []
+
+    ########################################################
+    ## LIST WHICH ORGANELLES ARE INVOLVED IN THE INTERACTION
+    ########################################################
+    over_inv = []
     involved = overlap_ID.split(splitter)
     indexes = dict.fromkeys(involved, [])
     indexes[overlap_ID] = []
 
     for index, l in enumerate(props["label"]):
-        cont_inv.clear()
+        over_inv.clear()
         for org in involved:
             volume = labels[props["slice"][index]]
             lorg = org_dict[org][props["slice"][index]]
@@ -596,8 +599,8 @@ def interaction_metric_analysis(overlap_ID: str,
             if len(all_inv) != 1:
                 print(f"we have an error.  as-> {all_inv}")
             indexes[org].append(all_inv[0])
-            cont_inv.append(f"{all_inv[0]}")
-        indexes[overlap_ID].append('_'.join(cont_inv))
+            over_inv.append(f"{all_inv[0]}")
+        indexes[overlap_ID].append('_'.join(over_inv))
 
         
     ##################################################
@@ -620,10 +623,10 @@ def interaction_metric_analysis(overlap_ID: str,
 
 
     ######################################################
-    ## optional: DISTRIBUTION OF CONTACTS MEASUREMENTS
+    ## optional: DISTRIBUTION OF INTERACTION MEASUREMENTS
     ######################################################
     if include_dist:
-        XY_contact_dist, XY_bins, XY_wedges = get_XY_distribution(mask=mask, 
+        XY_interaction_dist, XY_bins, XY_wedges = get_XY_distribution(mask=mask, 
                                                                   obj=site,
                                                                   obj_name=overlap_ID,
                                                                   centering_obj=dist_centering_obj,
@@ -633,18 +636,18 @@ def interaction_metric_analysis(overlap_ID: str,
                                                                   num_bins=dist_num_bins,
                                                                   zernike_degrees=dist_zernike_degrees)
         
-        Z_contact_dist = get_Z_distribution(mask=mask,
+        Z_interaction_dist = get_Z_distribution(mask=mask,
                                             obj=site,
                                             obj_name=overlap_ID,
                                             center_obj=dist_centering_obj,
                                             scale=scale)
-        contact_dist_tab = pd.merge(XY_contact_dist, Z_contact_dist, on=["object", "scale"])
+        interaction_dist_tab = pd.merge(XY_interaction_dist, Z_interaction_dist, on=["object", "scale"])
 
         indexes.clear()
         if return_site:
-            return site, props_table, contact_dist_tab
+            return site, props_table, interaction_dist_tab
         else:
-            return props_table, contact_dist_tab
+            return props_table, interaction_dist_tab
     else:
         indexes.clear()
         if return_site:
@@ -670,18 +673,18 @@ def get_interaction_metrics_3D(list_obj_names: list[str],
     Parameters
     ------------
     list_obj_names: list
-        a list of the names of objects used in making contacts
+        a list of the names of objects used in making overlaps
     list_obj_segs: list
-        a list of the segmentations of the objects used in making contacts
+        a list of the segmentations of the objects used in making overlaps
     mask: np.ndarray
-        3D (ZYX) binary mask of the area to measure contacts from
+        3D (ZYX) binary mask of the area to measure overlaps from
     splitter: str="X"
         a value used to separate the organelles in their IDs
     scale: tuple
         3D (ZYX) assignment for the scaling of each axis
         include_dist:bool=False
         *optional*
-        True = include the XY and Z distribution measurements of the contact sites within the masked region 
+        True = include the XY and Z distribution measurements of the overlaps sites within the masked region 
         (utilizing the functions get_XY_distribution() and get_Z_distribution() from Infer-subc)
         False = do not include distirbution measurements
     dist_centering_obj: Union[np.ndarray, None]=None
@@ -739,11 +742,11 @@ def get_interaction_metrics_3D(list_obj_names: list[str],
     #######################
     ## ANALYZE ALL OVERLAPS
     #######################
-    cont_tabs=[]
+    inter_tabs=[]
     dist_tabs=[]
     if include_dist:
-        for cont in possib:
-            cont_tab, dist_tab, site = interaction_metric_analysis(contact_ID=cont,
+        for inter in possib:
+            inter_tab, dist_tab, site = interaction_metric_analysis(overlap_ID=inter,
                                                                    list_obj_names=list_obj_names,
                                                                    list_obj_segs=list_obj_segs,
                                                                    org_dict=organelle_segs,
@@ -757,30 +760,30 @@ def get_interaction_metrics_3D(list_obj_names: list[str],
                                                                    dist_center_on=dist_center_on,
                                                                    dist_keep_center_as_bin=dist_keep_center_as_bin,
                                                                    return_site=True)
-            LOc_NR = find_non_redundant_overlaps(site, cont, organelle_segs, splitter)
-            LOc_NR = apply_mask((LOc_NR>0), mask).astype(int) * site
-            redundancy = cont_tab['idx'].isin(np.unique(LOc_NR[LOc_NR>0]).tolist())
-            cont_tab.insert(2, "in_higher_order", list(map(bool, ~redundancy)))
-            cont_tab.drop(columns=['idx'], inplace=True)
-            cont_tabs.append(cont_tab)
+            LOi_NR = find_non_redundant_overlaps(site, inter, organelle_segs, splitter)
+            LOi_NR = apply_mask((LOi_NR>0), mask).astype(int) * site
+            redundancy = inter_tab['idx'].isin(np.unique(LOi_NR[LOi_NR>0]).tolist())
+            inter_tab.insert(2, "in_higher_order", list(map(bool, ~redundancy)))
+            inter_tab.drop(columns=['idx'], inplace=True)
+            inter_tabs.append(inter_tab)
             dist_tabs.append(dist_tab)
-        return cont_tabs, dist_tabs
+        return inter_tabs, dist_tabs
     else:
-        for cont in possib:
-            cont_tab, site = interaction_metric_analysis(contact_ID=cont,
+        for inter in possib:
+            inter_tab, site = interaction_metric_analysis(overlap_ID=inter,
                                                          org_dict=organelle_segs,
                                                          mask=mask,
                                                          splitter=splitter,
                                                          scale=scale,
                                                          include_dist=False,
                                                          return_site=True)
-            LOc_NR = find_non_redundant_overlaps(site, cont, organelle_segs, splitter)
-            LOc_NR = apply_mask((LOc_NR>0), mask).astype(int) * site
-            redundancy = cont_tab['idx'].isin(np.unique(LOc_NR[LOc_NR>0]).tolist())
-            cont_tab.insert(2, "in_higher_order", list(map(bool, ~redundancy)))
-            cont_tab.drop(columns=['idx'], inplace=True)
-            cont_tabs.append(cont_tab)
-        return cont_tabs
+            LOi_NR = find_non_redundant_overlaps(site, inter, organelle_segs, splitter)
+            LOi_NR = apply_mask((LOi_NR>0), mask).astype(int) * site
+            redundancy = inter_tab['idx'].isin(np.unique(LOi_NR[LOi_NR>0]).tolist())
+            inter_tab.insert(2, "in_higher_order", list(map(bool, ~redundancy)))
+            inter_tab.drop(columns=['idx'], inplace=True)
+            inter_tabs.append(inter_tab)
+        return inter_tabs
 
 # def get_aXb_stats_3D(a, b, mask, use_shell_a=False):
 #     """
