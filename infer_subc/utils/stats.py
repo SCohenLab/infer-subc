@@ -436,10 +436,10 @@ def find_non_redundant_overlaps(site: np.ndarray,
     ##########################################
     ## DETERMINE REDUNDANT OVERLAPS
     ##########################################
-    LOc_NR = site.copy()                         
+    LOc_NR = site.copy()                      
     for org, val in organelle_segs.items():         
         if (org not in orgs.split(splitter)
-            and np.any(site*val)):
+            and np.any(site.astype(int)*val.astype(int))):
             print(f"Examining {orgs} Higher Order Interactions With {org}...", end="\r")               
             digit = len(str(np.max(val)))           
             valid = (LOc_NR>0)*(val>0)              
@@ -651,7 +651,7 @@ def interaction_metric_analysis(overlap_ID: str,
     else:
         indexes.clear()
         if return_site:
-            return site, props_table
+            return site, props_table 
         else:
             return props_table
         
@@ -746,10 +746,9 @@ def get_interaction_metrics_3D(list_obj_names: list[str],
     dist_tabs=[]
     if include_dist:
         for inter in possib:
-            inter_tab, dist_tab, site = interaction_metric_analysis(overlap_ID=inter,
+            site, inter_tab, dist_tab = interaction_metric_analysis(overlap_ID=inter,
                                                                    list_obj_names=list_obj_names,
                                                                    list_obj_segs=list_obj_segs,
-                                                                   org_dict=organelle_segs,
                                                                    mask=mask,
                                                                    splitter=splitter,
                                                                    scale=scale,
@@ -770,7 +769,7 @@ def get_interaction_metrics_3D(list_obj_names: list[str],
         return inter_tabs, dist_tabs
     else:
         for inter in possib:
-            inter_tab, site = interaction_metric_analysis(overlap_ID=inter,
+            site, inter_tab = interaction_metric_analysis(overlap_ID=inter,
                                                          org_dict=organelle_segs,
                                                          mask=mask,
                                                          splitter=splitter,

@@ -167,14 +167,14 @@ def make_all_metrics_tables(source_file: str,
     ###########################################
     # collect non-redundant interaction metrics 
     ###########################################
-    if len(list_obj_names>2):
+    if (len(list_obj_names)>2):
         if include_interaction_dist:
             interaction_tabs, interaction_dist_tabs = get_interaction_metrics_3D(list_obj_names=list_obj_names,
                                                                      list_obj_segs=list_obj_segs,
                                                                      mask=mask,
                                                                      scale=scale,
                                                                      include_dist=include_interaction_dist, 
-                                                                     dist_centering_obj=dist_centering_obj,
+                                                                     dist_centering_obj=centering,
                                                                      dist_num_bins=dist_num_bins,
                                                                      dist_zernike_degrees=dist_zernike_degrees,
                                                                      dist_center_on=dist_center_on,
@@ -306,7 +306,7 @@ def batch_process_quantification(out_file_name: str,
     img_file_list = list_image_files(raw_path, raw_file_type)
 
     # list of segmentation files to collect
-    segs_to_collect = organelle_names + [masks_file_name]
+    segs_to_collect = organelle_names + masks_file_name
 
     # containers to collect data tabels
     org_tabs = []
@@ -330,7 +330,7 @@ def batch_process_quantification(out_file_name: str,
             scale_tup = None
 
         # load regions as a list based on order in list (should match order in "masks" file)
-        masks = read_tiff_image(filez[masks_file_name]) 
+        masks = [read_tiff_image(filez[f]) for f in masks_file_name]
         regions = [masks[r] for r, region in enumerate(region_names)]
 
         # store organelle images as list
@@ -349,7 +349,7 @@ def batch_process_quantification(out_file_name: str,
                                                                                              dist_keep_center_as_bin=dist_keep_center_as_bin,
                                                                                              dist_zernike_degrees=dist_zernike_degrees,
                                                                                              scale=scale_tup,
-                                                                                             include_contact_dist=include_contact_dist)
+                                                                                             include_interaction_dist=include_contact_dist)
 
         org_tabs.append(org_metrics)
         contact_tabs.append(contact_metrics)
