@@ -46,6 +46,7 @@ def get_morphology_metrics(segmentation_img: np.ndarray,
                            seg_name: str, 
                            intensity_img, 
                            mask: np.ndarray, 
+                           mask_name: str,
                            scale: Union[tuple, None]=None):
     """
     Parameters
@@ -122,13 +123,16 @@ def get_morphology_metrics(segmentation_img: np.ndarray,
                            properties=properties,
                            extra_properties=extra_properties,
                            spacing=scale)
+    
+    # measure the mask volume as well for easier normalization in downstream functions
+    mask_vol = regionprops_table(mask,properties=["area"], spacing=scale)['area'][0]
 
     props_table = pd.DataFrame(props)
 
     ##################################################################
     ## RUN SURFACE AREA FUNCTION SEPARATELY AND APPEND THE PROPS_TABLE
     ##################################################################
-    surface_area_tab = pd.DataFrame(surface_area_from_props(input_labels, props, scale))
+    surface_area_tab = pd.DataFrame(_surface_area_from_props(input_labels, props, scale))
 
     #############################################
     ## RENAME AND ADD ADDITIONAL METADATA COLUMNS
@@ -138,16 +142,16 @@ def get_morphology_metrics(segmentation_img: np.ndarray,
 
     if scale is not None:
         round_scale = (round(scale[0], 4), round(scale[1], 4), round(scale[2], 4))
-        props_table.insert(loc=2, column="scale", value=f"{round_scale}")
+        props_table.insert(props_table.columns.get_loc('label') + 1, column="scale", value=f"{round_scale}")
     else: 
-        props_table.insert(loc=2, column="scale", value=f"{tuple(np.ones(segmentation_img.ndim))}") 
+        props_table.insert(props_table.columns.get_loc('label') + 1, column="scale", value=f"{tuple(np.ones(segmentation_img.ndim))}") 
 
-    props_table.insert(12, "surface_area", surface_area_tab)
-    props_table.insert(14, "SA_to_volume_ratio", props_table["surface_area"].div(props_table["volume"]))
+    props_table.insert(props_table.columns.get_loc('volume') + 1, "surface_area", surface_area_tab)
+    props_table.insert(props_table.columns.get_loc('surface_area') + 1, "SA_to_volume_ratio", props_table["surface_area"].div(props_table["volume"]))
+    props_table[f"{mask_name}_volume"] = mask_vol
 
     # print this statement to let user known of suppressed warnings
-    if Warning: print(f"Warning(s) suppressed while quantifying {seg_name}.")
-
+    if Warning: print(f"Warning(s) suppressed while quantifying {seg_name}. See 'method_morphology.ipynb' notebook for more details.")
 
     return props_table
 
