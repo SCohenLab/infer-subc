@@ -19,3 +19,4 @@ from .golgi import infer_golgi#, infer_and_export_golgi, get_golgi
 from .peroxisome import infer_perox#, infer_and_export_perox, get_perox
 from .er import infer_ER#, infer_and_export_ER, get_ER)
 from .lipid import infer_LD#, infer_and_export_LD, get_LD
+from .masks import infer_masks, infer_masks_A, infer_masks_B
