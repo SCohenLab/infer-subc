@@ -1,3 +1,5 @@
+### Annotated on (25-29)-12-24
+
 from .segmenter_function import SegmenterFunction, FunctionParameter, WidgetType
 ### SegmenterFunction: Class representing a segmentation function (is this a single workflow step???)
 ### FunctionParameter: Class representing an input parameter to a segmentation function
