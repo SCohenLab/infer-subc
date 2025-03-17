@@ -1281,8 +1281,8 @@ def get_concentric_distribution(
     ################   ################
     # created normalized distances
     normalized_distance, good_mask, i_center, j_center = get_normalized_distance_and_mask(labels=mask, center_objects=center_objects, center_on=center_on)
-    if normalized_distance is None:
-        print('WTF!!  normalized_distance returned wrong')
+    # if normalized_distance is None:
+    #     print('WTF!!  normalized_distance returned wrong')
 
     # create bin mask array
     if keep_center_as_bin:
