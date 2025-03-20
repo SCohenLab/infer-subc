@@ -8,7 +8,7 @@ README
 # 📒 About this project
 
 ### `infer-subc` 
-- aims to create a <ins>simple</ins>, <ins>extensible</ins>, and <ins>reproducible</ins> pipeline to segment (or infer) and quantify the size, shape, interaction, and subcellular distribution of multiple intracellular organelles from confocal microscopy 🔬 images. 
+- aims to create a <ins>simple</ins> and <ins>reproducible</ins> pipeline to segment (or infer) and quantify the size, shape, interaction, and subcellular distribution of multiple intracellular organelles from confocal microscopy 🔬 images. 
 - is <ins>modular</ins> 🔢 to support a variety of organelle-focused research questions. 
 - can be <ins>applied broadly</ins> to many types of *in vitro* 🧫 and *in vivo* models 🐁🧬 to better understand the spatial coordination and interactome of organelles during key biological processes or disease. 
 

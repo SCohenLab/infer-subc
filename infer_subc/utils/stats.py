@@ -19,7 +19,6 @@ import centrosome.propagate
 import centrosome.zernike
 
 from infer_subc.core.img import apply_mask
-from infer_subc.utils.stats import get_morphology_metrics
 from infer_subc.utils.batch import list_image_files, find_segmentation_tiff_files
 from infer_subc.core.file_io import read_czi_image, read_tiff_image
 
@@ -490,7 +489,7 @@ def get_org_morphology_3D(segmentation_img: np.ndarray,
         a tuple that contains the real world dimensions for each dimension in the image (Z, Y, X)
 
 
-    Regionprops measurements:
+    Regionprops measurements included:
     ------------------------
     ['label',
     'centroid',
@@ -508,7 +507,7 @@ def get_org_morphology_3D(segmentation_img: np.ndarray,
     'mean_intensity',
     'min_intensity']
 
-    Additional measurements:
+    Additional measurements included:
     -----------------------
     ['standard_deviation_intensity',
     'surface_area']
