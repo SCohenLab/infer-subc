@@ -57,7 +57,7 @@ def infer_nuclei_fromlabel(in_img: np.ndarray,
     max_hole_w: int
         hole filling cutoff for nuclei post-processing
     small_obj_w: int
-        minimu object size cutoff for nuclei post-processing
+        minimum object size cutoff for nuclei post-processing
 
     Returns
     -------------

@@ -56,7 +56,7 @@ def infer_masks(in_img: np.ndarray,
     nuc_max_hole_w: int
         hole filling cutoff for nuclei post-processing for nuclei channel
     nuc_small_obj_w: int
-        minimu object size cutoff for nuclei post-processing for nuclei channel
+        minimum object size cutoff for nuclei post-processing for nuclei channel
     cell_weights:
         a list of int that corresond to the weights for each channel in the composite; use 0 if a channel should not be included in the composite image
     cell_rescale:
@@ -79,7 +79,7 @@ def infer_masks(in_img: np.ndarray,
     cell_max_hole_w: 
         hole filling cutoff for cellmask signal post-processing
     cell_small_obj_w: 
-        minimu object size cutoff for cellmask signal post-processing
+        minimum object size cutoff for cellmask signal post-processing
     cell_fill_filter_method:
         determines if the fill and filter function should be run 'sice-by-slice' or in '3D' 
     cell_watershed_method:
@@ -200,7 +200,7 @@ def infer_masks_A(in_img: np.ndarray,
     cyto_max_hole_w: 
         hole filling cutoff for cellmask signal post-processing
     cyto_small_obj_w: 
-        minimu object size cutoff for cellmask signal post-processing
+        minimum object size cutoff for cellmask signal post-processing
     cyto_fill_filter_method:
         determines if fill and filter should be run 'sice-by-slice' or in '3D' 
     nuc_max_hole_w: int
@@ -302,7 +302,7 @@ def infer_masks_B(in_img: np.ndarray,
     max_hole_w: 
         hole filling cutoff for cellmask signal post-processing
     small_obj_w: 
-        minimu object size cutoff for cellmask signal post-processing
+        minimum object size cutoff for cellmask signal post-processing
     fill_filter_method:
         determines if fill and filter should be run 'sice-by-slice' or in '3D' 
     cyto_fillhole_max: int

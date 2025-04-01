@@ -154,7 +154,7 @@ def infer_cellmask_fromcomposite(in_img: np.ndarray,
     max_hole_w: 
         hole filling cutoff for cellmask signal post-processing
     small_obj_w: 
-        minimu object size cutoff for cellmask signal post-processing
+        minimum object size cutoff for cellmask signal post-processing
     fill_filter_method:
         determines if the fill and filter function should be run 'sice-by-slice' or in '3D' 
     watershed_method:
