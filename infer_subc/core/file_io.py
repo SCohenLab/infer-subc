@@ -1,4 +1,5 @@
 import numpy as np
+import os
 from typing import Dict, Union, List, Any, Tuple
 from dataclasses import dataclass
 import time
@@ -440,3 +441,54 @@ def export_tiff_AICS(
     print(f">>>>>>>>>>>> export_tiff_AICS ({(end - start):0.2f}) sec")
     print(f"saved file AICS {out_name}")
     return out_name
+
+def sample_dirs(create: bool = False) -> None:
+    """ Creates the directories needed to successfully run
+    infer-subc using the sample data folder """
+
+    if create:
+        sd_path = (Path(os.getcwd()).parents[1]/"sample_data")
+
+        # Checker for if the sample data folder exists
+        if sd_path.exists():
+
+            for ct in ["astrocyte","neuron"]:
+                # first check if cell type folder exists, if not raise error
+                if not (sd_path/f"example_{ct}").exists():
+                    raise ValueError(f'example_{ct} folder does not exist in the intended directory')
+                
+                # establish celltype path
+                ct_path = (sd_path/f"example_{ct}")
+
+                # create subfolders if not created already
+                for sub in ["raw","seg"]:
+                    if not (ct_path/sub).exists():
+                        Path.mkdir(ct_path/sub)
+                        print(f"making {ct_path/sub}")
+
+        # if the sample data folder does not exist raise error
+        else:
+            raise ValueError('Sample data folder does not exist in the intended directory,' \
+            ' please attempt to reclone the repository.')
+
+def sample_input(cell_type: Union[str, None]) -> tuple[Path, str, Path, Path]:
+    """
+    automatically sets the necessary paths for sample data if cell_type is
+    set equal to "neuron" or "astrocyte" for the notebooks in part 1
+    """
+    cell_type_list = ["neuron", "astrocyte"]
+    
+    if cell_type in cell_type_list:
+        data_root_path = Path(os.getcwd()).parents[1] / "sample_data" /  f"example_{cell_type}"
+
+        # Specify the file type of the sample data
+        im_type = ".tiff"
+
+        ## Specify which subfolder that contains the input data and the input data file extension
+        in_data_path = data_root_path / "raw"
+
+        ## Specify the output folder to save the segmentation outputs if.
+        ## If its not already created, the code below will creat it for you
+        out_data_path = data_root_path / "seg"
+        
+        return data_root_path, im_type, in_data_path, out_data_path
