@@ -4,8 +4,20 @@ import time
 import numpy as np
 
 from skimage.filters import scharr
+from skimage.morphology import (isotropic_opening, 
+                                isotropic_dilation, 
+                                isotropic_erosion, 
+                                binary_opening, 
+                                binary_dilation, 
+                                binary_erosion)
 
-from infer_subc.core.img import label_bool_as_uint16, make_aggregate
+from skimage.morphology.footprints import ball, disk
+
+
+from scipy.ndimage import zoom
+
+
+from infer_subc.core.img import label_bool_as_uint16, make_aggregate, size_filter_linear_size
 from infer_subc.core.file_io import export_inferred_organelle, import_inferred_organelle
 from infer_subc.core.img import (
     masked_object_thresh,
@@ -17,7 +29,9 @@ from infer_subc.core.img import (
     fill_and_filter_linear_size,
     get_max_label,
     get_interior_labels,
+    label
 )
+
 
 
 def raw_cellmask_fromaggr(img_in: np.ndarray, scale_min_max: bool = True) -> np.ndarray:
@@ -486,3 +500,101 @@ def select_highest_intensity_cell(raw_image: np.ndarray,
     good_cell = cell_labels == keep_label
 
     return good_cell
+
+def find_rad(in_seg: np.ndarray, method: str, rad_range: list = []) -> int:
+    if rad_range == []:                             # Setup of rad range
+        zz, yy, xx = np.shape(in_seg)                   # Determines width of the image
+        rad_range = [i+1 for i in list(range(yy // 4))] # Uses the width of the image to determine the possible radii
+                                                        # Must be smaller than half the size of the image
+    if len(rad_range) == 1:                         # If the rad range has only 1 value
+        return rad_range[0]//2                          # Sets rad range value / 2 as output
+    elif len(rad_range) == 2:                       # If the rad range has 2 values
+        return rad_range[1]//2                          # Sets the larger rad range value / 2 as output
+    
+    if method == 'binary':
+        rad = rad_range[((len(rad_range)) // 2)]        # Checks middle of rad range
+        print(f"Trying radius of {rad}")                # Updates user on progress
+        ################################################################################################################################
+        # Creates a "Saucer" shape for filtering (see side profile below)
+        #
+        #    D   Z
+        #    E 2 | 001111100
+        #    P 1 | 111111111
+        #    T 0 | 001111100
+        #    H   +----------- Y
+        #          012345678
+        #            WIDTH
+        #
+        edge = disk(rad//4)                                                     # Top & Bottom of Saucer
+        middle = disk(rad)                                                      # Middle of Saucer
+        w = (np.shape(middle)[0] - np.shape(edge)[0])//2                        # Determines distance between edge & middle saucer radii
+        edge = np.pad(edge, ((w,w),(w,w)), mode = 'constant', constant_values=0)# Adds emptiness to ensure saucer is equal dimensions
+        #                                Saucer components are combined:
+        fp = np.stack((edge,            #          0001111000
+                    middle,             #          1111111111
+                    edge))              #          0001111000   
+        ################################################################################################################################
+        if np.array_equal((binary_erosion(in_seg, fp)), np.zeros_like(in_seg)): # If nothing remains after erosion
+            rad_range = rad_range[:(rad_range.index(rad))]                          # Remove this radius and all larger radii from rad range
+            print(f"{rad} is too large")                                            # Status update
+        else:                                                                   # If something remains after erosion
+            rad_range = rad_range[(rad_range.index(rad)+1):]                        # Remove all smaller radii from rad range
+            print(f"{rad} is too small")                                            # Status update
+        print(f"{len(rad_range)} possible radii remaining")                     # Status update
+    elif method == 'isotropic':
+        rad = rad_range[((len(rad_range)) // 2)]
+        print(f"Trying radius of {rad}")
+        if np.array_equal(isotropic_erosion(in_seg.copy(), rad), np.zeros_like(in_seg)):
+            rad_range = rad_range[:(rad_range.index(rad))]
+            print(f"{rad} is too large")
+        else:
+            rad_range = rad_range[(rad_range.index(rad)+1):]
+            print(f"{rad} is too small")
+        print(f"{len(rad_range)} possible radii remaining")
+    return find_rad(in_seg, method, rad_range)                                      # Try a different radius
+
+def filter_soma_neurites(in_seg: np.ndarray, nuc_present: bool=False, method: str='binary'):
+    cell_mask = zoom(in_seg, (1, 0.5, 0.5)) # Make easier on memory
+    
+    rad = find_rad(cell_mask, method=method) # Find Radius
+    print(f"Radius of {rad} found")
+    if method == 'binary':
+        ################################################################################################################################
+        # Creates a "Saucer" shape for filtering (see side profile below)
+        #
+        #    D   Z
+        #    E 2 | 001111100
+        #    P 1 | 111111111
+        #    T 0 | 001111100
+        #    H   +----------- Y
+        #          012345678
+        #            WIDTH
+        #
+        edge = disk(rad//2)                                                     # Top & Bottom of Saucer
+        middle = disk(rad)                                                      # Middle of Saucer
+        w = (np.shape(middle)[0] - np.shape(edge)[0])//2                        # Determines distance between edge & middle saucer radii
+        edge = np.pad(edge, ((w,w),(w,w)), mode ='constant', constant_values=0) # Adds emptiness to ensure saucer is equal dimensions
+        #                                Saucer components are combined:
+        fp = np.stack((edge,            #          0001111000
+                    middle,             #          1111111111
+                    edge))              #          0001111000                                   
+        #################################################################################################################################
+
+        nr1 = binary_opening(in_seg, fp)                                # Opening of original image occurs w/ saucer as footprint
+        soma = binary_dilation(nr1, footprint=ball((rad)//2)) * in_seg  # Dilation of opened image occurs, masked by original image
+        neurites = np.invert(soma.astype(bool), dtype=bool) * in_seg    # Determination of the neurites from missing values of in_img
+        neurites = size_filter_linear_size(img=label(neurites), min_size=(rad//2), method='3D') # Removes small undesired segments
+        soma = label(np.invert(neurites.astype(bool), dtype=bool) * in_seg) # Determination of the soma from missing values of in_img in neurites
+        soma[soma!=np.bincount(np.ravel(soma)[np.ravel(soma)!= 0]).argmax()] = 0 # Ensures all values of the soma are the same value
+        neurites = np.invert(soma.astype(bool), dtype=bool) * in_seg # Redetermines the neurites from missing values of segmented soma
+        neurites = size_filter_linear_size(img=label(neurites), min_size=(rad//2), method='3D') # Once again removes small undesired segments
+    elif method == 'isotropic':
+        nr1 = isotropic_opening(in_seg, rad)
+        soma = isotropic_dilation(nr1, (rad)) * in_seg
+        neurites = np.invert(soma.astype(bool), dtype=bool) * in_seg
+        neurites = size_filter_linear_size(img=label(neurites), min_size=(rad*2), method='3D')
+        soma = label(np.invert(neurites.astype(bool), dtype=bool) * in_seg) # Determination of the soma from missing values of in_img in neurites
+        soma[soma!=np.bincount(np.ravel(soma)[np.ravel(soma)!= 0]).argmax()] = 0 # Ensures all values of the soma are the same value
+        neurites = np.invert(soma.astype(bool), dtype=bool) * in_seg # Redetermines the neurites from missing values of segmented soma
+        neurites = size_filter_linear_size(img=label(neurites), min_size=(rad*2), method='3D') # Once again removes small undesired segments
+    return np.stack([label(soma), label(neurites)]) #Relabels soma and neurites for outputs and stacks soma into channel 0 and neurites into 1
