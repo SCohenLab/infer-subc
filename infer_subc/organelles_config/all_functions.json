@@ -2453,5 +2453,49 @@
         "python::module": "infer_subc.organelles.membrane",
         "python::function": "choose_cell",
         "parameters": null
+    },
+    "segment_soma_neurites":{
+        "name": "Segment soma & neurites from cellmask",
+        "python::module": "infer_subc.organelles.cellmask.py",
+        "python::function": "filter_soma_neurites",
+        "parameters": {
+            "method":{
+                "widget_type": "drop-down",
+                "data_type": "str",
+                "options": [
+                    "binary",
+                    "isotropic"
+                ]
+            }
+        }
+    },
+    "select_channel_from_raw_2": {
+        "name": "Select the cellmask for segmentation",
+        "python::module": "infer_subc.core.img",
+        "python::function": "select_cellmask_from_img",
+        "parameters": {
+            "nuc_present": {
+                "data_type": "bool",
+                "options": [
+                    true,
+                    false
+                ],
+                "widget_type": "drop-down"
+            },
+            "chan": {
+                "data_type": "int",
+                "options": [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7
+                ],
+                "widget_type": "drop-down"
+            }
+        }
     }
 }
