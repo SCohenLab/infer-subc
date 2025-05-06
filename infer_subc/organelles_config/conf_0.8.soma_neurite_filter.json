@@ -1,0 +1,20 @@
+{
+    "1": {
+        "category": "extraction",
+        "function": "select_channel_from_raw_2",
+        "parameter_values": {
+            "nuc_present": false,
+            "chan": 0
+        },
+        "parent": 0,
+        "annotation": "choose channel of cellmask"
+    },
+    "2":{
+        "category": "core",
+        "function": "segment_soma_neurites",
+        "parameter_values":{
+            "method": "binary"
+        },
+        "parent": 1
+    }
+}
