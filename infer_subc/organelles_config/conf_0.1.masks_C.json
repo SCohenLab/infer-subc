@@ -1,0 +1,144 @@
+{
+    "1": {
+        "category": "extraction",
+        "function": "membrane_composite",
+        "parameter_values": {
+            "Invert_PM": true,
+            "PM_Channel": 5,
+            "weight_ch0": 20,
+            "weight_ch1": 10,
+            "weight_ch2": 5,
+            "weight_ch3": 15,
+            "weight_ch4": 12,
+            "weight_ch5": 15,
+            "weight_ch6": 0,
+            "weight_ch7": 0,
+            "weight_ch8": 0,
+            "weight_ch9": 0
+        },
+        "parent": 0
+    },
+    "2": {
+        "category": "extraction",
+        "function": "membrane_composite",
+        "parameter_values": {
+            "Invert_PM": false,
+            "PM_Channel": 0,
+            "weight_ch0": 20,
+            "weight_ch1": 10,
+            "weight_ch2": 5,
+            "weight_ch3": 15,
+            "weight_ch4": 12,
+            "weight_ch5": 0,
+            "weight_ch6": 0,
+            "weight_ch7": 0,
+            "weight_ch8": 0,
+            "weight_ch9": 0
+        },
+        "parent": 0
+    },
+    "3": {
+        "category": "preprocessing",
+        "function": "close_and_filter",
+        "parameter_values": {
+            "Method": "Disk",
+            "Size": 5
+        },
+        "parent": 1
+    },
+    "4": {
+        "category": "preprocessing",
+        "function": "close_and_filter",
+        "parameter_values": {
+            "Method": "Scharr",
+            "Size": 0
+        },
+        "parent": 2
+    },
+    "5": {
+        "category": "core",
+        "function": "masked_object_thresh_bind_pm",
+        "parameter_values": {
+            "Bind_to_PM": false,
+            "Cutoff_Size": 413,
+            "Global_Method": "triangle",
+            "Local_Adjust": 0.533,
+            "PM_Channel": 0,
+            "Thresh_Adj": 1.0
+        },
+        "parent": [0,3]
+    },
+    "6": {
+        "category": "core",
+        "function": "masked_object_thresh_bind_pm",
+        "parameter_values": {
+            "Bind_to_PM": true,
+            "Cutoff_Size": 787,
+            "Global_Method": "ave_tri_med",
+            "Local_Adjust": 1.0,
+            "PM_Channel": 5,
+            "Thresh_Adj": 10.0
+        },
+        "parent": [0,4]
+    },
+    "7": {
+        "category": "postprocessing",
+        "function": "find_nuc",
+        "parameter_values": {
+            "Fill_Filter_Method": "3D",
+            "Gauss_Sigma": 3.0,
+            "Max_Hole_Width": 25,
+            "Median_Size": 10,
+            "Min_Hole_Width": 0,
+            "Nuc_Channel": 7,
+            "Search_Img": "Img 5",
+            "Small_Obj_Width": 15,
+            "Thresh_Factor": 0.9,
+            "Thresh_Max": 1.0,
+            "Thresh_Min": 0.12
+        },
+        "parent": [0,5,6]
+    },
+    "8": {
+        "category": "postprocessing",
+        "function": "fill_filter_and_mix_nuc",
+        "parameter_values": {
+            "Max_Hole_Width": 25,
+            "Method": "Disk",
+            "Min_Hole_Width": 0,
+            "Size": 0,
+            "Small_Obj_Width": 1
+        },
+        "parent": [7,5]
+    },
+    "9": {
+        "category": "postprocessing",
+        "function": "fill_filter_and_mix_nuc",
+        "parameter_values": {
+            "Max_Hole_Width": 25,
+            "Method": "Disk",
+            "Min_Hole_Width": 0,
+            "Size": 0,
+            "Small_Obj_Width": 1
+        },
+        "parent": [7,6]
+    },
+    "10": {
+        "category": "postpostprocessing",
+        "function": "double_watershed_closing",
+        "parameter_values": {
+            "Max_Hole_Width": 10000,
+            "Method": "Disk",
+            "Min_Hole_Width": 0,
+            "Size": 15,
+            "Watershed_Method": "3D"
+        },
+        "parent": [7,5,6,8,9]
+    },
+    "11": {
+        "category": "export",
+        "function": "stack_masks",
+        "parent": [7,10],
+        "annotation": "export  canonical masks (nuc,cellmask, cyto) 9"
+    }
+}
