@@ -20,9 +20,14 @@ def stack_layers(*layers) -> np.ndarray:
     return np.stack(layers, axis=0)
 
 ### USED ###
-def stack_masks(nuc_mask: np.ndarray, cellmask: np.ndarray, cyto_mask: np.ndarray) -> np.ndarray:
-    """stack canonical masks:  cellmask, nuc, cytoplasm as uint8 (never more than 255 nuclei)"""
-    layers = [nuc_mask, cellmask, cyto_mask]
+# def stack_masks(nuc_mask: np.ndarray, cellmask: np.ndarray, cyto_mask: np.ndarray) -> np.ndarray:
+#     """stack canonical masks:  cellmask, nuc, cytoplasm as uint8 (never more than 255 nuclei)"""
+#     layers = [nuc_mask, cellmask, cyto_mask]
+#     return np.stack(layers, axis=0).astype(np.uint8)
+
+def stack_masks(nuc_mask: np.ndarray, cellmask: np.ndarray) -> np.ndarray:
+    """stack canonical masks cellmask and nuc as uint8 (never more than 255 nuclei)"""
+    layers = [nuc_mask, cellmask]
     return np.stack(layers, axis=0).astype(np.uint8)
 
 

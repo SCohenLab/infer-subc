@@ -452,7 +452,7 @@ def sample_dirs(create: bool = False) -> None:
         # Checker for if the sample data folder exists
         if sd_path.exists():
 
-            for ct in ["astrocyte","neuron"]:
+            for ct in ["neuron_1","astrocyte","neuron_2"]:
                 # first check if cell type folder exists, if not raise error
                 if not (sd_path/f"example_{ct}").exists():
                     raise ValueError(f'example_{ct} folder does not exist in the intended directory')
@@ -474,9 +474,10 @@ def sample_dirs(create: bool = False) -> None:
 def sample_input(cell_type: Union[str, None]) -> tuple[Path, str, Path, Path]:
     """
     automatically sets the necessary paths for sample data if cell_type is
-    set equal to "neuron" or "astrocyte" for the notebooks in part 1
+    set equal to "neuron_1", "astrocyte", or "neuron_2" for the notebooks in part 1.
+    They are compatible with notebooks 1.1a, 1.1b and 1.1c respectively.
     """
-    cell_type_list = ["neuron", "astrocyte"]
+    cell_type_list = ["neuron_1","astrocyte","neuron_2"]
     
     if cell_type in cell_type_list:
         data_root_path = Path(os.getcwd()).parents[1] / "sample_data" /  f"example_{cell_type}"
@@ -490,5 +491,8 @@ def sample_input(cell_type: Union[str, None]) -> tuple[Path, str, Path, Path]:
         ## Specify the output folder to save the segmentation outputs if.
         ## If its not already created, the code below will creat it for you
         out_data_path = data_root_path / "seg"
-        
+
         return data_root_path, im_type, in_data_path, out_data_path
+    else:
+        raise ValueError('Sample data file type must be "neuron_1", "astroctye" or "neuron_2"')
+        
