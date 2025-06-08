@@ -4,6 +4,8 @@ from infer_subc.core.img import fill_and_filter_linear_size, get_interior_labels
 from aicssegmentation.core.utils import hole_filling
 from infer_subc.organelles.nuclei import infer_nuclei_fromlabel
 from infer_subc.organelles.cellmask import non_linear_cellmask_transform
+from infer_subc.core.img import label_bool_as_uint16
+from typing import Union
 
 def membrane_composite(in_img: np.ndarray,
                        weight_ch0: int = 0,
@@ -293,3 +295,136 @@ def choose_cell(composite_img: np.ndarray, nuc_labels: np.ndarray, watershed: np
     cellmask_out = np.zeros_like(watershed)
     cellmask_out[watershed == keep_label] = 1
     return cellmask_out
+
+##########################
+# infer_intermediate_masks
+# alternative workflow "c"
+##########################
+
+def infer_intermediate_masks(in_img: np.ndarray,
+                           pm_ch: Union[int,None],
+                           weights_I: list[int],
+                           weights_II: list[int],
+                           invert_pm_I: bool,
+                           invert_pm_II: bool,
+                           method_I: str,
+                           method_II: str,
+                           size_I: int,
+                           size_II: int,
+                           global_method_I: str,
+                           global_method_II: str,
+                           cutoff_size_I: int,
+                           cutoff_size_II: int,
+                           local_adj_I: float,
+                           local_adj_II: float,
+                           bind_to_pm_I: bool,
+                           bind_to_pm_II: bool,
+                           thresh_adj_I: float,
+                           thresh_adj_II: float):
+ 
+    """
+    Procedure to infer intermediate masks from linear unmixed input.
+
+    Parameters
+    ------------
+    in_img: 
+        a 3d image containing all the channels
+    pm_ch:
+        the index of the channel containing your plasma membrane label
+    weights_I:
+        a list of int that corresond to the weights for each channel in the first composite; use 0 if a channel should not be included in the composite image
+    weights_II:
+        a list of int that corresond to the weights for each channel in the second composite; use 0 if a channel should not be included in the composite image
+    invert_pm_I:
+        True = invert plasma membrane channel in the first composite
+        False = do not invert plasma membrane channel in the first composite
+    invert_pm_II:
+        True = invert plasma membrane channel in the second composite
+        False = do not invert plasma membrane channel in the second composite
+    method_I:
+        which footprint shape to use for the closing algorithm on the first composite. Options include:
+        "Ball" (3D closing), "Disk" (2D closing), and "Scharr" (skip closing altogether and apply Scharr edge detection).
+    method_II:
+        which footprint shape to use for the closing algorithm on the second composite. Options include:
+        "Ball" (3D closing), "Disk" (2D closing), and "Scharr" (skip closing altogether and apply Scharr edge detection).
+    size_I:
+        size of the footprint used in closing algorithm on the first composite, this value is disregarded if method_I == "Scharr"
+    size_II:
+        size of the footprint used in closing algorithm on the second composite, this value is disregarded if method_II == "Scharr"
+    global_method_I:
+         which method to use for calculating global threshold applied to composite_mask_I (MO). Options include:
+         "triangle" (or "tri"), "median" (or "med"), and "ave_tri_med" (or "ave").
+         "ave" refers the average of "triangle" threshold and "mean" threshold.
+    global_method_II:
+         which method to use for calculating global threshold applied to composite_mask_II (MO). Options include:
+         "triangle" (or "tri"), "median" (or "med"), and "ave_tri_med" (or "ave").
+         "ave" refers the average of "triangle" threshold and "mean" threshold.
+    cutoff_size_I: 
+        Masked Object threshold `size_min`; minimum size of of object to advanced to the local Otsu thresholding
+        step in the Masked Object thresholding of composite_mask_I.
+    cutoff_size_II: 
+        Masked Object threshold `size_min`; minimum size of of object to advanced to the local Otsu thresholding
+        step in the Masked Object thresholding of composite_mask_II.
+    local_adj_I: 
+        Masked Object threshold `local_adjust`, proportion applied to the local Otsu threshold (composite_mask_I MO thresholding)
+    local_adj_II: 
+        Masked Object threshold `local_adjust`, proportion applied to the local Otsu threshold (composite_mask_II MO thresholding)
+    bind_to_pm_I:
+        True = restrict the resulting mask_I_segmentation to the thresholded plasma membrane
+        False = do not restrict the resulting mask_I_segmentation to the thresholded plasma membrane
+    bind_to_pm_II:
+        True = restrict the resulting mask_II_segmentation to the thresholded plasma membrane
+        False = do not restrict the resulting mask_II_segmentation to the thresholded plasma membrane
+    thresh_adj_I:
+        the proportion applied to the Otsu threshold of the plasma membrane (disregarded if bind_to_pm_I == False)
+    thresh_adj_II:
+        the proportion applied to the Otsu threshold of the plasma membrane (disregarded if bind_to_pm_II == False)
+    
+    
+
+    Returns
+    -------------
+    mask_I and mask_II segmentation:
+        two logical/labels objects that will be used to find the cellmask
+
+    """
+
+    ###################
+    # EXTRACT
+    ###################
+
+    struct_img_raw_I = membrane_composite(in_img, *weights_I, invert_pm_I, pm_ch)
+
+    struct_img_raw_II = membrane_composite(in_img, *weights_II, invert_pm_II, pm_ch)
+
+    ###################
+    # PRE_PROCESSING
+    ###################
+
+    composite_mask_I = close_and_filter(struct_img_raw_I, method_I, size_I)
+
+    composite_mask_II = close_and_filter(struct_img_raw_II, method_II, size_II)
+
+    ###################
+    # CORE_PROCESSING
+    ###################
+
+    mask_I_segmentation = masked_object_thresh_bind_pm(in_img,
+                                                       composite_mask_I,
+                                                       global_method_I,
+                                                       cutoff_size_I,
+                                                       local_adj_I,
+                                                       bind_to_pm_I,
+                                                       pm_ch,
+                                                       thresh_adj_I)
+    
+    mask_II_segmentation = masked_object_thresh_bind_pm(in_img,
+                                                       composite_mask_II,
+                                                       global_method_II,
+                                                       cutoff_size_II,
+                                                       local_adj_II,
+                                                       bind_to_pm_II,
+                                                       pm_ch,
+                                                       thresh_adj_II)
+    
+    return label_bool_as_uint16(mask_I_segmentation),label_bool_as_uint16(mask_II_segmentation)

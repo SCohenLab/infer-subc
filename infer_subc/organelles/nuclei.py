@@ -21,6 +21,9 @@ from infer_subc.core.img import (
     stack_masks
 )
 
+from infer_subc.core.img import label_bool_as_uint16
+from infer_subc.organelles.membrane import find_nuc
+
 ### USED ###
 ##########################
 #  infer_nuclei_fromlabel
@@ -419,3 +422,86 @@ def mask_cytoplasm_nuclei(cellmask: np.ndarray,
     stack = stack_masks(nuc_mask=good_nuc, cellmask=cellmask, cyto_mask=good_cyto)
     
     return stack
+
+##########################
+# infer_nucleus_masks_C
+# alternative workflow "c"
+##########################
+
+def infer_nucleus_masks_C(in_img: np.ndarray,
+                           nuc_ch: Union[int,None],
+                           mask_I_segmentation: np.ndarray,
+                           mask_II_segmentation: np.ndarray,
+                           nuc_med_filter_size: int,
+                           nuc_gaussian_smoothing_sigma: float,
+                           nuc_threshold_factor: float,
+                           nuc_thresh_min: float,
+                           nuc_thresh_max: float,
+                           nuc_hole_min_width: int,
+                           nuc_hole_max_width: int,
+                           nuc_small_object_width: int,
+                           nuc_fill_filter_method: str,
+                           nuc_search_img: str):
+    
+    """
+    Procedure to infer intermediate masks from linear unmixed input.
+
+    Parameters
+    ------------
+    in_img: 
+        a 3d image containing all the channels
+    nuc_ch:
+        the index of the channel containing your nuclei label
+    mask_I_segmentation:
+        the first logical/labels object that will be used to find the cellmask
+    mask_II_segmentation:
+        the second logical/labels object that will be used to find the cellmask
+    nuc_med_filter_size: 
+        width of median filter for nuclei signal
+    nuc_gaussian_smoothing_sigma: 
+        sigma for gaussian smoothing of nuclei signal
+    nuc_threshold_factor:
+        adjustment to make to the intial local threshold of the nucleus singal;
+        intital threshold is derived from Li's minimum cross entropy method
+    nuc_thresh_min:
+        minimum bound of the local threshold of the nucleus
+    nuc_thresh_max:
+        maximum bound of the local threshold of the nucleus
+    nuc_hole_min_width: 
+        the minimum hole width to be filled in the nucleus post-thresholding
+    nuc_hole_max_width:
+        the maximum hole width to be filled in the nucleus post-thresholding
+    nuc_small_object_width:
+        minimum object size cutoff for nucleus post-thresholding
+    nuc_fill_filter_method:
+        determines if fill and filter should be run 'sice-by-slice' or in '3D'
+    nuc_search_img:
+        the segmentation used to select the nucleus based on greatest overlap. Options include:
+        "Img 5" (mask_I_segmentation) and "Img 6" (mask_II_segmentation)
+    
+    Returns
+    -------------
+    nucleus_object:
+        mask defined extent of NU
+
+    """
+    ###################
+    # POST_PROCESSING
+    ###################
+
+    nuc_obj = find_nuc(in_img, 
+             mask_I_segmentation,
+             mask_II_segmentation,
+             nuc_ch,
+             nuc_med_filter_size,
+             nuc_gaussian_smoothing_sigma,
+             nuc_threshold_factor,
+             nuc_thresh_min,
+             nuc_thresh_max,
+             nuc_hole_min_width,
+             nuc_hole_max_width,
+             nuc_small_object_width,
+             nuc_fill_filter_method,
+             nuc_search_img)
+    
+    return label_bool_as_uint16(nuc_obj)

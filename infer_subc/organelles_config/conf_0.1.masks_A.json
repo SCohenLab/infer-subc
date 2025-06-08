@@ -61,10 +61,10 @@
         "category": "postpostprocessing",
         "function": "infer_nuclei_fromcytoplasm",
         "parameter_values": {
-            "nuc_min_width": 0,
-            "nuc_max_width": 500,
+            "nuc_min_hole_w": 0,
+            "nuc_max_hole_w": 500,
             "fill_filter_method": "3D",
-            "small_obj_width": 20
+            "small_obj_w": 20
         },
         "parent": 5,
         "annotation": "nuclei segmentation from cytoplasm mask: 6"
@@ -86,8 +86,7 @@
         "function": "stack_masks",
         "parent": [
             5,
-            7,
-            6
+            7
         ],
         "annotation": "export  canonical masks (nuc,cellmask, cyto) 9"
     }

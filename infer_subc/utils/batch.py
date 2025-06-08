@@ -4,7 +4,7 @@ import time
 
 from infer_subc.core.file_io import list_image_files, export_tiff, read_tiff_image, read_czi_image, export_inferred_organelle
 from infer_subc.core.img import label_uint16
-from infer_subc.organelles.masks import infer_masks, infer_masks_A, infer_masks_B
+from infer_subc.organelles.masks import infer_masks, infer_masks_A, infer_masks_B, infer_masks_C
 from infer_subc.organelles.er import infer_ER
 from infer_subc.organelles.golgi import infer_golgi
 from infer_subc.organelles.lipid import infer_LD
@@ -137,6 +137,7 @@ def batch_process_segmentation(raw_path: Union[Path,str],
                                masks_settings: Union[List, None],
                                masks_A_settings: Union[List, None],
                                masks_B_settings: Union[List, None],
+                               masks_C_settings: Union[List, None],
                                lyso_settings: Union[List, None],
                                mito_settings: Union[List, None],
                                golgi_settings: Union[List, None],
@@ -226,6 +227,52 @@ def batch_process_segmentation(raw_path: Union[Path,str],
                         nuc_small_obj_width: int,
                         cell_fillhole_max: int,
                         cyto_small_object_width2: int]
+    For infer_masks_C:
+    - `masks_C_settings` = [pm_ch: Union[int,None],
+                    nuc_ch: Union[int,None],
+                    weights_I: list[int],
+                    weights_II: list[int],
+                    invert_pm_I: bool,
+                    invert_pm_II: bool,
+                    method_I: str,
+                    method_II: str,
+                    size_I: int,
+                    size_II: int,
+                    global_method_I: str,
+                    global_method_II: str,
+                    cutoff_size_I: int,
+                    cutoff_size_II: int,
+                    local_adj_I: float,
+                    local_adj_II: float,
+                    bind_to_pm_I: bool,
+                    bind_to_pm_II: bool,
+                    thresh_adj_I: float,
+                    thresh_adj_II: float,
+                    nuc_med_filter_size: int,
+                    nuc_gaussian_smoothing_sigma: float,
+                    nuc_threshold_factor: float,
+                    nuc_thresh_min: float,
+                    nuc_thresh_max: float,
+                    nuc_hole_min_width: int,
+                    nuc_hole_max_width: int,
+                    nuc_small_object_width: int,
+                    nuc_fill_filter_method: str,
+                    nuc_search_img: str,
+                    cm_method_I: str,
+                    cm_method_II: str,
+                    cm_size_I: int,
+                    cm_size_II: int,
+                    cm_min_hole_width_I: int,
+                    cm_min_hole_width_II: int,
+                    cm_max_hole_width_I: int,
+                    cm_max_hole_width_II: int,
+                    cm_small_obj_width_I: int,
+                    cm_small_obj_width_II: int,
+                    cell_watershed_method: str,
+                    cell_min_hole_width: int,
+                    cell_max_hole_width: int,
+                    cell_method: str,
+                    cell_size: int)]
 
     For infer_lyso:
     - `lyso_settings` = [lyso_ch: int,
@@ -388,6 +435,12 @@ def batch_process_segmentation(raw_path: Union[Path,str],
             masks_B = infer_masks_B(img_data, *masks_B_settings)
             out_file_n = export_inferred_organelle(masks_B, file_splitter+"masks_B", meta_dict, seg_path)
             seg_list.append("masks_B")
+
+        # run masks_C function
+        if masks_C_settings:
+            masks_C = infer_masks_C(img_data, *masks_C_settings)
+            out_file_n = export_inferred_organelle(masks_C, file_splitter+"masks_C", meta_dict, seg_path)
+            seg_list.append("masks_C")
 
         # run 1.2_infer_lysosomes function
         if lyso_settings:

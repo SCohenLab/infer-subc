@@ -19,6 +19,7 @@ from infer_subc.core.img import (
     get_interior_labels,
 )
 
+from infer_subc.organelles.membrane import mix_nuc_and_fill, double_watershed
 
 def raw_cellmask_fromaggr(img_in: np.ndarray, scale_min_max: bool = True) -> np.ndarray:
     """define cellmask image
@@ -486,3 +487,115 @@ def select_highest_intensity_cell(raw_image: np.ndarray,
     good_cell = cell_labels == keep_label
 
     return good_cell
+
+##########################
+# infer_cellmask_masks_C
+# alternative workflow "c"
+##########################
+def infer_cellmask_masks_C(nuc_obj: np.ndarray,
+                           mask_I_segmentation: np.ndarray,
+                           mask_II_segmentation: np.ndarray,
+                           cm_method_I: str,
+                           cm_method_II: str,
+                           cm_size_I: int,
+                           cm_size_II: int,
+                           cm_min_hole_width_I: int,
+                           cm_min_hole_width_II: int,
+                           cm_max_hole_width_I: int,
+                           cm_max_hole_width_II: int,
+                           cm_small_obj_width_I: int,
+                           cm_small_obj_width_II: int,
+                           cell_watershed_method: str,
+                           cell_min_hole_width: int,
+                           cell_max_hole_width: int,
+                           cell_method: str,
+                           cell_size: int):
+    
+    """
+    Procedure to infer cellmask from linear unmixed input.
+
+    Parameters
+    ------------
+    nuc_obj:
+        a 3d image containing the inferred nucleus object
+    mask_I_segmentation:
+        the first logical/labels object that will be used to find the cellmask
+    mask_II_segmentation:
+        the second logical/labels object that will be used to find the cellmask
+    cm_method_I:
+        which footprint shape to use for the nucleus dilation before combination with the mask_I_segmentation. Options include:
+        "Ball" (3D dilation), "Disk" (2D dilation), and "None" (skip dilation altogether).
+    cm_method_II:
+        which footprint shape to use for the nucleus dilation before combination with the mask_II_segmentation. Options include:
+        "Ball" (3D dilation), "Disk" (2D dilation), and "None" (skip dilation altogether).
+    cm_size_I:
+        size of the footprint used in dilation of the nucleus object, this value is disregarded if cm_method_I == "None"
+    cm_size_II:
+        size of the footprint used in dilation of the nucleus object, this value is disregarded if cm_method_II == "None"
+    cm_min_hole_width_I: 
+        the minimum hole width to be filled in the cellmask_I_segmentation
+    cm_min_hole_width_II: 
+        the minimum hole width to be filled in the cellmask_II_segmentation
+    cm_max_hole_width_I: 
+        the maximum hole width to be filled in the cellmask_I_segmentation
+    cm_max_hole_width_II: 
+        the maximum hole width to be filled in the cellmask_II_segmentation
+    cm_small_obj_width_I:
+        minimum object size cutoff for the cellmask_I_segmentation
+    cm_small_obj_width_II:
+        minimum object size cutoff for the cellmask_II_segmentation
+    cell_watershed_method:
+        determines if the watershed should be run 'sice-by-slice' or in '3D'
+    cell_min_hole_width: 
+        the minimum hole width to be filled in the cellmask object
+    cell_max_hole_width: 
+        the maximum hole width to be filled in the cellmask object
+    cell_method:
+        which footprint shape to use for the cellmask closing (dilation -> erosion). Options include:
+        "Ball" (3D closing), "Disk" (2D closing), and "None" (skip closing altogether).
+    cell_size:
+        size of the footprint used in closing of the cellmask object, this value is disregarded if cm_method_I == "None"
+        
+    
+    Returns
+    -------------
+    cellmask:
+        a logical/labels object defining boundaries of cellmask
+
+    """
+    ###################
+    # POST_PROCESSING
+    ###################
+
+    cellmask_I_seg = mix_nuc_and_fill(nuc_obj,
+                 mask_I_segmentation,
+                 cm_method_I,
+                 cm_size_I,
+                 cm_min_hole_width_I,
+                 cm_max_hole_width_I,
+                 cm_small_obj_width_I)
+    
+    cellmask_II_seg = mix_nuc_and_fill(nuc_obj,
+                 mask_II_segmentation,
+                 cm_method_II,
+                 cm_size_II,
+                 cm_min_hole_width_II,
+                 cm_max_hole_width_II,
+                 cm_small_obj_width_II)
+    
+    #########################
+    # POST- POST_PROCESSING
+    #########################
+
+    cellmask_obj = double_watershed(nuc_obj,
+                                mask_I_segmentation,
+                                mask_II_segmentation,
+                                cellmask_I_seg,
+                                cellmask_II_seg,
+                                cell_watershed_method,
+                                cell_min_hole_width,
+                                cell_max_hole_width,
+                                cell_method,
+                                cell_size)
+    
+    return label_bool_as_uint16(cellmask_obj)
