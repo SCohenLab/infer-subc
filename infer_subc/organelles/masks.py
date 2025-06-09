@@ -6,12 +6,11 @@ from infer_subc.core.img import *
 from infer_subc.organelles.cellmask import (infer_cellmask_fromcomposite,
                                             infer_cellmask_fromcytoplasm,
                                             select_highest_intensity_cell,
-                                            combine_cytoplasm_and_nuclei,
-                                            infer_cellmask_masks_C)
+                                            combine_cytoplasm_and_nuclei)
 
-from infer_subc.organelles.nuclei import infer_nuclei_fromlabel, infer_nuclei_fromcytoplasm, mask_cytoplasm_nuclei, segment_nuclei_seeds, infer_nucleus_masks_C
+from infer_subc.organelles.nuclei import infer_nuclei_fromlabel, infer_nuclei_fromcytoplasm, mask_cytoplasm_nuclei, segment_nuclei_seeds
 from infer_subc.organelles.cytoplasm import infer_cytoplasm, infer_cytoplasm_fromcomposite, infer_cytoplasm_fromcomposite
-from infer_subc.organelles.membrane import infer_intermediate_masks
+from infer_subc.organelles.membrane import infer_intermediate_masks, infer_cellmask_masks_C, infer_nucleus_masks_C
 
 ##################
 # Masks Workflow #

@@ -14,9 +14,24 @@ from aicssegmentation.core.pre_processing_utils import image_smoothing_gaussian_
 from aicssegmentation.core.seg_dot import dot_2d_slice_by_slice_wrapper, dot_3d_wrapper
 
 
-def stack_layers(*layers) -> np.ndarray:
-    """wrapper to stack the inferred objects into a single numpy.ndimage"""
+def stack_layers(nuclei_labels: np.ndarray, cellmask: np.ndarray) -> np.ndarray:
+    """wrapper to stack the inferred objects into a single numpy.ndimage.
+    Most recent update (masks D) corrects the nucleus output if incorrect beforehand"""
 
+    # make cellmask boolean
+    cell = np.copy(cellmask) > 0
+
+    # create a copy of the nuclei labels
+    nuclei = np.copy(nuclei_labels)
+
+    # remove extracellular nuclei
+    nuclei[~cell] = 0
+
+    # make nuc boolean type
+    nuc_mask = nuclei > 0
+
+    # establish layers
+    layers = [label_bool_as_uint16(nuc_mask), cellmask]
     return np.stack(layers, axis=0)
 
 ### USED ###
