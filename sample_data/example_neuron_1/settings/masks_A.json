@@ -57,9 +57,10 @@
         "function": "infer_nuclei_fromcytoplasm",
         "parameter_values": {
             "fill_filter_method": "3D",
-            "nuc_max_width": 400,
-            "nuc_min_width": 0,
-            "small_obj_width": 20
+            "nuc_max_hole_w": 400,
+            "nuc_min_hole_w": 0,
+            "small_obj_w": 20,
+            "nuc_fill_method" : "3D"
         },
         "parent": 5
     },
@@ -81,9 +82,8 @@
         "category": "export",
         "function": "stack_masks",
         "parent": [
-            5,
-            7,
-            6
+            6,
+            7
         ]
     }
 }

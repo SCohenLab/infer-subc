@@ -66,7 +66,10 @@
             "PM_Channel": 0,
             "Thresh_Adj": 1.0
         },
-        "parent": [0,3]
+        "parent": [
+            0,
+            3
+        ]
     },
     "6": {
         "category": "core",
@@ -79,7 +82,10 @@
             "PM_Channel": 5,
             "Thresh_Adj": 10.0
         },
-        "parent": [0,4]
+        "parent": [
+            0,
+            4
+        ]
     },
     "7": {
         "category": "postprocessing",
@@ -97,7 +103,11 @@
             "Thresh_Max": 1.0,
             "Thresh_Min": 0.12
         },
-        "parent": [0,5,6]
+        "parent": [
+            0,
+            5,
+            6
+        ]
     },
     "8": {
         "category": "postprocessing",
@@ -109,7 +119,10 @@
             "Size": 0,
             "Small_Obj_Width": 1
         },
-        "parent": [7,5]
+        "parent": [
+            7,
+            5
+        ]
     },
     "9": {
         "category": "postprocessing",
@@ -121,7 +134,10 @@
             "Size": 0,
             "Small_Obj_Width": 1
         },
-        "parent": [7,6]
+        "parent": [
+            7,
+            6
+        ]
     },
     "10": {
         "category": "postpostprocessing",
@@ -133,7 +149,13 @@
             "Size": 15,
             "Watershed_Method": "3D"
         },
-        "parent": [7,5,6,8,9]
+        "parent": [
+            7,
+            5,
+            6,
+            8,
+            9
+        ]
     },
     "11": {
         "category": "export",
@@ -141,4 +163,5 @@
         "parent": [7,10],
         "annotation": "export  canonical masks (nuc,cellmask)"
     }
+    
 }

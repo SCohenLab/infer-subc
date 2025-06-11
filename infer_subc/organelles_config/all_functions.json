@@ -1889,6 +1889,14 @@
                 "min": 0,
                 "max": 80,
                 "increment": 1
+            },
+            "nuc_fill_method": {
+                "data_type": "str",
+                "widget_type": "drop-down",
+                "options": [
+                    "3D",
+                    "slice_by_slice"
+                ]
             }
         }
     },

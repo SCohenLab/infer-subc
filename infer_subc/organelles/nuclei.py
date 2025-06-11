@@ -167,7 +167,9 @@ def infer_nuclei_fromcytoplasm(cytoplasm_mask: np.ndarray,
     small_obj_w: int
         object size cutoff to remove artifacts from dilation/erosion steps
     fill_filter_method: str
-        to filter artifacts in "3D" or "slice-by-slice"
+        to filter artifacts in "3D" or "slice-by-slice" (for the nucleus after the exclusive or)
+    nuc_fill_method: str
+        to filter artifacts in "3D" or "slice-by-slice" (for the cytoplasm before the exclusive or)
 
     Returns
     -------------
@@ -420,6 +422,7 @@ def mask_cytoplasm_nuclei(cellmask: np.ndarray,
                                         min_size=small_obj_width,
                                         method='3D')
     
-    stack = stack_masks(nuc_mask=good_nuc, cellmask=cellmask, cyto_mask=good_cyto)
-    
-    return stack
+    # stack = stack_masks(nuc_mask=good_nuc, cellmask=cellmask, cyto_mask=good_cyto)
+    # Changed due to only nuc & cell output and addition of Step 9
+
+    return good_nuc

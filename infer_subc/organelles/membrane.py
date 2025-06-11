@@ -106,14 +106,14 @@ def find_nuc(raw_img: np.ndarray,
              ):
     nuc_img = infer_nuclei_fromlabel(in_img=raw_img, 
                                      nuc_ch=Nuc_Channel,
-                                     median_sz=Median_Size, 
-                                     gauss_sig=Gauss_Sigma,
+                                     median_size=Median_Size, 
+                                     gauss_sigma=Gauss_Sigma,
                                      thresh_factor=Thresh_Factor,
                                      thresh_min=Thresh_Min,
                                      thresh_max=Thresh_Max,
-                                     min_hole_w=Min_Hole_Width,
-                                     max_hole_w=Max_Hole_Width,
-                                     small_obj_w=Small_Obj_Width,
+                                     min_hole_width=Min_Hole_Width,
+                                     max_hole_width=Max_Hole_Width,
+                                     small_obj_width=Small_Obj_Width,
                                      fill_filter_method=Fill_Filter_Method)
     if Search_Img == "Img 5":
         in_img = in_img_A
@@ -621,5 +621,87 @@ def infer_cellmask_masks_C(nuc_obj: np.ndarray,
                                 cell_max_hole_width,
                                 cell_method,
                                 cell_size)
+    
+    return label_bool_as_uint16(cellmask_obj)
+
+##########################
+# infer_cellmask_masks_D
+# alternative workflow "d"
+##########################
+def infer_cellmask_masks_D(in_img: np.ndarray,
+                           pm_ch: Union[int,None],
+                           weights: list[int],
+                           invert_pm: bool,
+                           nuclei_labels: np.ndarray,
+                           cell_method: str,
+                           hole_min: int,
+                           hole_max: int,
+                           fill_2d: bool):
+    
+    """
+    Procedure to infer intermediate masks from linear unmixed input.
+
+    Parameters
+    ------------
+    in_img: 
+        a 3d image containing all the channels
+    pm_ch:
+        the index of the channel containing your plasma membrane label
+    weights:
+        a list of int that corresond to the weights for each channel in the composite; use 0 if a channel should not be included in the composite image
+    invert_pm:
+        True = invert plasma membrane channel in the composite
+        False = do not invert plasma membrane channel in the composite
+    nuclei_labels:
+        a 3d image containing the inferred nuclei objects
+    cell_method:
+        The type of watershedding method to perform for the cellmask. Options include:
+        "3D" (3D watershedding), "slice-by-slice" (2D watershedding).
+    hole_min: 
+        the minimum hole width to be filled in the cellmask
+    hole_max: 
+        the maximum hole width to be filled in the cellmask
+    fill_2d:
+        True = fill cellmask holes in 2D (slice by slice)
+        False = fill cellmask holes in 3D
+    
+    Returns
+    -------------
+    cellmask:
+        a logical/labels object defining boundaries of cellmask
+
+    """
+
+    ###################
+    # EXTRACT
+    ###################
+
+    struct_img_raw = membrane_composite(in_img, *weights, invert_pm, pm_ch)
+
+    ###################
+    # CORE_PROCESSING
+    ###################
+
+    watershed_cell = invert_pm_watershed(in_img,
+                                  nuclei_labels,
+                                  pm_ch,
+                                  cell_method)
+    
+    ###################
+    # POST_PROCESSING
+    ###################
+    
+    raw_cellmask = choose_cell(struct_img_raw,
+                           nuclei_labels,
+                           watershed_cell)
+    
+    #########################
+    # POST- POST_PROCESSING
+    #########################
+
+    cellmask_obj = hole_filling(raw_cellmask,
+                            hole_min,
+                            hole_max,
+                            fill_2d)
     
     return label_bool_as_uint16(cellmask_obj)

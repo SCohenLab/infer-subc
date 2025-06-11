@@ -10,7 +10,7 @@ from infer_subc.organelles.cellmask import (infer_cellmask_fromcomposite,
 
 from infer_subc.organelles.nuclei import infer_nuclei_fromlabel, infer_nuclei_fromcytoplasm, mask_cytoplasm_nuclei, segment_nuclei_seeds
 from infer_subc.organelles.cytoplasm import infer_cytoplasm, infer_cytoplasm_fromcomposite, infer_cytoplasm_fromcomposite
-from infer_subc.organelles.membrane import infer_intermediate_masks, infer_cellmask_masks_C, infer_nucleus_masks_C
+from infer_subc.organelles.membrane import infer_intermediate_masks, infer_cellmask_masks_C, infer_nucleus_masks_C, infer_cellmask_masks_D
 
 ##################
 # Masks Workflow #
@@ -600,3 +600,113 @@ def infer_masks_C(in_img: np.ndarray,
                             cellmask=cellmask_obj)
     
     return mask_stack
+
+def infer_masks_D(in_img: np.ndarray,
+                   pm_ch: Union[int,None],
+                   nuc_ch: Union[int,None],
+                   weights: list[int],
+                   median_sz: int, 
+                   gauss_sig: float,
+                   thresh_factor: float,
+                   thresh_min: float,
+                   thresh_max: float,
+                   min_hole_w: int,
+                   max_hole_w: int,
+                   small_obj_w: int,
+                   fill_filter_method: str,
+                   invert_pm: bool,
+                   cell_method: str,
+                   hole_min: int,
+                   hole_max: int,
+                   fill_2d: bool):
+    
+    """
+    Procedure to infer intermediate masks from linear unmixed input.
+
+    Parameters
+    ------------
+    in_img: 
+        a 3d image containing all the channels
+    pm_ch:
+        the index of the channel containing your plasma membrane label
+    nuc_ch:
+        the index of the channel containing your nuclei label
+    weights:
+        a list of int that corresond to the weights for each channel in the composite; use 0 if a channel should not be included in the composite image
+    median_sz: int
+        width of median filter for nuclei signal
+    gauss_sig: float
+        sigma for gaussian smoothing of nuclei signal
+    thresh_factor: float
+        adjustment factor for log Li nuclei threholding
+    thresh_min: float
+        abs min threhold for log Li nuclei threholding
+    thresh_max: float
+        abs max threhold for log Li nuclei threholding
+    min_hole_w: int
+        hole filling minimum for nuclei post-processing
+    max_hole_w: int
+        hole filling cutoff for nuclei post-processing
+    small_obj_w: int
+        minimum object size cutoff for nuclei post-processing
+    fill_filter_method:
+        determines if fill and filter should be run 'sice-by-slice' or in '3D' (nucleus)
+    invert_pm:
+        True = invert plasma membrane channel in the composite
+        False = do not invert plasma membrane channel in the composite
+    cell_method:
+        The type of watershedding method to perform for the cellmask. Options include:
+        "3D" (3D watershedding), "slice-by-slice" (2D watershedding).
+    hole_min: 
+        the minimum hole width to be filled in the cellmask
+    hole_max: 
+        the maximum hole width to be filled in the cellmask
+    fill_2d:
+        True = fill cellmask holes in 2D (slice by slice)
+        False = fill cellmask holes in 3D
+    
+    Returns
+    -------------
+    mask_stack:
+        a two channel np.ndarray constisting of the nucleus and cell (one object per channel)
+
+    """
+
+    ##########################
+    # get nuclei labels #
+    ##########################
+
+    nuclei_labels = infer_nuclei_fromlabel(in_img,
+                                nuc_ch,
+                                median_sz,
+                                gauss_sig,
+                                thresh_factor,
+                                thresh_min,
+                                thresh_max,
+                                min_hole_w,
+                                max_hole_w,
+                                small_obj_w,
+                                fill_filter_method)
+    
+    ##########################
+    # get cellmask #
+    ##########################
+
+    cellmask_obj = infer_cellmask_masks_D(in_img,
+                                    pm_ch,
+                                    weights,
+                                    invert_pm,
+                                    nuclei_labels,
+                                    cell_method,
+                                    hole_min,
+                                    hole_max,
+                                    fill_2d)
+    
+    ###################
+    ### stack layers ##
+    ###################
+
+    stack = stack_layers(nuclei_labels = nuclei_labels,
+                         cellmask = cellmask_obj)
+    
+    return stack

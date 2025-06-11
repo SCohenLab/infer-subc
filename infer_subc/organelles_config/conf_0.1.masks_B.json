@@ -82,5 +82,11 @@
         },
         "parent": [7, 4],
         "annotation": ""
+    },
+    "9": {
+        "category": "export",
+        "function": "stack_masks",
+        "parent": [8,7],
+        "annotation": "export  canonical masks (nuc,cellmask)"
     }
 }

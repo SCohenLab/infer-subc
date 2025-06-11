@@ -4,7 +4,7 @@ import time
 
 from infer_subc.core.file_io import list_image_files, export_tiff, read_tiff_image, read_czi_image, export_inferred_organelle
 from infer_subc.core.img import label_uint16
-from infer_subc.organelles.masks import infer_masks, infer_masks_A, infer_masks_B, infer_masks_C
+from infer_subc.organelles.masks import infer_masks, infer_masks_A, infer_masks_B, infer_masks_C, infer_masks_D
 from infer_subc.organelles.er import infer_ER
 from infer_subc.organelles.golgi import infer_golgi
 from infer_subc.organelles.lipid import infer_LD
@@ -138,6 +138,7 @@ def batch_process_segmentation(raw_path: Union[Path,str],
                                masks_A_settings: Union[List, None],
                                masks_B_settings: Union[List, None],
                                masks_C_settings: Union[List, None],
+                               masks_D_settings: Union[List, None],
                                lyso_settings: Union[List, None],
                                mito_settings: Union[List, None],
                                golgi_settings: Union[List, None],
@@ -272,7 +273,26 @@ def batch_process_segmentation(raw_path: Union[Path,str],
                     cell_min_hole_width: int,
                     cell_max_hole_width: int,
                     cell_method: str,
-                    cell_size: int)]
+                    cell_size: int]
+
+    For infer_masks_D:
+    - `masks_D_settings` = [pm_ch: Union[int,None],
+                   nuc_ch: Union[int,None],
+                   weights: list[int],
+                   median_sz: int, 
+                   gauss_sig: float,
+                   thresh_factor: float,
+                   thresh_min: float,
+                   thresh_max: float,
+                   min_hole_w: int,
+                   max_hole_w: int,
+                   small_obj_w: int,
+                   fill_filter_method: str,
+                   invert_pm: bool,
+                   cell_method: str,
+                   hole_min: int,
+                   hole_max: int,
+                   fill_2d: bool]
 
     For infer_lyso:
     - `lyso_settings` = [lyso_ch: int,
@@ -441,6 +461,12 @@ def batch_process_segmentation(raw_path: Union[Path,str],
             masks_C = infer_masks_C(img_data, *masks_C_settings)
             out_file_n = export_inferred_organelle(masks_C, file_splitter+"masks_C", meta_dict, seg_path)
             seg_list.append("masks_C")
+        
+        # run masks_D function
+        if masks_D_settings:
+            masks_D = infer_masks_D(img_data, *masks_C_settings)
+            out_file_n = export_inferred_organelle(masks_D, file_splitter+"masks_D", meta_dict, seg_path)
+            seg_list.append("masks_D")
 
         # run 1.2_infer_lysosomes function
         if lyso_settings:
