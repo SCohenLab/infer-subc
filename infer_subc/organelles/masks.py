@@ -226,7 +226,7 @@ def infer_masks_A(in_img: np.ndarray,
     Returns
     -------------
     mask_stack:
-        a logical/labels object defining boundaries of nucleus, cell mask, and cytoplasm
+        a logical/labels object defining boundaries of nucleus and cell mask
 
     """
     
@@ -257,7 +257,7 @@ def infer_masks_A(in_img: np.ndarray,
                                             small_obj_width = cell_small_obj_width,
                                             fill_filter_method = cell_fill_filter_method)
     
-    stack = stack_masks(nuc_mask=nuc_obj, cellmask=cell_obj, cyto_mask=cyto_obj)
+    stack = stack_masks(nuc_mask=nuc_obj, cellmask=cell_obj)
 
     return stack
 
@@ -327,7 +327,7 @@ def infer_masks_B(in_img: np.ndarray,
     Returns
     -------------
     mask_stack:
-        a three channel np.ndarray constisting of the nucleus, cell and cytoplasm masks (one object per channel)
+        a three channel np.ndarray constisting of the nucleus and cell (one object per channel)
 
     """
     cytoplasms = infer_cytoplasm_fromcomposite(in_img, 
@@ -351,9 +351,11 @@ def infer_masks_B(in_img: np.ndarray,
     
     good_CM = select_highest_intensity_cell(in_img, cellmasks, nuclei_seeds)
     
-    mask_stack = mask_cytoplasm_nuclei(good_CM, cytoplasms, cyto_small_object_width2)
+    good_nuc = mask_cytoplasm_nuclei(good_CM, cytoplasms, cyto_small_object_width2)
     
-    return mask_stack
+    stack = stack_masks(nuc_mask=good_nuc, cellmask=good_CM)
+
+    return stack
 
 ####################
 # Masks C Workflow #

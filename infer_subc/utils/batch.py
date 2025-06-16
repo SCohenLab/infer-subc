@@ -464,7 +464,7 @@ def batch_process_segmentation(raw_path: Union[Path,str],
         
         # run masks_D function
         if masks_D_settings:
-            masks_D = infer_masks_D(img_data, *masks_C_settings)
+            masks_D = infer_masks_D(img_data, *masks_D_settings)
             out_file_n = export_inferred_organelle(masks_D, file_splitter+"masks_D", meta_dict, seg_path)
             seg_list.append("masks_D")
 

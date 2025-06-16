@@ -398,7 +398,7 @@ def mask_cytoplasm_nuclei(cellmask: np.ndarray,
                            small_obj_width: int):
     """ 
     mask the cytoplasm with the cell mask to isolate the cytoplasmic area of intereste.
-    create a single nuclei segmentation from the inverse of the cytoplas (no binary opening)
+    create a single nuclei segmentation from the inverse of the cytoplasm (no binary opening)
 
     Parameters:
     ----------
