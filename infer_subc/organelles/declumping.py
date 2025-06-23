@@ -15,8 +15,8 @@ def _highpass_filter(in_img: np.ndarray, sigma:float=0.0, median_size:int=0,
                                    gauss_sigma = sigma)
         highpass -= lowpass
         np.clip(highpass, 0, None, out=highpass)
-        if open:
-            highpass=opening(highpass)
+    if open:
+        highpass=opening(highpass)
     return highpass
 
 def _otsu_size_filter(in_img: np.ndarray, thresh_adj:float=1, min_size:int=0) -> np.ndarray:
