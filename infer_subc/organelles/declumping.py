@@ -31,9 +31,9 @@ def watershed_declumping(raw_img:np.ndarray, seg_img:np.ndarray, declump:bool,
         highpass = _highpass_filter(in_img=raw_img, sigma=sigma, median_size=median_size, 
                                     open=open, iterations=iterations)
         ots = _otsu_size_filter(in_img=highpass, thresh_adj=thresh_adj, min_size=min_size)
-        return label((seg_img[seg_img>0]) + watershed(image=(np.max(raw_img)-raw_img), 
+        return label((seg_img) + watershed(image=(np.max(raw_img)-raw_img), 
                                                       markers=label(ots), 
-                                                      mask=seg_img[seg_img>0],
+                                                      mask=seg_img,
                                                       connectivity=np.ones((3, 3, 3), bool)))
     else:
         return seg_img
