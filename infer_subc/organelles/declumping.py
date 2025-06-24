@@ -1,5 +1,5 @@
 import numpy as np
-from scipy import ndimage
+from aicssegmentation import ndimage
 from skimage.morphology import opening
 from skimage.filters import threshold_otsu
 from skimage.segmentation import watershed
