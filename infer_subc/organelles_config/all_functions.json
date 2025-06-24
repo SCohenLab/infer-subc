@@ -2469,7 +2469,7 @@
             }
         }
     },
-    "select_channel_from_raw_2": {
+    "select_cellmask_from_mask": {
         "name": "Select the cellmask for segmentation",
         "python::module": "infer_subc.core.img",
         "python::function": "select_cellmask_from_img",

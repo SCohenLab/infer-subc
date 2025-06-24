@@ -1,7 +1,7 @@
 {
     "1": {
         "category": "extraction",
-        "function": "select_channel_from_raw_2",
+        "function": "select_cellmask_from_mask",
         "parameter_values": {
             "nuc_present": false,
             "chan": 0
