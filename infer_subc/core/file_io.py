@@ -544,54 +544,5 @@ def create_quant(create: bool):
                 print(f"making {qfol / sub}")
         else:
             print("Quantification subfolder has already been created")
-
-def nuc_cell_divide(divide: bool):
-
-    '''Splits the masks segmentations in the sample data folders into nuc and cell if the segmentations and raw images are present.
-    (masks file is not deleted).'''
-
-    # sample data folder
-
-    if divide:
-        sd_fol = Path(os.getcwd()).parents[1] / "sample_data"
-
-        if not sd_fol.exists():
-            raise ValueError('Sample data folder does not exist in correct directory')
-
-        for celltype in ['neuron_1', 'astrocyte', 'neuron_2', 'ipsc']:
-
-            # get raw image folder
-            raw_img_fol = sd_fol / f"example_{celltype}" / "raw"
-
-            # check if there is an image present
-            img_list = list_image_files(raw_img_fol,"")
-
-            # check if example raw image exists
-            if bool(len(img_list)):
-
-                # there should only be one example image
-                _img_data,meta_dict = read_czi_image(img_list[0])
-            
-                seg_path = sd_fol / f"example_{celltype}" / "seg"
-
-                seg_list = list_image_files(seg_path, ".tiff")
-
-                # check if nuc and cell are already present
-                if set(['nuc', 'cell']) <= set(f.stem.split("-")[-1] for f in seg_list):
-                    print(f"nuc and cell segmentations are already present for {img_list[0].stem.split('.')[0]}")
-                else:
-                    for f in (seg_list):
-
-                        #get the name of the segmentation
-                        seg_name = f.stem.split("-")[-1]
-
-                        # if the segmentation was a mask segmentation split it into nuc and cell
-                        if seg_name[0:5] == "masks":
-                            mask_seg = read_tiff_image(f)
-                            nuc_seg,cell_seg = mask_seg
-
-                            # now output the two masks
-                            export_inferred_organelle(nuc_seg, "nuc", meta_dict, f.parent)
-                            export_inferred_organelle(cell_seg, "cell", meta_dict, f.parent)
                     
         
