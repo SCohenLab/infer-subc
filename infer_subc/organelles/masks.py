@@ -363,24 +363,8 @@ def infer_masks_B(in_img: np.ndarray,
 def infer_masks_C(in_img: np.ndarray,
                    pm_ch: Union[int,None],
                    nuc_ch: Union[int,None],
-                   weights_I: list[int],
-                   weights_II: list[int],
-                   invert_pm_I: bool,
-                   invert_pm_II: bool,
-                   method_I: str,
-                   method_II: str,
-                   size_I: int,
-                   size_II: int,
-                   global_method_I: str,
-                   global_method_II: str,
-                   cutoff_size_I: int,
-                   cutoff_size_II: int,
-                   local_adj_I: float,
-                   local_adj_II: float,
-                   bind_to_pm_I: bool,
-                   bind_to_pm_II: bool,
-                   thresh_adj_I: float,
-                   thresh_adj_II: float,
+                   parameters_I: list[list, bool, str, int, str, int, float, bool, float, str, int, int, int, int],
+                   parameters_II: list[list, bool, str, int, str, int, float, bool, float, str, int, int, int, int],
                    nuc_med_filter_size: int,
                    nuc_gaussian_smoothing_sigma: float,
                    nuc_threshold_factor: float,
@@ -391,16 +375,6 @@ def infer_masks_C(in_img: np.ndarray,
                    nuc_small_object_width: int,
                    nuc_fill_filter_method: str,
                    nuc_search_img: str,
-                   cm_method_I: str,
-                   cm_method_II: str,
-                   cm_size_I: int,
-                   cm_size_II: int,
-                   cm_min_hole_width_I: int,
-                   cm_min_hole_width_II: int,
-                   cm_max_hole_width_I: int,
-                   cm_max_hole_width_II: int,
-                   cm_small_obj_width_I: int,
-                   cm_small_obj_width_II: int,
                    cell_watershed_method: str,
                    cell_min_hole_width: int,
                    cell_max_hole_width: int,
@@ -417,54 +391,84 @@ def infer_masks_C(in_img: np.ndarray,
         the index of the channel containing your plasma membrane label
     nuc_ch:
         the index of the channel containing your nuclei label
+    parameters_I:
+        list that contains the following (weights_I, invert_pm_I, method_I, size_I, global_method_I, cutoff_size_I, local_adj_I,
+        bind_to_pm_I, thresh_adj_I, cm_method_I,cm_size_I, cm_min_hole_width_I, cm_max_hole_width_I, cm_small_obj_width_I), 
+        all of which are related to the first sequence of steps in masks_C
     weights_I:
         a list of int that corresond to the weights for each channel in the first composite; use 0 if a channel should not be included in the composite image
-    weights_II:
-        a list of int that corresond to the weights for each channel in the second composite; use 0 if a channel should not be included in the composite image
     invert_pm_I:
         True = invert plasma membrane channel in the first composite
         False = do not invert plasma membrane channel in the first composite
-    invert_pm_II:
-        True = invert plasma membrane channel in the second composite
-        False = do not invert plasma membrane channel in the second composite
     method_I:
         which footprint shape to use for the closing algorithm on the first composite. Options include:
         "Ball" (3D closing), "Disk" (2D closing), and "Scharr" (skip closing altogether and apply Scharr edge detection).
-    method_II:
-        which footprint shape to use for the closing algorithm on the second composite. Options include:
-        "Ball" (3D closing), "Disk" (2D closing), and "Scharr" (skip closing altogether and apply Scharr edge detection).
     size_I:
         size of the footprint used in closing algorithm on the first composite, this value is disregarded if method_I == "Scharr"
-    size_II:
-        size of the footprint used in closing algorithm on the second composite, this value is disregarded if method_II == "Scharr"
     global_method_I:
          which method to use for calculating global threshold applied to composite_mask_I (MO). Options include:
-         "triangle" (or "tri"), "median" (or "med"), and "ave_tri_med" (or "ave").
-         "ave" refers the average of "triangle" threshold and "mean" threshold.
-    global_method_II:
-         which method to use for calculating global threshold applied to composite_mask_II (MO). Options include:
          "triangle" (or "tri"), "median" (or "med"), and "ave_tri_med" (or "ave").
          "ave" refers the average of "triangle" threshold and "mean" threshold.
     cutoff_size_I: 
         Masked Object threshold `size_min`; minimum size of of object to advanced to the local Otsu thresholding
         step in the Masked Object thresholding of composite_mask_I.
-    cutoff_size_II: 
-        Masked Object threshold `size_min`; minimum size of of object to advanced to the local Otsu thresholding
-        step in the Masked Object thresholding of composite_mask_II.
     local_adj_I: 
         Masked Object threshold `local_adjust`, proportion applied to the local Otsu threshold (composite_mask_I MO thresholding)
-    local_adj_II: 
-        Masked Object threshold `local_adjust`, proportion applied to the local Otsu threshold (composite_mask_II MO thresholding)
     bind_to_pm_I:
         True = restrict the resulting mask_I_segmentation to the thresholded plasma membrane
         False = do not restrict the resulting mask_I_segmentation to the thresholded plasma membrane
+    thresh_adj_I:
+        the proportion applied to the Otsu threshold of the plasma membrane (disregarded if bind_to_pm_I == False)
+    cm_method_I:
+        which footprint shape to use for the nucleus dilation before combination with the mask_I_segmentation. Options include:
+        "Ball" (3D dilation), "Disk" (2D dilation), and "None" (skip dilation altogether).
+    cm_size_I:
+        size of the footprint used in dilation of the nucleus object, this value is disregarded if cm_method_I == "None"
+    cm_min_hole_width_I: 
+        the minimum hole width to be filled in the cellmask_I_segmentation
+    cm_max_hole_width_I: 
+        the maximum hole width to be filled in the cellmask_I_segmentation
+    cm_small_obj_width_I:
+        minimum object size cutoff for the cellmask_I_segmentation
+    parameters_II:
+        list that contains the following parameters (weights_II, invert_pm_II, method_II, size_II, global_method_II, cutoff_size_II,
+        local_adj_II, bind_to_pm_II, thresh_adj_II, cm_method_II, cm_size_II, cm_min_hole_width_II, cm_max_hole_width_II, 
+        cm_small_obj_width_II), all of which are related to the second sequence of steps in masks_C
+    weights_II:
+        a list of int that corresond to the weights for each channel in the second composite; use 0 if a channel should not be included in the composite image
+    invert_pm_II:
+        True = invert plasma membrane channel in the second composite
+        False = do not invert plasma membrane channel in the second composite
+    method_II:
+        which footprint shape to use for the closing algorithm on the second composite. Options include:
+        "Ball" (3D closing), "Disk" (2D closing), and "Scharr" (skip closing altogether and apply Scharr edge detection).
+    size_II:
+        size of the footprint used in closing algorithm on the second composite, this value is disregarded if method_II == "Scharr"
+    global_method_II:
+         which method to use for calculating global threshold applied to composite_mask_II (MO). Options include:
+         "triangle" (or "tri"), "median" (or "med"), and "ave_tri_med" (or "ave").
+         "ave" refers the average of "triangle" threshold and "mean" threshold.
+    cutoff_size_II: 
+        Masked Object threshold `size_min`; minimum size of of object to advanced to the local Otsu thresholding
+        step in the Masked Object thresholding of composite_mask_II.
+    local_adj_II: 
+        Masked Object threshold `local_adjust`, proportion applied to the local Otsu threshold (composite_mask_II MO thresholding)
     bind_to_pm_II:
         True = restrict the resulting mask_II_segmentation to the thresholded plasma membrane
         False = do not restrict the resulting mask_II_segmentation to the thresholded plasma membrane
-    thresh_adj_I:
-        the proportion applied to the Otsu threshold of the plasma membrane (disregarded if bind_to_pm_I == False)
     thresh_adj_II:
         the proportion applied to the Otsu threshold of the plasma membrane (disregarded if bind_to_pm_II == False)
+    cm_method_II:
+        which footprint shape to use for the nucleus dilation before combination with the mask_II_segmentation. Options include:
+        "Ball" (3D dilation), "Disk" (2D dilation), and "None" (skip dilation altogether).
+    cm_size_II:
+        size of the footprint used in dilation of the nucleus object, this value is disregarded if cm_method_II == "None"
+    cm_min_hole_width_II: 
+        the minimum hole width to be filled in the cellmask_II_segmentation
+    cm_max_hole_width_II: 
+        the maximum hole width to be filled in the cellmask_II_segmentation
+    cm_small_obj_width_II:
+        minimum object size cutoff for the cellmask_II_segmentation
     nuc_med_filter_size: 
         width of median filter for nuclei signal
     nuc_gaussian_smoothing_sigma: 
@@ -483,32 +487,10 @@ def infer_masks_C(in_img: np.ndarray,
     nuc_small_object_width:
         minimum object size cutoff for nucleus post-thresholding
     nuc_fill_filter_method:
-        determines if fill and filter should be run 'sice-by-slice' or in '3D'
+        determines if fill and filter should be run 'sice-by-slice' or in '3D' (nucleus)
     nuc_search_img:
         the segmentation used to select the nucleus based on greatest overlap. Options include:
         "Img 5" (mask_I_segmentation) and "Img 6" (mask_II_segmentation)
-    cm_method_I:
-        which footprint shape to use for the nucleus dilation before combination with the mask_I_segmentation. Options include:
-        "Ball" (3D dilation), "Disk" (2D dilation), and "None" (skip dilation altogether).
-    cm_method_II:
-        which footprint shape to use for the nucleus dilation before combination with the mask_II_segmentation. Options include:
-        "Ball" (3D dilation), "Disk" (2D dilation), and "None" (skip dilation altogether).
-    cm_size_I:
-        size of the footprint used in dilation of the nucleus object, this value is disregarded if cm_method_I == "None"
-    cm_size_II:
-        size of the footprint used in dilation of the nucleus object, this value is disregarded if cm_method_II == "None"
-    cm_min_hole_width_I: 
-        the minimum hole width to be filled in the cellmask_I_segmentation
-    cm_min_hole_width_II: 
-        the minimum hole width to be filled in the cellmask_II_segmentation
-    cm_max_hole_width_I: 
-        the maximum hole width to be filled in the cellmask_I_segmentation
-    cm_max_hole_width_II: 
-        the maximum hole width to be filled in the cellmask_II_segmentation
-    cm_small_obj_width_I:
-        minimum object size cutoff for the cellmask_I_segmentation
-    cm_small_obj_width_II:
-        minimum object size cutoff for the cellmask_II_segmentation
     cell_watershed_method:
         determines if the watershed should be run 'sice-by-slice' or in '3D'
     cell_min_hole_width: 
@@ -527,6 +509,10 @@ def infer_masks_C(in_img: np.ndarray,
         a two channel np.ndarray constisting of the nucleus and cell (one object per channel)
 
     """
+    # Get list of parameters (I and II)
+    weights_I, invert_pm_I, method_I, size_I, global_method_I, cutoff_size_I, local_adj_I, bind_to_pm_I, thresh_adj_I, cm_method_I, cm_size_I, cm_min_hole_width_I, cm_max_hole_width_I, cm_small_obj_width_I = parameters_I
+
+    weights_II, invert_pm_II, method_II, size_II, global_method_II, cutoff_size_II, local_adj_II, bind_to_pm_II, thresh_adj_II, cm_method_II,cm_size_II, cm_min_hole_width_II, cm_max_hole_width_II, cm_small_obj_width_II = parameters_II
 
     ##########################
     # get intermediate masks #
