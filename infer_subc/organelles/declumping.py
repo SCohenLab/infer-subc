@@ -5,6 +5,7 @@ from skimage.filters import threshold_otsu
 from skimage.segmentation import watershed
 from aicssegmentation.core.utils import size_filter
 from infer_subc.core.img import label_uint16
+from skimage.measure._label import label
 
 def _highpass_filter(in_img: np.ndarray, sigma:float=0.0,
                      iterations:int=1, open:bool=False) -> np.ndarray:
@@ -28,9 +29,15 @@ def watershed_declumping(raw_img:np.ndarray, seg_img:np.ndarray, declump:bool,
     if declump and iterations>=1:
         highpass = _highpass_filter(in_img=raw_img, sigma=sigma, open=open, iterations=iterations)
         ots = _otsu_size_filter(in_img=highpass, thresh_adj=thresh_adj, min_size=min_size)
-        return label_uint16((seg_img) + watershed(image=(np.max(raw_img)-raw_img), 
+        
+        # Changed to match the method_notebook
+        # return label(watershed(image=(np.max(raw_img)-raw_img), 
+        #                                               markers=label_uint16(ots), 
+        #                                               mask=seg_img,
+        #                                               connectivity=np.ones((3, 3, 3), bool))).astype(np.uint16)
+        return label((seg_img) + watershed(image=(np.max(raw_img)-raw_img), 
                                                       markers=label_uint16(ots), 
                                                       mask=seg_img,
-                                                      connectivity=np.ones((3, 3, 3), bool)))
+                                                      connectivity=np.ones((3, 3, 3), bool))).astype(np.uint16)
     else:
         return seg_img
