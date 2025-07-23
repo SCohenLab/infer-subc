@@ -133,7 +133,7 @@ def find_segmentation_tiff_files(prototype:Union[Path,str],
 def batch_process_segmentation(raw_path: Union[Path,str],
                                raw_file_type: str,
                                seg_path: Union[Path, str],
-                               file_splitter: Union[str, None],
+                               name_suffix: Union[str, None],
                                masks_settings: Union[List, None],
                                masks_A_settings: Union[List, None],
                                masks_B_settings: Union[List, None],
@@ -156,9 +156,9 @@ def batch_process_segmentation(raw_path: Union[Path,str],
         The raw file type (e.g., ".tiff" or ".czi")
     seg_path: Union[Path, str]
         A string or a Path object of the path where the segmentation outputs will be saved 
-    file_splitter: str
+    name_suffix: str
         An optional string to include before the segmentation suffix at the end of the output file. 
-        For example, if the file_splitter was "20240105", the segmentation file output from the 1.1_masks workflow would include:
+        For example, if the name_suffix was "20240105", the segmentation file output from the 1.1_masks workflow would include:
         "{base-file-name}-20240105-masks"
     {}_settings: Union[List, None]
         For each workflow that you wish to include in the batch processing, 
@@ -398,8 +398,8 @@ def batch_process_segmentation(raw_path: Union[Path,str],
         Path.mkdir(seg_path)
         print(f"The specified 'seg_path' was not found. Creating {seg_path}.")
     
-    if not file_splitter:
-        file_splitter=""
+    if not name_suffix:
+        name_suffix=""
 
     # reading list of files from the raw path
     img_file_list = list_image_files(raw_path, raw_file_type)
@@ -415,62 +415,62 @@ def batch_process_segmentation(raw_path: Union[Path,str],
         # run masks function
         if masks_settings:
             masks = infer_masks(img_data, *masks_settings)
-            out_file_n = export_inferred_organelle(masks, file_splitter+"masks", meta_dict, seg_path)
+            out_file_n = export_inferred_organelle(masks, name_suffix+"masks", meta_dict, seg_path)
             seg_list.append("masks")
         
         # run masks_A function
         if masks_A_settings:
             masks_A =  infer_masks_A(img_data, *masks_A_settings)
-            out_file_n = export_inferred_organelle(masks_A, file_splitter+"masks_A", meta_dict, seg_path)
+            out_file_n = export_inferred_organelle(masks_A, name_suffix+"masks_A", meta_dict, seg_path)
             seg_list.append("masks_A")
             
         # run masks_B function
         if masks_B_settings:
             masks_B = infer_masks_B(img_data, *masks_B_settings)
-            out_file_n = export_inferred_organelle(masks_B, file_splitter+"masks_B", meta_dict, seg_path)
+            out_file_n = export_inferred_organelle(masks_B, name_suffix+"masks_B", meta_dict, seg_path)
             seg_list.append("masks_B")
 
         # run masks_C function
         if masks_C_settings:
             masks_C = infer_masks_C(img_data, *masks_C_settings)
-            out_file_n = export_inferred_organelle(masks_C, file_splitter+"masks_C", meta_dict, seg_path)
+            out_file_n = export_inferred_organelle(masks_C, name_suffix+"masks_C", meta_dict, seg_path)
             seg_list.append("masks_C")
         
         # run masks_D function
         if masks_D_settings:
             masks_D = infer_masks_D(img_data, *masks_D_settings)
-            out_file_n = export_inferred_organelle(masks_D, file_splitter+"masks_D", meta_dict, seg_path)
+            out_file_n = export_inferred_organelle(masks_D, name_suffix+"masks_D", meta_dict, seg_path)
             seg_list.append("masks_D")
 
         # run 1.2_infer_lysosomes function
         if lyso_settings:
             lyso_seg = infer_lyso(img_data, *lyso_settings)
-            out_file_n = export_inferred_organelle(lyso_seg, file_splitter+"lyso", meta_dict, seg_path)  
+            out_file_n = export_inferred_organelle(lyso_seg, name_suffix+"lyso", meta_dict, seg_path)  
             seg_list.append("lyso")          
 
         if mito_settings:
             mito_seg = infer_mito(img_data, *mito_settings)
-            out_file_n = export_inferred_organelle(mito_seg, file_splitter+"mito", meta_dict, seg_path)  
+            out_file_n = export_inferred_organelle(mito_seg, name_suffix+"mito", meta_dict, seg_path)  
             seg_list.append("mito")
             
         if golgi_settings:
             golgi_seg = infer_golgi(img_data, *golgi_settings)
-            out_file_n = export_inferred_organelle(golgi_seg, file_splitter+"golgi", meta_dict, seg_path)  
+            out_file_n = export_inferred_organelle(golgi_seg, name_suffix+"golgi", meta_dict, seg_path)  
             seg_list.append("golgi")
 
         if perox_settings:
             perox_seg = infer_perox(img_data, *perox_settings)
-            out_file_n = export_inferred_organelle(perox_seg, file_splitter+"perox", meta_dict, seg_path)  
+            out_file_n = export_inferred_organelle(perox_seg, name_suffix+"perox", meta_dict, seg_path)  
             seg_list.append("perox")
             
         if ER_settings:
             ER_seg = infer_ER(img_data, *ER_settings)
-            out_file_n = export_inferred_organelle(ER_seg, file_splitter+"ER", meta_dict, seg_path)  
+            out_file_n = export_inferred_organelle(ER_seg, name_suffix+"ER", meta_dict, seg_path)  
             seg_list.append("ER")
             
         if LD_settings:
             LD_seg = infer_LD(img_data, *LD_settings)
-            out_file_n = export_inferred_organelle(LD_seg, file_splitter+"LD", meta_dict, seg_path)
+            out_file_n = export_inferred_organelle(LD_seg, name_suffix+"LD", meta_dict, seg_path)
             seg_list.append("LD")
 
         end = time.time()
