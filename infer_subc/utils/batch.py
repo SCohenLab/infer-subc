@@ -1,9 +1,10 @@
 from typing import Union, Dict, List
 from pathlib import Path
 import time
+import numpy as np
 
 from infer_subc.core.file_io import list_image_files, export_tiff, read_tiff_image, read_czi_image, export_inferred_organelle
-from infer_subc.core.img import label_uint16
+from infer_subc.core.img import label_uint16, apply_mask, min_max_intensity_normalization, label, size_filter_linear_size
 from infer_subc.organelles.masks import infer_masks, infer_masks_A, infer_masks_B, infer_masks_C, infer_masks_D
 from infer_subc.organelles.er import infer_ER
 from infer_subc.organelles.golgi import infer_golgi
@@ -609,3 +610,27 @@ def batch_process_segmentation(raw_path: Union[Path,str],
 #     """wrapper to stack the inferred objects into a single numpy.ndimage"""
 
 #     return np.stack(layers, axis=0)
+
+def QC_filter(in_img: np.ndarray,
+              raw_img: np.ndarray,
+              method: Union[int, str, None]):
+    """
+    Filter the input image based on the specified method."""
+
+    if (type(method) is int) and (method > 0):
+        out_img = size_filter_linear_size(in_img, min_size=method, method='3D') #simple size filtering
+    elif type(method) is str:
+        if method.isdigit():
+            out_img = size_filter_linear_size(in_img, min_size=int(method), method='3D')
+        elif method.lower() == 'largest':
+            size_per_label = [counts for val, counts in np.unique(label(in_img), return_counts=True) if val != 0]
+            out_img = in_img == (np.argmax(size_per_label)+1) # +1 because size_per_label starts at label of 1
+        elif method.lower() == 'brightest':
+            composite = apply_mask(min_max_intensity_normalization(raw_img).sum(axis=0), in_img)
+            intensity_per_label = [composite[in_img == i].sum() for i in np.unique(label(in_img)) if i != 0]
+            out_img = in_img == (np.argmax(intensity_per_label)+1) # +1 because intensity_per_label starts at label of 1
+        elif method.lower() == 'none':
+            out_img = in_img # option to not apply any filtering given user error
+    elif method == None or method == 0:
+        out_img = in_img # no filtering is applied
+    return out_img
