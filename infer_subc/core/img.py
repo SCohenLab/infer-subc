@@ -565,8 +565,8 @@ def select_channel_from_raw(img_in: np.ndarray, chan: Union[int, Tuple[int]]) ->
     """
     return img_in[chan]
 
-def select_cellmask_from_img(in_img:np.ndarray, nuc_present: bool, chan: Union[int, Tuple[int]]) -> np.ndarray:
-    if nuc_present:
+def select_cellmask_from_img(in_img:np.ndarray, multichannel_input: bool, chan: Union[int, Tuple[int]]) -> np.ndarray:
+    if multichannel_input:
         return in_img[chan]
     else:
         return in_img

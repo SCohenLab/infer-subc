@@ -3,7 +3,7 @@
         "category": "extraction",
         "function": "select_cellmask_from_mask",
         "parameter_values": {
-            "nuc_present": false,
+            "multichannel_input": false,
             "chan": 0
         },
         "parent": 0,

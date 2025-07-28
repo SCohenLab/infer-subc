@@ -2462,11 +2462,11 @@
         }
     },
     "select_cellmask_from_mask": {
-        "name": "Select the cellmask for segmentation",
+        "name": "If Mask File: Select Cellmask Channel",
         "python::module": "infer_subc.core.img",
         "python::function": "select_cellmask_from_img",
         "parameters": {
-            "nuc_present": {
+            "multichannel_input": {
                 "data_type": "bool",
                 "options": [
                     true,
