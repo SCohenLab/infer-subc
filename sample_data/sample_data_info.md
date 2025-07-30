@@ -14,11 +14,11 @@ follow the instructions below:
 - For the example **neuron (1)** use workflow [1.1a](/notebooks/part_1_segmentation_workflows/1.1a_infer_masks_from-composite_single_cell.ipynb)
 - For the example **astrocyte** use workflow [1.1b](/notebooks/part_1_segmentation_workflows/1.1b_infer_masks_from-composite_multiple-cells.ipynb)
 - For the example **neuron (2)** use workflow [1.1c](/notebooks/part_1_segmentation_workflows/1.1c_infer_masks_from-composite_neuron_with_pm.ipynb)
-- For the example **ipsc** use workflow [1.1d](/notebooks/part_1_segmentation_workflows/1.1d_infer_masks_from-composite_ipsc.ipynb)
+- For the example **iPSC** use workflow [1.1d](/notebooks/part_1_segmentation_workflows/1.1d_infer_masks_from-composite_iPSC.ipynb)
 
 **4.** Then run workflows 1.2-1.7 twice (once per cell type).
 
-- In the notebooks, you can switch between cell types by setting the `sample_data_type` variable equal to **"neuron_1"**, **"astrocyte"**, **"neuron_2"** or **"ipsc"**.
+- In the notebooks, you can switch between cell types by setting the `sample_data_type` variable equal to **"neuron_1"**, **"astrocyte"**, **"neuron_2"** or **"iPSC"**.
 
 **5.** Carry out quantification of the sample neuron and astrocyte in part 2 using the notebooks.
 
@@ -88,4 +88,4 @@ follow the instructions below:
     - mito.json
     - perox.json
 
-TBA (example_neuron_2 and example_ipsc links)
+TBA (example_neuron_2 and example_iPSC links)

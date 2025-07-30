@@ -87,8 +87,8 @@ The `organelle-segmenter-plugin` package is required for this method (see setup 
     > - "lyso.json"
     > <p>
     > 
-    > Do **NOT** use names like:
-    > - "lysosomes.json"
+    > Do **NOT** use names like: (does not end in workflow suffix)
+    > - "lysosomes.json" 
     > - "LS.json"
 7. Close the workflow and repeat the steps above for any additional organelles and/or the masks. Save each of the workflow setting files together in the same folder.
 8. Once all the settings are saved, open the batch processor by going to `Plugins` > `Infer sub-Cellular Object Npe2 plugin` > `Batch processing`. A new right-side panel will appear.

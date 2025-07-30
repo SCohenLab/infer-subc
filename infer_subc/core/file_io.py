@@ -452,7 +452,7 @@ def sample_dirs(create: bool = False) -> None:
         # Checker for if the sample data folder exists
         if sd_path.exists():
 
-            for ct in ["neuron_1","astrocyte","neuron_2","ipsc"]:
+            for ct in ["neuron_1","astrocyte","neuron_2","iPSC"]:
                 # first check if cell type folder exists, if not raise error
                 if not (sd_path/f"example_{ct}").exists():
                     raise ValueError(f'example_{ct} folder does not exist in the intended directory')
@@ -474,10 +474,10 @@ def sample_dirs(create: bool = False) -> None:
 def sample_input(cell_type: Union[str, None]) -> tuple[Path, str, Path, Path]:
     """
     automatically sets the necessary paths for sample data if cell_type is
-    set equal to "neuron_1", "astrocyte", "neuron_2" or "ipsc" for the notebooks in part 1.
+    set equal to "neuron_1", "astrocyte", "neuron_2" or "iPSC" for the notebooks in part 1.
     They are compatible with notebooks 1.1a, 1.1b, 1.1c and 1.1d respectively.
     """
-    cell_type_list = ["neuron_1","astrocyte","neuron_2","ipsc"]
+    cell_type_list = ["neuron_1","astrocyte","neuron_2","iPSC"]
     
     if cell_type in cell_type_list:
         data_root_path = Path(os.getcwd()).parents[1] / "sample_data" /  f"example_{cell_type}"
@@ -494,14 +494,14 @@ def sample_input(cell_type: Union[str, None]) -> tuple[Path, str, Path, Path]:
 
         return data_root_path, im_type, in_data_path, out_data_path
     else:
-        raise ValueError('Sample data file type must be "neuron_1", "astroctye", "neuron_2" or "ipsc"')
+        raise ValueError('Sample data file type must be "neuron_1", "astroctye", "neuron_2" or "iPSC"')
     
 def sample_input_quant(cell_type: Union[str, None]) -> tuple[Path, str, Path, Path, Path]:
     """
     automatically sets the necessary paths for sample data if cell_type in the quantification
-    notebook is set equal to "neuron_1", "astrocyte", "neuron_2" or "ipsc".
+    notebook is set equal to "neuron_1", "astrocyte", "neuron_2" or "iPSC".
     """
-    cell_type_list = ["neuron_1","astrocyte","neuron_2","ipsc"]
+    cell_type_list = ["neuron_1","astrocyte","neuron_2","iPSC"]
     
     if cell_type in cell_type_list:
 
@@ -524,7 +524,7 @@ def sample_input_quant(cell_type: Union[str, None]) -> tuple[Path, str, Path, Pa
 
         return data_root_path, raw_img_type, raw_data_path, seg_data_path, quant_data_path
     else:
-        raise ValueError('Sample data file type must be "neuron_1", "astroctye", "neuron_2" or "ipsc"')
+        raise ValueError('Sample data file type must be "neuron_1", "astroctye", "neuron_2" or "iPSC"')
     
 def create_quant(create: bool):
     """ function that creates the quantification subfolder for the sample data"""
@@ -539,7 +539,7 @@ def create_quant(create: bool):
             Path.mkdir(qfol)
             
             # create sub folders
-            for sub in ["raw", "seg", "quant"]:
+            for sub in ["raw", "seg","edit_seg" "quant"]:
                 Path.mkdir(qfol / sub)
                 print(f"making {qfol / sub}")
         else:

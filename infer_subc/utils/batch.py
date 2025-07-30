@@ -416,62 +416,62 @@ def batch_process_segmentation(raw_path: Union[Path,str],
         # run masks function
         if masks_settings:
             masks = infer_masks(img_data, *masks_settings)
-            out_file_n = export_inferred_organelle(masks, name_suffix+"masks", meta_dict, seg_path)
+            export_inferred_organelle(masks, name_suffix+"masks", meta_dict, seg_path)
             seg_list.append("masks")
         
         # run masks_A function
         if masks_A_settings:
             masks_A =  infer_masks_A(img_data, *masks_A_settings)
-            out_file_n = export_inferred_organelle(masks_A, name_suffix+"masks_A", meta_dict, seg_path)
+            export_inferred_organelle(masks_A, name_suffix+"masks_A", meta_dict, seg_path)
             seg_list.append("masks_A")
             
         # run masks_B function
         if masks_B_settings:
             masks_B = infer_masks_B(img_data, *masks_B_settings)
-            out_file_n = export_inferred_organelle(masks_B, name_suffix+"masks_B", meta_dict, seg_path)
+            export_inferred_organelle(masks_B, name_suffix+"masks_B", meta_dict, seg_path)
             seg_list.append("masks_B")
 
         # run masks_C function
         if masks_C_settings:
             masks_C = infer_masks_C(img_data, *masks_C_settings)
-            out_file_n = export_inferred_organelle(masks_C, name_suffix+"masks_C", meta_dict, seg_path)
+            export_inferred_organelle(masks_C, name_suffix+"masks_C", meta_dict, seg_path)
             seg_list.append("masks_C")
         
         # run masks_D function
         if masks_D_settings:
             masks_D = infer_masks_D(img_data, *masks_D_settings)
-            out_file_n = export_inferred_organelle(masks_D, name_suffix+"masks_D", meta_dict, seg_path)
+            export_inferred_organelle(masks_D, name_suffix+"masks_D", meta_dict, seg_path)
             seg_list.append("masks_D")
 
         # run 1.2_infer_lysosomes function
         if lyso_settings:
             lyso_seg = infer_lyso(img_data, *lyso_settings)
-            out_file_n = export_inferred_organelle(lyso_seg, name_suffix+"lyso", meta_dict, seg_path)  
+            export_inferred_organelle(lyso_seg, name_suffix+"lyso", meta_dict, seg_path)  
             seg_list.append("lyso")          
 
         if mito_settings:
             mito_seg = infer_mito(img_data, *mito_settings)
-            out_file_n = export_inferred_organelle(mito_seg, name_suffix+"mito", meta_dict, seg_path)  
+            export_inferred_organelle(mito_seg, name_suffix+"mito", meta_dict, seg_path)  
             seg_list.append("mito")
             
         if golgi_settings:
             golgi_seg = infer_golgi(img_data, *golgi_settings)
-            out_file_n = export_inferred_organelle(golgi_seg, name_suffix+"golgi", meta_dict, seg_path)  
+            export_inferred_organelle(golgi_seg, name_suffix+"golgi", meta_dict, seg_path)  
             seg_list.append("golgi")
 
         if perox_settings:
             perox_seg = infer_perox(img_data, *perox_settings)
-            out_file_n = export_inferred_organelle(perox_seg, name_suffix+"perox", meta_dict, seg_path)  
+            export_inferred_organelle(perox_seg, name_suffix+"perox", meta_dict, seg_path)  
             seg_list.append("perox")
             
         if ER_settings:
             ER_seg = infer_ER(img_data, *ER_settings)
-            out_file_n = export_inferred_organelle(ER_seg, name_suffix+"ER", meta_dict, seg_path)  
+            export_inferred_organelle(ER_seg, name_suffix+"ER", meta_dict, seg_path)  
             seg_list.append("ER")
             
         if LD_settings:
             LD_seg = infer_LD(img_data, *LD_settings)
-            out_file_n = export_inferred_organelle(LD_seg, name_suffix+"LD", meta_dict, seg_path)
+            export_inferred_organelle(LD_seg, name_suffix+"LD", meta_dict, seg_path)
             seg_list.append("LD")
 
         end = time.time()
@@ -573,7 +573,7 @@ def batch_process_segmentation(raw_path: Union[Path,str],
 #     # channel_axis = meta_dict['channel_axis']
 
 #     inferred_organelles, layer_names, optimal_Z = fixed_infer_organelles(img_data)
-#     out_file_n = export_inferred_organelle(inferred_organelles, layer_names, meta_dict, data_root_path)
+#      export_inferred_organelle(inferred_organelles, layer_names, meta_dict, data_root_path)
 
 #     ## TODO:  collect stats...
 
