@@ -616,21 +616,27 @@ def QC_filter(in_img: np.ndarray,
               method: Union[int, str, None]):
     """
     Filter the input image based on the specified method."""
-
+    out_img = np.zeros_like(in_img, dtype=np.uint16)
     if (type(method) is int) and (method > 0):
+        print("Applying size filter with linear size...")
         out_img = size_filter_linear_size(in_img, min_size=method, method='3D') #simple size filtering
     elif type(method) is str:
         if method.isdigit():
+            print("Applying size filter with linear size...")
             out_img = size_filter_linear_size(in_img, min_size=int(method), method='3D')
         elif method.lower() == 'largest':
+            print("Applying the largest object filter...")
             size_per_label = [counts for val, counts in np.unique(label(in_img), return_counts=True) if val != 0]
-            out_img = in_img == (np.argmax(size_per_label)+1) # +1 because size_per_label starts at label of 1
+            out_img[label(in_img) == (np.argmax(size_per_label)+1)] = 1  # +1 because size_per_label starts at label of 1
         elif method.lower() == 'brightest':
+            print("Applying the brightest object filter...")
             composite = apply_mask(min_max_intensity_normalization(raw_img).sum(axis=0), in_img)
             intensity_per_label = [composite[in_img == i].sum() for i in np.unique(label(in_img)) if i != 0]
-            out_img = in_img == (np.argmax(intensity_per_label)+1) # +1 because intensity_per_label starts at label of 1
+            out_img[label(in_img) == (np.argmax(intensity_per_label)+1)] = 1 # +1 because intensity_per_label starts at label of 1
         elif method.lower() == 'none':
+            print("No filtering applied.")
             out_img = in_img # option to not apply any filtering given user error
     elif method == None or method == 0:
+        print("No filtering applied.")
         out_img = in_img # no filtering is applied
     return out_img
