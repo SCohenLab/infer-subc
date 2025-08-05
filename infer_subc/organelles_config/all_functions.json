@@ -2454,21 +2454,6 @@
         "python::function": "choose_cell",
         "parameters": null
     },
-    "segment_soma_neurites":{
-        "name": "Segment soma & neurites from cellmask",
-        "python::module": "infer_subc.organelles.cellmask",
-        "python::function": "filter_soma_neurites",
-        "parameters": {
-            "method":{
-                "widget_type": "drop-down",
-                "data_type": "str",
-                "options": [
-                    "binary",
-                    "isotropic"
-                ]
-            }
-        }
-    },
     "select_cellmask_from_mask": {
         "name": "If Mask File: Select Cellmask Channel",
         "python::module": "infer_subc.core.img",
@@ -2496,6 +2481,65 @@
                 ],
                 "widget_type": "drop-down"
             }
+        }
+    },
+    "find_radius":{
+        "name": "Find segmenting radius for cellmask",
+        "python::module": "infer_subc.organelles.cellmask",
+        "python::function": "find_radius",
+        "parameters": {
+            "method": {
+                "widget_type": "drop-down",
+                "data_type": "str",
+                "options": [
+                    "isotropic",
+                    "binary"
+                ]
+            }
+        }
+    },
+    "infer_soma_from_mask":{
+        "name": "Find soma from cellmask",
+        "python::module": "infer_subc.organelles.cellmask",
+        "python::function": "infer_soma_from_mask",
+        "parameters": {
+            "method": {
+                "widget_type": "drop-down",
+                "data_type": "str",
+                "options": [
+                    "isotropic",
+                    "binary"
+                ]
+            }
+        }
+    },
+    "infer_neurites_from_mask":{
+        "name": "Find neurites from cellmask",
+        "python::module": "infer_subc.organelles.cellmask",
+        "python::function": "infer_neurites_from_mask",
+        "parameters": {
+            "method": {
+                "widget_type": "drop-down",
+                "data_type": "str",
+                "options": [
+                    "isotropic",
+                    "binary"
+                ]
+            }
+        }
+    },
+    "clean_soma_from_neurites":{
+        "name": "Clean the soma segmentation",
+        "python::module": "infer_subc.organelles.cellmask",
+        "python::function": "clean_soma_from_neurites",
+        "parameters": {
+        }
+    },
+    "clean_neurites_from_soma":{
+        "name": "Clean the neurites segmentation",
+        "python::module": "infer_subc.organelles.cellmask",
+        "python::function": "clean_neurites_from_soma",
+        "parameters": {
         }
     }
 }
