@@ -10,7 +10,7 @@
         "annotation": "choose channel of cellmask"
     },
     "2":{
-        "category": "pre-processing",
+        "category": "preprocessing",
         "function": "find_radius",
         "parameter_values":{
             "method": "binary"
@@ -37,19 +37,19 @@
         "annotation": "infer neurites from cellmask and radius"
     },
     "5": {
-        "category": "post-processing",
+        "category": "postprocessing",
         "function": "clean_soma_from_neurites",
         "parent": [1,4],
         "annotation": "clean soma from neurites"
     },
     "6":{
-        "category": "post-processing",
+        "category": "postprocessing",
         "function": "clean_neurites_from_soma",
         "parent": [1,5],
         "annotation": "clean neurites from soma"
     },
     "7": {
-        "category": "post-post-processing",
+        "category": "postpostprocessing",
         "function": "stack_layers",
         "parent": [5,6],
         "annotation": "stack soma and neurites layers"
