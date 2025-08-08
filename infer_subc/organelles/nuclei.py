@@ -21,20 +21,22 @@ from infer_subc.core.img import (
     stack_masks
 )
 
+from infer_subc.core.img import label_bool_as_uint16
+
 ### USED ###
 ##########################
 #  infer_nuclei_fromlabel
 ##########################
 def infer_nuclei_fromlabel(in_img: np.ndarray, 
                             nuc_ch: Union[int,None],
-                            median_sz: int, 
-                            gauss_sig: float,
+                            median_size: int, 
+                            gauss_sigma: float,
                             thresh_factor: float,
                             thresh_min: float,
                             thresh_max: float,
-                            min_hole_w: int,
-                            max_hole_w: int,
-                            small_obj_w: int,
+                            min_hole_width: int,
+                            max_hole_width: int,
+                            small_obj_width: int,
                             fill_filter_method: str
                             ) -> np.ndarray:
     """
@@ -44,9 +46,9 @@ def infer_nuclei_fromlabel(in_img: np.ndarray,
     ------------
     in_img: np.ndarray
         a 3d image containing all the channels
-    median_sz: int
+    median_size: int
         width of median filter for signal
-    gauss_sig: float
+    gauss_sigma: float
         sigma for gaussian smoothing of  signal
     thresh_factor: float
         adjustment factor for log Li threholding
@@ -54,9 +56,11 @@ def infer_nuclei_fromlabel(in_img: np.ndarray,
         abs min threhold for log Li threholding
     thresh_max: float
         abs max threhold for log Li threholding
-    max_hole_w: int
+    min_hole_width: int
+        hole filling minimum for nuclei post-processing
+    max_hole_width: int
         hole filling cutoff for nuclei post-processing
-    small_obj_w: int
+    small_obj_width: int
         minimum object size cutoff for nuclei post-processing
 
     Returns
@@ -74,8 +78,8 @@ def infer_nuclei_fromlabel(in_img: np.ndarray,
     # PRE_PROCESSING
     ###################                
     nuclei =  scale_and_smooth(nuclei,
-                        median_size = median_sz, 
-                        gauss_sigma = gauss_sig)
+                        median_size = median_size, 
+                        gauss_sigma = gauss_sigma)
 
     ###################
     # CORE_PROCESSING
@@ -89,9 +93,9 @@ def infer_nuclei_fromlabel(in_img: np.ndarray,
     # POST_PROCESSING
     ###################
     nuclei_object = fill_and_filter_linear_size(nuclei_object, 
-                                                hole_min=min_hole_w, 
-                                                hole_max=max_hole_w, 
-                                                min_size=small_obj_w,
+                                                hole_min=min_hole_width, 
+                                                hole_max=max_hole_width, 
+                                                min_size=small_obj_width,
                                                 method=fill_filter_method)
 
     nuclei_labels = label_uint16(nuclei_object)
@@ -163,7 +167,9 @@ def infer_nuclei_fromcytoplasm(cytoplasm_mask: np.ndarray,
     small_obj_w: int
         object size cutoff to remove artifacts from dilation/erosion steps
     fill_filter_method: str
-        to filter artifacts in "3D" or "slice-by-slice"
+        to filter artifacts in "3D" or "slice-by-slice" (for the nucleus after the exclusive or)
+    nuc_fill_method: str
+        to filter artifacts in "3D" or "slice-by-slice" (for the cytoplasm before the exclusive or)
 
     Returns
     -------------
@@ -392,7 +398,7 @@ def mask_cytoplasm_nuclei(cellmask: np.ndarray,
                            small_obj_width: int):
     """ 
     mask the cytoplasm with the cell mask to isolate the cytoplasmic area of intereste.
-    create a single nuclei segmentation from the inverse of the cytoplas (no binary opening)
+    create a single nuclei segmentation from the inverse of the cytoplasm (no binary opening)
 
     Parameters:
     ----------
@@ -416,6 +422,7 @@ def mask_cytoplasm_nuclei(cellmask: np.ndarray,
                                         min_size=small_obj_width,
                                         method='3D')
     
-    stack = stack_masks(nuc_mask=good_nuc, cellmask=cellmask, cyto_mask=good_cyto)
-    
-    return stack
+    # stack = stack_masks(nuc_mask=good_nuc, cellmask=cellmask, cyto_mask=good_cyto)
+    # Changed due to only nuc & cell output and addition of Step 9
+
+    return good_nuc

@@ -1776,7 +1776,7 @@
         "parameters": null
     },
     "stack_masks": {
-        "name": "stack masks",
+        "name": "Stack masks",
         "python::module": "infer_subc.core.img",
         "python::function": "stack_masks",
         "parameters": null
@@ -1861,14 +1861,14 @@
         "python::module": "infer_subc.organelles.nuclei",
         "python::function": "infer_nuclei_fromcytoplasm",
         "parameters": {
-            "nuc_min_width": {
+            "nuc_min_hole_w": {
                 "widget_type": "slider",
                 "data_type": "int",
                 "min": 0,
                 "max": 500,
                 "increment": 1
             },
-            "nuc_max_width": {
+            "nuc_max_hole_w": {
                 "widget_type": "slider",
                 "data_type": "int",
                 "min": 0,
@@ -1883,12 +1883,20 @@
                     "slice_by_slice"
                 ]
             },
-            "small_obj_width": {
+            "small_obj_w": {
                 "widget_type": "slider",
                 "data_type": "int",
                 "min": 0,
                 "max": 80,
                 "increment": 1
+            },
+            "nuc_fill_method": {
+                "data_type": "str",
+                "widget_type": "drop-down",
+                "options": [
+                    "3D",
+                    "slice_by_slice"
+                ]
             }
         }
     },

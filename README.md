@@ -8,26 +8,40 @@ README
 # 📒 About this project
 
 ### `infer-subc` 
-- aims to create a <ins>simple</ins> and <ins>reproducible</ins> pipeline to segment (or infer) and quantify the size, shape, interaction, and subcellular distribution of multiple intracellular organelles from confocal microscopy 🔬 images. 
+- aims to create a <ins>simple</ins> and <ins>reproducible</ins> pipeline to segment (or "infer") and quantify the size, shape, interaction, and subcellular distribution of multiple intracellular organelles from confocal microscopy 🔬 images. 
 - is <ins>modular</ins> 🔢 to support a variety of organelle-focused research questions. 
 - can be <ins>applied broadly</ins> to many types of *in vitro* 🧫 and *in vivo* models 🐁🧬 to better understand the spatial coordination and interactome of organelles during key biological processes or disease. 
 
 # Getting Started
 ## ⚙️ Setup 
-`infer-subc` and the companion segmentation plugin `organelle-segmenter-plugin` for [Napari](https://napari.org/) are available via `pip`: 
+`infer-subc` and the companion segmentation plugin `organelle-segmenter-plugin` for [Napari](https://napari.org/) are available via `PyPI`. Install the packages as follows:
 
 ```
 pip install infer-subc-main
 pip install infer-subc-plugin
 ```
 
-A full list of dependencies and recommended setup steps are included in [env_create.sh](./env_create.sh).
+We recommend installing and using these packages in a Python environment (e.g., conda). A full list of dependencies and recommended setup steps are included in [env_create.sh](./env_create.sh).
+
+### Cloning `infer-subc`:
+Cloning `infer-subc` is necessary if you are going to do any of the following:
+
+- Run segmentation or quantification using the provided `sample data`
+- Run many or all segmentation workflows using Jupyter Notebooks instead of the `Napari plugin`
+- If you want to dive into the underlying code
+
+To clone this repository, navigate to the location on your computer via command line where you want the clone of repository to be downloaded. Then:
+
+```
+git clone https://github.com/SCohenLab/infer-subc.git
+```
+
 
 ## 🖍️ Part 1 - Segmentation Workflows 
 
 > ***NOTE**: Proceed to the Organelle Quantification section below if you have already created instance segmentations using a separate method.*
 
-The starting point for the `infer-subc` analysis pipeline is to perform instance segmentation on single or multichannel confocal microscopy images, where each channel labels a different intracellular organelle (or structure). In the infer-subc segmentation workflows, each organelle will be segmented from a single intensity channel from the microscopy image. To carry out single-cell analysis in Part 2 – Organelle Quantification, the cell area (or "mask") should be segmented as well.
+The starting point for the `infer-subc` analysis pipeline is to perform instance segmentation on single or multichannel confocal microscopy images, where each channel labels a different intracellular organelle (or structure). In the infer-subc segmentation workflows, each organelle will be segmented from a single intensity channel from the microscopy image. To carry out single-cell analysis in Part 2 – Organelle Quantification, the cell mask and nucleus (together "masks") should be segmented as well.
 
 > ### Compatible Organelles and Subcellular Regions 🔓🗝️
 > 
@@ -42,7 +56,7 @@ The starting point for the `infer-subc` analysis pipeline is to perform instance
 >
 >  *Outside segmentation methods can also be used to incorporate additional organelles.*
 
-We recommend our `infer-subc` implementation for Napari called [`organelle-segmenter-plugin`](https://github.com/ndcn/organelle-segmenter-plugin) for image segmentation. This allows users to test segmentation settings for each organelle systematically, then batch process the segmentation of all organelles of interest across multiple cells using predetermined settings. Alternatively, the included set of Jupyter Notebooks can be used to work through the segmentation process step by step using functions included in the `infer-subc` module. 
+We recommend our `infer-subc` implementation for Napari called [`organelle-segmenter-plugin`](https://github.com/ndcn/organelle-segmenter-plugin) for image segmentation. This allows users to test segmentation settings for each organelle systematically, then batch process the segmentation of all organelles of interest across multiple cells using predetermined settings. Alternatively, the included set of Jupyter Notebooks can be used to work through the segmentation process step by step using functions included in the `infer-subc` package. 
 
 If desired, alternative segmentation methods (e.g., CellProfiler, Imaris, ImageJ, etc.) can be used as the input for `Part 2 – Organelle Quantification` below.
 
@@ -51,7 +65,7 @@ If desired, alternative segmentation methods (e.g., CellProfiler, Imaris, ImageJ
 > We have tested the following file formats as input in both the Napari plugin and the Jupyter notebooks:
 > 
 > - Single or multi-channel ".tiff"/".tif" or ".czi" files
-> - 2D (single Z-plane) or 3D (Z-stack) images
+> - <mark>2D (single Z-plane)</mark> or 3D (Z-stack) images
 > - Dimension order: CZYX
 
 ### <ins>Segmentation Option A:</ins> [Napari Plugin](https://github.com/ndcn/organelle-segmenter-plugin) 🔌
@@ -73,8 +87,8 @@ The `organelle-segmenter-plugin` package is required for this method (see setup 
     > - "lyso.json"
     > <p>
     > 
-    > Do **NOT** use names like:
-    > - "lysosomes.json"
+    > Do **NOT** use names like: (does not end in workflow suffix)
+    > - "lysosomes.json" 
     > - "LS.json"
 7. Close the workflow and repeat the steps above for any additional organelles and/or the masks. Save each of the workflow setting files together in the same folder.
 8. Once all the settings are saved, open the batch processor by going to `Plugins` > `Infer sub-Cellular Object Npe2 plugin` > `Batch processing`. A new right-side panel will appear.

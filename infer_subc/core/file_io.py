@@ -1,4 +1,5 @@
 import numpy as np
+import os
 from typing import Dict, Union, List, Any, Tuple
 from dataclasses import dataclass
 import time
@@ -440,3 +441,137 @@ def export_tiff_AICS(
     print(f">>>>>>>>>>>> export_tiff_AICS ({(end - start):0.2f}) sec")
     print(f"saved file AICS {out_name}")
     return out_name
+
+def sample_dirs(create: bool = False) -> None:
+    """ Creates the directories needed to successfully run
+    infer-subc using the sample data folder """
+
+    if create:
+        sd_path = (Path(os.getcwd()).parents[1]/"sample_data")
+
+        # Checker for if the sample data folder exists
+        if sd_path.exists():
+
+            for ct in ["neuron_1","astrocyte","neuron_2","iPSC"]:
+                # first check if cell type folder exists, if not raise error
+                if not (sd_path/f"example_{ct}").exists():
+                    raise ValueError(f'example_{ct} folder does not exist in the intended directory')
+                
+                # establish celltype path
+                ct_path = (sd_path/f"example_{ct}")
+
+                # create subfolders if not created already
+                for sub in ["raw","seg"]:
+                    if not (ct_path/sub).exists():
+                        Path.mkdir(ct_path/sub)
+                        print(f"making {ct_path/sub}")
+
+        # if the sample data folder does not exist raise error
+        else:
+            raise ValueError('Sample data folder does not exist in the intended directory,' \
+            ' please attempt to reclone the repository.')
+
+def sample_input(cell_type: Union[str, None]) -> tuple[Path, str, Path, Path]:
+    """
+    automatically sets the necessary paths for sample data if cell_type is
+    set equal to "neuron_1", "astrocyte", "neuron_2" or "iPSC" for the notebooks in part 1.
+    They are compatible with notebooks 1.1a, 1.1b, 1.1c and 1.1d respectively.
+    """
+    cell_type_list = ["neuron_1","astrocyte","neuron_2","iPSC"]
+    
+    if cell_type in cell_type_list:
+        data_root_path = Path(os.getcwd()).parents[1] / "sample_data" /  f"example_{cell_type}"
+
+        # Specify the file type of the sample data
+        im_type = ".tiff"
+
+        ## Specify which subfolder that contains the input data and the input data file extension
+        in_data_path = data_root_path / "raw"
+
+        ## Specify the output folder to save the segmentation outputs if.
+        ## If its not already created, the code below will creat it for you
+        out_data_path = data_root_path / "seg"
+
+        return data_root_path, im_type, in_data_path, out_data_path
+    else:
+        raise ValueError('Sample data file type must be "neuron_1", "astroctye", "neuron_2" or "iPSC"')
+    
+def sample_input_quant(cell_type: Union[str, None]) -> tuple[Path, str, Path, Path, Path]:
+    """
+    automatically sets the necessary paths for sample data if cell_type in the quantification
+    notebook is set equal to "neuron_1", "astrocyte", "neuron_2" or "iPSC".
+    """
+    cell_type_list = ["neuron_1","astrocyte","neuron_2","iPSC"]
+    
+    if cell_type in cell_type_list:
+
+        sd_fol = Path(os.getcwd()).parents[1] / "sample_data"
+
+        data_root_path = sd_fol / "example_quant"
+
+        # Specify the file type of the sample data
+        raw_img_type = ".tiff"
+
+        ## Specify which subfolder that contains the input data and the input data file extension
+        raw_data_path = data_root_path / "raw"
+
+        ## Specify the location of the segmentations.
+        seg_data_path = data_root_path / "seg"
+
+        # Where to output the quantification
+        quant_data_path = data_root_path / "quant"
+
+        return data_root_path, raw_img_type, raw_data_path, seg_data_path, quant_data_path
+    else:
+        raise ValueError('Sample data file type must be "neuron_1", "astroctye", "neuron_2" or "iPSC"')
+    
+def create_quant(create: bool):
+    """ function that creates the quantification subfolder for the sample data"""
+    if create:
+        # quantification folder
+        qfol = (Path(os.getcwd()).parents[1] / "sample_data" / "example_quant")
+
+        # check if quantification folder exists
+        if not qfol.exists():
+
+            # create quant folder
+            Path.mkdir(qfol)
+            
+            # create sub folders
+            for sub in ["raw", "seg","edit_seg" "quant"]:
+                Path.mkdir(qfol / sub)
+                print(f"making {qfol / sub}")
+        else:
+            print("Quantification subfolder has already been created")
+
+def copy_raw(copy_list: list):
+    """ function that copies specified sample data images to quant folder"""
+
+    sd_fol = Path(os.getcwd()).parents[1] / "sample_data"
+
+    sd_list = ['neuron_1', 'astrocyte', 'neuron_2', 'iPSC']
+
+    if len(set(copy_list) - set(sd_list)):
+        print(f"The following entries are not applicable sample data types and will not be copied over: {[*set(copy_list) - set(sd_list)]}")
+
+    sd_list = [*set(sd_list) & set (copy_list)]
+
+    # iterate through all sample data images to be copied
+    for cell_type in sd_list:
+        try:
+            # get sample data path
+            sd_img_path = list_image_files(sd_fol / f"example_{cell_type}" / "raw", "")[0]
+
+            # get image name (without file type)
+            img_n = sd_img_path.name.split(".")[0]
+
+            # read image and meta data
+            img,md = read_czi_image(sd_img_path)
+
+            # copy image to quant folder
+            export_ome_tiff(img,md,img_n,
+                            str(sd_fol / "example_quant" / "raw") + "//",
+                            md['name'])
+        except:
+            raise ValueError (f"Issue with copying {cell_type} to quantification folder, check if raw file exists")                   
+        

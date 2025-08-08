@@ -3,9 +3,14 @@ from typing import Union
 import numpy as np
 
 from infer_subc.core.img import *
-from infer_subc.organelles.cellmask import infer_cellmask_fromcomposite, infer_cellmask_fromcytoplasm, select_highest_intensity_cell, combine_cytoplasm_and_nuclei
+from infer_subc.organelles.cellmask import (infer_cellmask_fromcomposite,
+                                            infer_cellmask_fromcytoplasm,
+                                            select_highest_intensity_cell,
+                                            combine_cytoplasm_and_nuclei)
+
 from infer_subc.organelles.nuclei import infer_nuclei_fromlabel, infer_nuclei_fromcytoplasm, mask_cytoplasm_nuclei, segment_nuclei_seeds
 from infer_subc.organelles.cytoplasm import infer_cytoplasm, infer_cytoplasm_fromcomposite, infer_cytoplasm_fromcomposite
+from infer_subc.organelles.membrane import infer_intermediate_masks, infer_cellmask_masks_C, infer_nucleus_masks_C, infer_cellmask_masks_D
 
 ##################
 # Masks Workflow #
@@ -221,7 +226,7 @@ def infer_masks_A(in_img: np.ndarray,
     Returns
     -------------
     mask_stack:
-        a logical/labels object defining boundaries of nucleus, cell mask, and cytoplasm
+        a logical/labels object defining boundaries of nucleus and cell mask
 
     """
     
@@ -252,10 +257,13 @@ def infer_masks_A(in_img: np.ndarray,
                                             small_obj_width = cell_small_obj_width,
                                             fill_filter_method = cell_fill_filter_method)
     
-    stack = stack_masks(nuc_mask=nuc_obj, cellmask=cell_obj, cyto_mask=cyto_obj)
+    stack = stack_masks(nuc_mask=nuc_obj, cellmask=cell_obj)
 
     return stack
 
+####################
+# Masks B Workflow #
+####################
 def infer_masks_B(in_img: np.ndarray,
                    cyto_weights: list[int],
                    cyto_rescale: bool,
@@ -319,7 +327,7 @@ def infer_masks_B(in_img: np.ndarray,
     Returns
     -------------
     mask_stack:
-        a three channel np.ndarray constisting of the nucleus, cell and cytoplasm masks (one object per channel)
+        a three channel np.ndarray constisting of the nucleus and cell (one object per channel)
 
     """
     cytoplasms = infer_cytoplasm_fromcomposite(in_img, 
@@ -343,6 +351,350 @@ def infer_masks_B(in_img: np.ndarray,
     
     good_CM = select_highest_intensity_cell(in_img, cellmasks, nuclei_seeds)
     
-    mask_stack = mask_cytoplasm_nuclei(good_CM, cytoplasms, cyto_small_object_width2)
+    good_nuc = mask_cytoplasm_nuclei(good_CM, cytoplasms, cyto_small_object_width2)
+    
+    stack = stack_masks(nuc_mask=good_nuc, cellmask=good_CM)
+
+    return stack
+
+####################
+# Masks C Workflow #
+####################
+def infer_masks_C(in_img: np.ndarray,
+                   pm_ch: Union[int,None],
+                   nuc_ch: Union[int,None],
+                   parameters_I: list[list, bool, str, int, str, int, float, bool, float, str, int, int, int, int],
+                   parameters_II: list[list, bool, str, int, str, int, float, bool, float, str, int, int, int, int],
+                   nuc_med_filter_size: int,
+                   nuc_gaussian_smoothing_sigma: float,
+                   nuc_threshold_factor: float,
+                   nuc_thresh_min: float,
+                   nuc_thresh_max: float,
+                   nuc_hole_min_width: int,
+                   nuc_hole_max_width: int,
+                   nuc_small_object_width: int,
+                   nuc_fill_filter_method: str,
+                   nuc_search_img: str,
+                   cell_watershed_method: str,
+                   cell_min_hole_width: int,
+                   cell_max_hole_width: int,
+                   cell_method: str,
+                   cell_size: int) -> np.ndarray:
+    """
+    Procedure to infer intermediate masks from linear unmixed input.
+
+    Parameters
+    ------------
+    in_img: 
+        a 3d image containing all the channels
+    pm_ch:
+        the index of the channel containing your plasma membrane label
+    nuc_ch:
+        the index of the channel containing your nuclei label
+    parameters_I:
+        list that contains the following (weights_I, invert_pm_I, method_I, size_I, global_method_I, cutoff_size_I, local_adj_I,
+        bind_to_pm_I, thresh_adj_I, cm_method_I,cm_size_I, cm_min_hole_width_I, cm_max_hole_width_I, cm_small_obj_width_I), 
+        all of which are related to the first sequence of steps in masks_C
+    weights_I:
+        a list of int that corresond to the weights for each channel in the first composite; use 0 if a channel should not be included in the composite image
+    invert_pm_I:
+        True = invert plasma membrane channel in the first composite
+        False = do not invert plasma membrane channel in the first composite
+    method_I:
+        which footprint shape to use for the closing algorithm on the first composite. Options include:
+        "Ball" (3D closing), "Disk" (2D closing), and "Scharr" (skip closing altogether and apply Scharr edge detection).
+    size_I:
+        size of the footprint used in closing algorithm on the first composite, this value is disregarded if method_I == "Scharr"
+    global_method_I:
+         which method to use for calculating global threshold applied to composite_mask_I (MO). Options include:
+         "triangle" (or "tri"), "median" (or "med"), and "ave_tri_med" (or "ave").
+         "ave" refers the average of "triangle" threshold and "mean" threshold.
+    cutoff_size_I: 
+        Masked Object threshold `size_min`; minimum size of of object to advanced to the local Otsu thresholding
+        step in the Masked Object thresholding of composite_mask_I.
+    local_adj_I: 
+        Masked Object threshold `local_adjust`, proportion applied to the local Otsu threshold (composite_mask_I MO thresholding)
+    bind_to_pm_I:
+        True = restrict the resulting mask_I_segmentation to the thresholded plasma membrane
+        False = do not restrict the resulting mask_I_segmentation to the thresholded plasma membrane
+    thresh_adj_I:
+        the proportion applied to the Otsu threshold of the plasma membrane (disregarded if bind_to_pm_I == False)
+    cm_method_I:
+        which footprint shape to use for the nucleus dilation before combination with the mask_I_segmentation. Options include:
+        "Ball" (3D dilation), "Disk" (2D dilation), and "None" (skip dilation altogether).
+    cm_size_I:
+        size of the footprint used in dilation of the nucleus object, this value is disregarded if cm_method_I == "None"
+    cm_min_hole_width_I: 
+        the minimum hole width to be filled in the cellmask_I_segmentation
+    cm_max_hole_width_I: 
+        the maximum hole width to be filled in the cellmask_I_segmentation
+    cm_small_obj_width_I:
+        minimum object size cutoff for the cellmask_I_segmentation
+    parameters_II:
+        list that contains the following parameters (weights_II, invert_pm_II, method_II, size_II, global_method_II, cutoff_size_II,
+        local_adj_II, bind_to_pm_II, thresh_adj_II, cm_method_II, cm_size_II, cm_min_hole_width_II, cm_max_hole_width_II, 
+        cm_small_obj_width_II), all of which are related to the second sequence of steps in masks_C
+    weights_II:
+        a list of int that corresond to the weights for each channel in the second composite; use 0 if a channel should not be included in the composite image
+    invert_pm_II:
+        True = invert plasma membrane channel in the second composite
+        False = do not invert plasma membrane channel in the second composite
+    method_II:
+        which footprint shape to use for the closing algorithm on the second composite. Options include:
+        "Ball" (3D closing), "Disk" (2D closing), and "Scharr" (skip closing altogether and apply Scharr edge detection).
+    size_II:
+        size of the footprint used in closing algorithm on the second composite, this value is disregarded if method_II == "Scharr"
+    global_method_II:
+         which method to use for calculating global threshold applied to composite_mask_II (MO). Options include:
+         "triangle" (or "tri"), "median" (or "med"), and "ave_tri_med" (or "ave").
+         "ave" refers the average of "triangle" threshold and "mean" threshold.
+    cutoff_size_II: 
+        Masked Object threshold `size_min`; minimum size of of object to advanced to the local Otsu thresholding
+        step in the Masked Object thresholding of composite_mask_II.
+    local_adj_II: 
+        Masked Object threshold `local_adjust`, proportion applied to the local Otsu threshold (composite_mask_II MO thresholding)
+    bind_to_pm_II:
+        True = restrict the resulting mask_II_segmentation to the thresholded plasma membrane
+        False = do not restrict the resulting mask_II_segmentation to the thresholded plasma membrane
+    thresh_adj_II:
+        the proportion applied to the Otsu threshold of the plasma membrane (disregarded if bind_to_pm_II == False)
+    cm_method_II:
+        which footprint shape to use for the nucleus dilation before combination with the mask_II_segmentation. Options include:
+        "Ball" (3D dilation), "Disk" (2D dilation), and "None" (skip dilation altogether).
+    cm_size_II:
+        size of the footprint used in dilation of the nucleus object, this value is disregarded if cm_method_II == "None"
+    cm_min_hole_width_II: 
+        the minimum hole width to be filled in the cellmask_II_segmentation
+    cm_max_hole_width_II: 
+        the maximum hole width to be filled in the cellmask_II_segmentation
+    cm_small_obj_width_II:
+        minimum object size cutoff for the cellmask_II_segmentation
+    nuc_med_filter_size: 
+        width of median filter for nuclei signal
+    nuc_gaussian_smoothing_sigma: 
+        sigma for gaussian smoothing of nuclei signal
+    nuc_threshold_factor:
+        adjustment to make to the intial local threshold of the nucleus singal;
+        intital threshold is derived from Li's minimum cross entropy method
+    nuc_thresh_min:
+        minimum bound of the local threshold of the nucleus
+    nuc_thresh_max:
+        maximum bound of the local threshold of the nucleus
+    nuc_hole_min_width: 
+        the minimum hole width to be filled in the nucleus post-thresholding
+    nuc_hole_max_width:
+        the maximum hole width to be filled in the nucleus post-thresholding
+    nuc_small_object_width:
+        minimum object size cutoff for nucleus post-thresholding
+    nuc_fill_filter_method:
+        determines if fill and filter should be run 'sice-by-slice' or in '3D' (nucleus)
+    nuc_search_img:
+        the segmentation used to select the nucleus based on greatest overlap. Options include:
+        "Img 5" (mask_I_segmentation) and "Img 6" (mask_II_segmentation)
+    cell_watershed_method:
+        determines if the watershed should be run 'sice-by-slice' or in '3D'
+    cell_min_hole_width: 
+        the minimum hole width to be filled in the cellmask object
+    cell_max_hole_width: 
+        the maximum hole width to be filled in the cellmask object
+    cell_method:
+        which footprint shape to use for the cellmask closing (dilation -> erosion). Options include:
+        "Ball" (3D closing), "Disk" (2D closing), and "None" (skip closing altogether).
+    cell_size:
+        size of the footprint used in closing of the cellmask object, this value is disregarded if cm_method_I == "None"
+    
+    Returns
+    -------------
+    mask_stack:
+        a two channel np.ndarray constisting of the nucleus and cell (one object per channel)
+
+    """
+    # Get list of parameters (I and II)
+    weights_I, invert_pm_I, method_I, size_I, global_method_I, cutoff_size_I, local_adj_I, bind_to_pm_I, thresh_adj_I, cm_method_I, cm_size_I, cm_min_hole_width_I, cm_max_hole_width_I, cm_small_obj_width_I = parameters_I
+
+    weights_II, invert_pm_II, method_II, size_II, global_method_II, cutoff_size_II, local_adj_II, bind_to_pm_II, thresh_adj_II, cm_method_II,cm_size_II, cm_min_hole_width_II, cm_max_hole_width_II, cm_small_obj_width_II = parameters_II
+
+    ##########################
+    # get intermediate masks #
+    ##########################
+
+    mask_I_segmentation, mask_II_segmentation = infer_intermediate_masks(in_img,
+                           pm_ch,
+                           weights_I,
+                           weights_II,
+                           invert_pm_I,
+                           invert_pm_II,
+                           method_I,
+                           method_II,
+                           size_I,
+                           size_II,
+                           global_method_I,
+                           global_method_II,
+                           cutoff_size_I,
+                           cutoff_size_II,
+                           local_adj_I,
+                           local_adj_II,
+                           bind_to_pm_I,
+                           bind_to_pm_II,
+                           thresh_adj_I,
+                           thresh_adj_II)
+    
+    #################
+    # infer nucleus #
+    #################
+    
+    nuc_obj = infer_nucleus_masks_C(in_img,
+                           nuc_ch,
+                           mask_I_segmentation,
+                           mask_II_segmentation,
+                           nuc_med_filter_size,
+                           nuc_gaussian_smoothing_sigma,
+                           nuc_threshold_factor,
+                           nuc_thresh_min,
+                           nuc_thresh_max,
+                           nuc_hole_min_width,
+                           nuc_hole_max_width,
+                           nuc_small_object_width,
+                           nuc_fill_filter_method,
+                           nuc_search_img)
+    
+    ##################
+    # infer cellmask #
+    ##################
+    
+    cellmask_obj = infer_cellmask_masks_C(nuc_obj,
+                                    mask_I_segmentation,
+                                    mask_II_segmentation,
+                                    cm_method_I,
+                                    cm_method_II,
+                                    cm_size_I,
+                                    cm_size_II,
+                                    cm_min_hole_width_I,
+                                    cm_min_hole_width_II,
+                                    cm_max_hole_width_I,
+                                    cm_max_hole_width_II,
+                                    cm_small_obj_width_I,
+                                    cm_small_obj_width_II,
+                                    cell_watershed_method,
+                                    cell_min_hole_width,
+                                    cell_max_hole_width,
+                                    cell_method,
+                                    cell_size)
+    
+    ###################
+    ### stack masks ###
+    ###################
+    mask_stack = stack_masks(nuc_mask=nuc_obj, 
+                            cellmask=cellmask_obj)
     
     return mask_stack
+
+def infer_masks_D(in_img: np.ndarray,
+                   pm_ch: Union[int,None],
+                   nuc_ch: Union[int,None],
+                   weights: list[int],
+                   median_sz: int, 
+                   gauss_sig: float,
+                   thresh_factor: float,
+                   thresh_min: float,
+                   thresh_max: float,
+                   min_hole_w: int,
+                   max_hole_w: int,
+                   small_obj_w: int,
+                   fill_filter_method: str,
+                   invert_pm: bool,
+                   cell_method: str,
+                   hole_min: int,
+                   hole_max: int,
+                   fill_2d: bool):
+    
+    """
+    Procedure to infer intermediate masks from linear unmixed input.
+
+    Parameters
+    ------------
+    in_img: 
+        a 3d image containing all the channels
+    pm_ch:
+        the index of the channel containing your plasma membrane label
+    nuc_ch:
+        the index of the channel containing your nuclei label
+    weights:
+        a list of int that corresond to the weights for each channel in the composite; use 0 if a channel should not be included in the composite image
+    median_sz: int
+        width of median filter for nuclei signal
+    gauss_sig: float
+        sigma for gaussian smoothing of nuclei signal
+    thresh_factor: float
+        adjustment factor for log Li nuclei threholding
+    thresh_min: float
+        abs min threhold for log Li nuclei threholding
+    thresh_max: float
+        abs max threhold for log Li nuclei threholding
+    min_hole_w: int
+        hole filling minimum for nuclei post-processing
+    max_hole_w: int
+        hole filling cutoff for nuclei post-processing
+    small_obj_w: int
+        minimum object size cutoff for nuclei post-processing
+    fill_filter_method:
+        determines if fill and filter should be run 'sice-by-slice' or in '3D' (nucleus)
+    invert_pm:
+        True = invert plasma membrane channel in the composite
+        False = do not invert plasma membrane channel in the composite
+    cell_method:
+        The type of watershedding method to perform for the cellmask. Options include:
+        "3D" (3D watershedding), "slice-by-slice" (2D watershedding).
+    hole_min: 
+        the minimum hole width to be filled in the cellmask
+    hole_max: 
+        the maximum hole width to be filled in the cellmask
+    fill_2d:
+        True = fill cellmask holes in 2D (slice by slice)
+        False = fill cellmask holes in 3D
+    
+    Returns
+    -------------
+    mask_stack:
+        a two channel np.ndarray constisting of the nucleus and cell (one object per channel)
+
+    """
+
+    ##########################
+    # get nuclei labels #
+    ##########################
+
+    nuclei_labels = infer_nuclei_fromlabel(in_img,
+                                nuc_ch,
+                                median_sz,
+                                gauss_sig,
+                                thresh_factor,
+                                thresh_min,
+                                thresh_max,
+                                min_hole_w,
+                                max_hole_w,
+                                small_obj_w,
+                                fill_filter_method)
+    
+    ##########################
+    # get cellmask #
+    ##########################
+
+    cellmask_obj = infer_cellmask_masks_D(in_img,
+                                    pm_ch,
+                                    weights,
+                                    invert_pm,
+                                    nuclei_labels,
+                                    cell_method,
+                                    hole_min,
+                                    hole_max,
+                                    fill_2d)
+    
+    ###################
+    ### stack layers ##
+    ###################
+
+    stack = stack_layers(nuclei_labels = nuclei_labels,
+                         cellmask = cellmask_obj)
+    
+    return stack

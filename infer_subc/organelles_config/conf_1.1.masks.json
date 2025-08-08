@@ -90,25 +90,11 @@
         "annotation": "basic cellmask segmentation: 7"
     },
     "8": {
-        "category": "postpostprocessing",
-        "function": "infer_cytoplasm",
-        "parameter_values": {
-            "erode_nuclei": false
-        },
-        "parent": [
-            1,
-            7
-        ],
-        "annotation": "infer cytoplasm: 8"
-    },
-    "9": {
         "category": "export",
         "function": "stack_masks",
         "parent": [
             1,
-            7,
-            8
-        ],
+            7],
         "annotation": "export  canonical masks (nuc,cellmask, cyto) 9"
     }
 }

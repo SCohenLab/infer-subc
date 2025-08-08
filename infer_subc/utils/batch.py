@@ -1,10 +1,11 @@
 from typing import Union, Dict, List
 from pathlib import Path
 import time
+import numpy as np
 
 from infer_subc.core.file_io import list_image_files, export_tiff, read_tiff_image, read_czi_image, export_inferred_organelle
-from infer_subc.core.img import label_uint16
-from infer_subc.organelles.masks import infer_masks, infer_masks_A, infer_masks_B
+from infer_subc.core.img import label_uint16, apply_mask, min_max_intensity_normalization, label, size_filter_linear_size
+from infer_subc.organelles.masks import infer_masks, infer_masks_A, infer_masks_B, infer_masks_C, infer_masks_D
 from infer_subc.organelles.er import infer_ER
 from infer_subc.organelles.golgi import infer_golgi
 from infer_subc.organelles.lipid import infer_LD
@@ -133,10 +134,12 @@ def find_segmentation_tiff_files(prototype:Union[Path,str],
 def batch_process_segmentation(raw_path: Union[Path,str],
                                raw_file_type: str,
                                seg_path: Union[Path, str],
-                               file_splitter: Union[str, None],
+                               name_suffix: Union[str, None],
                                masks_settings: Union[List, None],
                                masks_A_settings: Union[List, None],
                                masks_B_settings: Union[List, None],
+                               masks_C_settings: Union[List, None],
+                               masks_D_settings: Union[List, None],
                                lyso_settings: Union[List, None],
                                mito_settings: Union[List, None],
                                golgi_settings: Union[List, None],
@@ -154,9 +157,9 @@ def batch_process_segmentation(raw_path: Union[Path,str],
         The raw file type (e.g., ".tiff" or ".czi")
     seg_path: Union[Path, str]
         A string or a Path object of the path where the segmentation outputs will be saved 
-    file_splitter: str
+    name_suffix: str
         An optional string to include before the segmentation suffix at the end of the output file. 
-        For example, if the file_splitter was "20240105", the segmentation file output from the 1.1_masks workflow would include:
+        For example, if the name_suffix was "20240105", the segmentation file output from the 1.1_masks workflow would include:
         "{base-file-name}-20240105-masks"
     {}_settings: Union[List, None]
         For each workflow that you wish to include in the batch processing, 
@@ -226,6 +229,45 @@ def batch_process_segmentation(raw_path: Union[Path,str],
                         nuc_small_obj_width: int,
                         cell_fillhole_max: int,
                         cyto_small_object_width2: int]
+    For infer_masks_C:
+    - `masks_C_settings` = [pm_ch: Union[int,None],
+                   nuc_ch: Union[int,None],
+                   parameters_I: list[list, bool, str, int, str, int, float, bool, float, str, int, int, int, int],
+                   parameters_II: list[list, bool, str, int, str, int, float, bool, float, str, int, int, int, int],
+                   nuc_med_filter_size: int,
+                   nuc_gaussian_smoothing_sigma: float,
+                   nuc_threshold_factor: float,
+                   nuc_thresh_min: float,
+                   nuc_thresh_max: float,
+                   nuc_hole_min_width: int,
+                   nuc_hole_max_width: int,
+                   nuc_small_object_width: int,
+                   nuc_fill_filter_method: str,
+                   nuc_search_img: str,
+                   cell_watershed_method: str,
+                   cell_min_hole_width: int,
+                   cell_max_hole_width: int,
+                   cell_method: str,
+                   cell_size: int)]
+
+    For infer_masks_D:
+    - `masks_D_settings` = [pm_ch: Union[int,None],
+                   nuc_ch: Union[int,None],
+                   weights: list[int],
+                   median_sz: int, 
+                   gauss_sig: float,
+                   thresh_factor: float,
+                   thresh_min: float,
+                   thresh_max: float,
+                   min_hole_w: int,
+                   max_hole_w: int,
+                   small_obj_w: int,
+                   fill_filter_method: str,
+                   invert_pm: bool,
+                   cell_method: str,
+                   hole_min: int,
+                   hole_max: int,
+                   fill_2d: bool]
 
     For infer_lyso:
     - `lyso_settings` = [lyso_ch: int,
@@ -357,8 +399,8 @@ def batch_process_segmentation(raw_path: Union[Path,str],
         Path.mkdir(seg_path)
         print(f"The specified 'seg_path' was not found. Creating {seg_path}.")
     
-    if not file_splitter:
-        file_splitter=""
+    if not name_suffix:
+        name_suffix=""
 
     # reading list of files from the raw path
     img_file_list = list_image_files(raw_path, raw_file_type)
@@ -374,50 +416,62 @@ def batch_process_segmentation(raw_path: Union[Path,str],
         # run masks function
         if masks_settings:
             masks = infer_masks(img_data, *masks_settings)
-            out_file_n = export_inferred_organelle(masks, file_splitter+"masks", meta_dict, seg_path)
+            export_inferred_organelle(masks, name_suffix+"masks", meta_dict, seg_path)
             seg_list.append("masks")
         
         # run masks_A function
         if masks_A_settings:
             masks_A =  infer_masks_A(img_data, *masks_A_settings)
-            out_file_n = export_inferred_organelle(masks_A, file_splitter+"masks_A", meta_dict, seg_path)
+            export_inferred_organelle(masks_A, name_suffix+"masks_A", meta_dict, seg_path)
             seg_list.append("masks_A")
             
         # run masks_B function
         if masks_B_settings:
             masks_B = infer_masks_B(img_data, *masks_B_settings)
-            out_file_n = export_inferred_organelle(masks_B, file_splitter+"masks_B", meta_dict, seg_path)
+            export_inferred_organelle(masks_B, name_suffix+"masks_B", meta_dict, seg_path)
             seg_list.append("masks_B")
+
+        # run masks_C function
+        if masks_C_settings:
+            masks_C = infer_masks_C(img_data, *masks_C_settings)
+            export_inferred_organelle(masks_C, name_suffix+"masks_C", meta_dict, seg_path)
+            seg_list.append("masks_C")
+        
+        # run masks_D function
+        if masks_D_settings:
+            masks_D = infer_masks_D(img_data, *masks_D_settings)
+            export_inferred_organelle(masks_D, name_suffix+"masks_D", meta_dict, seg_path)
+            seg_list.append("masks_D")
 
         # run 1.2_infer_lysosomes function
         if lyso_settings:
             lyso_seg = infer_lyso(img_data, *lyso_settings)
-            out_file_n = export_inferred_organelle(lyso_seg, file_splitter+"lyso", meta_dict, seg_path)  
+            export_inferred_organelle(lyso_seg, name_suffix+"lyso", meta_dict, seg_path)  
             seg_list.append("lyso")          
 
         if mito_settings:
             mito_seg = infer_mito(img_data, *mito_settings)
-            out_file_n = export_inferred_organelle(mito_seg, file_splitter+"mito", meta_dict, seg_path)  
+            export_inferred_organelle(mito_seg, name_suffix+"mito", meta_dict, seg_path)  
             seg_list.append("mito")
             
         if golgi_settings:
             golgi_seg = infer_golgi(img_data, *golgi_settings)
-            out_file_n = export_inferred_organelle(golgi_seg, file_splitter+"golgi", meta_dict, seg_path)  
+            export_inferred_organelle(golgi_seg, name_suffix+"golgi", meta_dict, seg_path)  
             seg_list.append("golgi")
 
         if perox_settings:
             perox_seg = infer_perox(img_data, *perox_settings)
-            out_file_n = export_inferred_organelle(perox_seg, file_splitter+"perox", meta_dict, seg_path)  
+            export_inferred_organelle(perox_seg, name_suffix+"perox", meta_dict, seg_path)  
             seg_list.append("perox")
             
         if ER_settings:
             ER_seg = infer_ER(img_data, *ER_settings)
-            out_file_n = export_inferred_organelle(ER_seg, file_splitter+"ER", meta_dict, seg_path)  
+            export_inferred_organelle(ER_seg, name_suffix+"ER", meta_dict, seg_path)  
             seg_list.append("ER")
             
         if LD_settings:
             LD_seg = infer_LD(img_data, *LD_settings)
-            out_file_n = export_inferred_organelle(LD_seg, file_splitter+"LD", meta_dict, seg_path)
+            export_inferred_organelle(LD_seg, name_suffix+"LD", meta_dict, seg_path)
             seg_list.append("LD")
 
         end = time.time()
@@ -519,7 +573,7 @@ def batch_process_segmentation(raw_path: Union[Path,str],
 #     # channel_axis = meta_dict['channel_axis']
 
 #     inferred_organelles, layer_names, optimal_Z = fixed_infer_organelles(img_data)
-#     out_file_n = export_inferred_organelle(inferred_organelles, layer_names, meta_dict, data_root_path)
+#      export_inferred_organelle(inferred_organelles, layer_names, meta_dict, data_root_path)
 
 #     ## TODO:  collect stats...
 
@@ -556,3 +610,33 @@ def batch_process_segmentation(raw_path: Union[Path,str],
 #     """wrapper to stack the inferred objects into a single numpy.ndimage"""
 
 #     return np.stack(layers, axis=0)
+
+def QC_filter(in_img: np.ndarray,
+              raw_img: np.ndarray,
+              method: Union[int, str, None]):
+    """
+    Filter the input image based on the specified method."""
+    out_img = np.zeros_like(in_img, dtype=np.uint16)
+    if (type(method) is int) and (method > 0):
+        print("Applying size filter with linear size...")
+        out_img = size_filter_linear_size(in_img, min_size=method, method='3D') #simple size filtering
+    elif type(method) is str:
+        if method.isdigit():
+            print("Applying size filter with linear size...")
+            out_img = size_filter_linear_size(in_img, min_size=int(method), method='3D')
+        elif method.lower() == 'largest':
+            print("Applying the largest object filter...")
+            size_per_label = [counts for val, counts in np.unique(label(in_img), return_counts=True) if val != 0]
+            out_img[label(in_img) == (np.argmax(size_per_label)+1)] = 1  # +1 because size_per_label starts at label of 1
+        elif method.lower() == 'brightest':
+            print("Applying the brightest object filter...")
+            composite = apply_mask(min_max_intensity_normalization(raw_img).sum(axis=0), in_img)
+            intensity_per_label = [composite[in_img == i].sum() for i in np.unique(label(in_img)) if i != 0]
+            out_img[label(in_img) == (np.argmax(intensity_per_label)+1)] = 1 # +1 because intensity_per_label starts at label of 1
+        elif method.lower() == 'none':
+            print("No filtering applied.")
+            out_img = in_img # option to not apply any filtering given user error
+    elif method == None or method == 0:
+        print("No filtering applied.")
+        out_img = in_img # no filtering is applied
+    return out_img

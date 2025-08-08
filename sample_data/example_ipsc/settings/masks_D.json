@@ -1,0 +1,77 @@
+{
+    "1": {
+        "category": "extraction",
+        "function": "membrane_composite",
+        "parameter_values": {
+            "Invert_PM": false,
+            "PM_Channel": 7,
+            "weight_ch0": 0,
+            "weight_ch1": 0,
+            "weight_ch2": 2,
+            "weight_ch3": 2,
+            "weight_ch4": 2,
+            "weight_ch5": 2,
+            "weight_ch6": 2,
+            "weight_ch7": 0,
+            "weight_ch8": 0,
+            "weight_ch9": 0
+        },
+        "parent": 0
+    },
+    "2": {
+        "category": "extraction",
+        "function": "infer_nuclei_fromlabel",
+        "parameter_values": {
+            "fill_filter_method": "3D",
+            "gauss_sigma": 2.0,
+            "max_hole_width": 40,
+            "median_size": 4,
+            "min_hole_width": 0,
+            "nuc_ch": 1,
+            "small_obj_width": 25,
+            "thresh_factor": 0.9,
+            "thresh_max": 1.0,
+            "thresh_min": 0.1
+        },
+        "parent": 0
+    },
+    "3": {
+        "category": "core",
+        "function": "invert_pm_watershed",
+        "parameter_values": {
+            "Method": "3D",
+            "PM_Channel": 7
+        },
+        "parent": [
+            0,
+            2
+        ]
+    },
+    "4": {
+        "category": "postprocessing",
+        "function": "choose_cell",
+        "parent": [
+            1,
+            2,
+            3
+        ]
+    },
+    "5": {
+        "category": "postpostprocessing",
+        "function": "hole_filling",
+        "parameter_values": {
+            "fill_2d": true,
+            "hole_max": 300,
+            "hole_min": 0
+        },
+        "parent": 4
+    },
+    "6": {
+        "category": "export",
+        "function": "stack_layers",
+        "parent": [
+            2,
+            5
+        ]
+    }
+}

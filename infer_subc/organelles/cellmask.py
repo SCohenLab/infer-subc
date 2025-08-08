@@ -19,7 +19,6 @@ from infer_subc.core.img import (
     get_interior_labels,
 )
 
-
 def raw_cellmask_fromaggr(img_in: np.ndarray, scale_min_max: bool = True) -> np.ndarray:
     """define cellmask image
     CELLMASK_W = (6.,1.,2.)

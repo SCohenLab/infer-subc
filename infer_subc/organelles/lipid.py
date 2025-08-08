@@ -19,7 +19,7 @@ from infer_subc.core.file_io import export_inferred_organelle, import_inferred_o
 ### USED ###
 def infer_LD(
             in_img: np.ndarray,
-            LD_ch: str,
+            LD_ch: int,
             median_sz: int,
             gauss_sig: float,
             method: str,
