@@ -507,7 +507,7 @@ def sample_input_quant(cell_type: Union[str, None]) -> tuple[Path, str, Path, Pa
 
         sd_fol = Path(os.getcwd()).parents[1] / "sample_data"
 
-        data_root_path = sd_fol /  f"example_{cell_type}"
+        data_root_path = sd_fol / "example_quant"
 
         # Specify the file type of the sample data
         raw_img_type = ".tiff"
@@ -516,11 +516,10 @@ def sample_input_quant(cell_type: Union[str, None]) -> tuple[Path, str, Path, Pa
         raw_data_path = data_root_path / "raw"
 
         ## Specify the location of the segmentations.
-        ## If its not already created, the code below will creat it for you
         seg_data_path = data_root_path / "seg"
 
         # Where to output the quantification
-        quant_data_path = sd_fol / "example_quant" / "quant"
+        quant_data_path = data_root_path / "quant"
 
         return data_root_path, raw_img_type, raw_data_path, seg_data_path, quant_data_path
     else:
@@ -544,5 +543,35 @@ def create_quant(create: bool):
                 print(f"making {qfol / sub}")
         else:
             print("Quantification subfolder has already been created")
-                    
+
+def copy_raw(copy_list: list):
+    """ function that copies specified sample data images to quant folder"""
+
+    sd_fol = Path(os.getcwd()).parents[1] / "sample_data"
+
+    sd_list = ['neuron_1', 'astrocyte', 'neuron_2', 'iPSC']
+
+    if len(set(copy_list) - set(sd_list)):
+        print(f"The following entries are not applicable sample data types and will not be copied over: {[*set(copy_list) - set(sd_list)]}")
+
+    sd_list = [*set(sd_list) & set (copy_list)]
+
+    # iterate through all sample data images to be copied
+    for cell_type in sd_list:
+        try:
+            # get sample data path
+            sd_img_path = list_image_files(sd_fol / f"example_{cell_type}" / "raw", "")[0]
+
+            # get image name (without file type)
+            img_n = sd_img_path.name.split(".")[0]
+
+            # read image and meta data
+            img,md = read_czi_image(sd_img_path)
+
+            # copy image to quant folder
+            export_ome_tiff(img,md,img_n,
+                            str(sd_fol / "example_quant" / "raw") + "//",
+                            md['name'])
+        except:
+            raise ValueError (f"Issue with copying {cell_type} to quantification folder, check if raw file exists")                   
         
