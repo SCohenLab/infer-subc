@@ -2455,7 +2455,7 @@
         "parameters": null
     },
     "label_declump":{
-        "name": "Choose to label with declumping or not",
+        "name": "Choose to label with/without declumping",
         "python::module": "infer_subc.organelles.declumping",
         "python::function": "watershed_declumping",
         "parameters": {
