@@ -29,7 +29,8 @@ from infer_subc.core.img import (
     fill_and_filter_linear_size,
     get_max_label,
     get_interior_labels,
-    label
+    label,
+    select_cellmask_from_img
 )
 
 def raw_cellmask_fromaggr(img_in: np.ndarray, scale_min_max: bool = True) -> np.ndarray:
@@ -616,3 +617,36 @@ def clean_neurites_from_soma(cell_mask: np.ndarray, soma_out_2: np.ndarray):
 
     neurites_out_2 = label(neurites_out_2)
     return neurites_out_2
+
+def infer_soma_neurites(in_seg: np.ndarray, multichannel_input: bool=False, chan: int=0, method: str='binary'):
+
+    ###################
+    # EXTRACT
+    ###################  
+    cell_mask = select_cellmask_from_img(in_seg, multichannel_input=multichannel_input, chan=chan)
+
+    ###################
+    # PRE_PROCESSING
+    ################### 
+    radii_mask = find_radius(cell_mask, method)
+
+    ###################
+    # CORE_PROCESSING
+    ###################
+    soma_initial = infer_soma_from_mask(cell_mask, radii_mask, method)
+
+    neurites_initial = infer_neurites_from_mask(cell_mask, radii_mask, soma_initial, method)
+
+    ###################
+    # POST_PROCESSING
+    ################### 
+    soma_cleaned = clean_soma_from_neurites(cell_mask, neurites_initial)
+
+    neurites_cleaned = clean_neurites_from_soma(cell_mask, soma_cleaned)
+
+    ###################
+    # POST_POST_PROCESSING
+    ################### 
+    soma_neurites = np.stack([soma_cleaned, neurites_cleaned])
+    
+    return soma_neurites
