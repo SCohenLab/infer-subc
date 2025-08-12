@@ -26,6 +26,7 @@ def _otsu_size_filter(in_img: np.ndarray, thresh_adj:float=1, min_size:int=0) ->
 def watershed_declumping(raw_img:np.ndarray, seg_img:np.ndarray, declump:bool, 
                          sigma:float, iterations:int=1, open:bool=False, 
                          thresh_adj:float=1, min_size:int=0) -> np.ndarray:
+    seg_img = label_uint16(seg_img)
     if declump and iterations>=1:
         highpass = _highpass_filter(in_img=raw_img, sigma=sigma, open=open, iterations=iterations)
         ots = _otsu_size_filter(in_img=highpass, thresh_adj=thresh_adj, min_size=min_size)
