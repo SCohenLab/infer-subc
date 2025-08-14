@@ -47,8 +47,16 @@
     },
     "5": {
         "category": "postpostprocessing",
-        "function": "label_uint16",
-        "parent": 4,
-        "annotation": "label to uint16 for export 5"
+        "function": "label_declump",
+        "parameter_values":{
+            "declump": false,
+            "sigma": 1.0,
+            "iterations": 1,
+            "open": false,
+            "thresh_adj": 1.0,
+            "min_size": 0
+        },
+        "parent": [1,4],
+        "annotation": "label and/or declump for export 7"
     }
 }

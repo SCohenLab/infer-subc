@@ -2453,5 +2453,56 @@
         "python::module": "infer_subc.organelles.membrane",
         "python::function": "choose_cell",
         "parameters": null
+    },
+    "label_declump":{
+        "name": "Choose to label with/without declumping",
+        "python::module": "infer_subc.organelles.declumping",
+        "python::function": "watershed_declumping",
+        "parameters": {
+            "declump": {
+                "widget_type": "drop-down",
+                "data_type": "bool",
+                "options": [
+                    true,
+                    false
+                    ]
+            },
+            "sigma": {
+                "widget_type": "slider",
+                "data_type": "float",
+                "min": 0,
+                "max": 10,
+                "increment": 0.1
+            },
+            "iterations": {
+                "widget_type": "slider",
+                "data_type": "int",
+                "min": 0,
+                "max": 10,
+                "increment": 1
+            },
+            "open": {
+                "widget_type": "drop-down",
+                "data_type": "bool",
+                "options": [
+                    true,
+                    false
+                    ]
+            },
+            "thresh_adj": {
+                "widget_type": "slider",
+                "data_type": "float",
+                "min": 0,
+                "max": 2,
+                "increment": 0.1
+            },
+            "min_size": {
+                "widget_type": "slider",
+                "data_type": "int",
+                "min": 0,
+                "max": 100,
+                "increment": 1
+            }
+        }
     }
 }

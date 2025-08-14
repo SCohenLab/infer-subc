@@ -8,7 +8,7 @@ from aicssegmentation.core.vessel import filament_2d_wrapper
 
 from infer_subc.core.file_io import export_inferred_organelle, import_inferred_organelle
 from infer_subc.core.img import scale_and_smooth, fill_and_filter_linear_size, select_channel_from_raw, label_uint16, dot_filter_3, filament_filter_3
-
+from infer_subc.organelles.declumping import watershed_declumping
 
 ##########################
 #  infer_LYSOSOMES
@@ -36,7 +36,13 @@ def infer_lyso(
                                 min_hole_w: int,
                                 max_hole_w: int,
                                 small_obj_w: int,
-                                fill_filter_method: str
+                                fill_filter_method: str,
+                                declump: bool,
+                                dec_sig: float,
+                                dec_iter: int,
+                                dec_open: float,
+                                dec_adj: float,
+                                dec_min_size: int
                             ) -> np.ndarray:
     """
     Procedure to infer lysosome from linearly unmixed input,
@@ -122,7 +128,15 @@ def infer_lyso(
     ###################
     # LABELING
     ###################
-    struct_obj1 = label_uint16(struct_obj)
+
+    struct_obj1 = watershed_declumping(raw_img = lyso,
+                                       seg_img = struct_obj,
+                                       declump = declump,
+                                       sigma = dec_sig,
+                                       iterations = dec_iter,
+                                       open = dec_open,
+                                       thresh_adj = dec_adj,
+                                       min_size = dec_min_size)
 
     return struct_obj1
 

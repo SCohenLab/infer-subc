@@ -10,6 +10,7 @@ from infer_subc.core.img import (
     select_channel_from_raw,
     label_uint16,
 )
+from infer_subc.organelles.declumping import watershed_declumping
 from infer_subc.core.file_io import export_inferred_organelle, import_inferred_organelle
 
 
@@ -29,7 +30,13 @@ def infer_LD(
             min_hole_w: int,
             max_hole_w: int,
             small_obj_w: int,
-            fill_filter_method: str
+            fill_filter_method: str,
+                declump: bool,
+                dec_sig: float,
+                dec_iter: int,
+                dec_open: float,
+                dec_adj: float,
+                dec_min_size: int
             ) -> np.ndarray:
     """
     Procedure to infer LD from linearly unmixed input.
@@ -100,7 +107,14 @@ def infer_LD(
     ###################
     # LABELING
     ###################
-    struct_obj1 = label_uint16(struct_obj)
+    struct_obj1 = watershed_declumping(raw_img = lipid,
+                                       seg_img = struct_obj,
+                                       declump = declump,
+                                       sigma = dec_sig,
+                                       iterations = dec_iter,
+                                       open = dec_open,
+                                       thresh_adj = dec_adj,
+                                       min_size = dec_min_size)
 
     return struct_obj1
 
