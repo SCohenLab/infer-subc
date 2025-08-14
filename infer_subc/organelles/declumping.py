@@ -9,7 +9,7 @@ from skimage.measure._label import label
 
 def _highpass_filter(in_img: np.ndarray, sigma:float=0.0,
                      iterations:int=1, open:bool=False) -> np.ndarray:
-    highpass = in_img.copy()
+    highpass = in_img.copy().astype(np.float32)
     for _ in range(iterations):
         lowpass = ndimage.gaussian_filter(highpass, sigma)
         highpass -= lowpass
