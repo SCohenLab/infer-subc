@@ -4,7 +4,6 @@ from skimage.morphology import opening
 from skimage.filters import threshold_otsu
 from skimage.segmentation import watershed
 from aicssegmentation.core.utils import size_filter
-from infer_subc.core.img import label_uint16
 from skimage.measure._label import label
 
 def _highpass_filter(in_img: np.ndarray, sigma:float=0.0,
