@@ -37,7 +37,7 @@ classifiers = [
 license = {file = "LICENSE"}
 
 dependencies = [
-    'numpy' >=1.15.1, <= 1.26.4,
+    'numpy >=1.15.1, <= 1.26.4',
     'napari',
     'napari-aicsimageio',
     'aicssegmentation',
