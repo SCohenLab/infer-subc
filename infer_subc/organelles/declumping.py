@@ -26,19 +26,14 @@ def _otsu_size_filter(in_img: np.ndarray, thresh_adj:float=1, min_size:int=0) ->
 def watershed_declumping(raw_img:np.ndarray, seg_img:np.ndarray, declump:bool, 
                          sigma:float, iterations:int=1, open:bool=False, 
                          thresh_adj:float=1, min_size:int=0) -> np.ndarray:
-    seg_img = label_uint16(seg_img)
+    seg_img = label(seg_img)
     if declump and iterations>=1:
         highpass = _highpass_filter(in_img=raw_img, sigma=sigma, open=open, iterations=iterations)
         ots = _otsu_size_filter(in_img=highpass, thresh_adj=thresh_adj, min_size=min_size)
         
-        # Changed to match the method_notebook
-        # return label(watershed(image=(np.max(raw_img)-raw_img), 
-        #                                               markers=label_uint16(ots), 
-        #                                               mask=seg_img,
-        #                                               connectivity=np.ones((3, 3, 3), bool))).astype(np.uint16)
         return label((seg_img) + watershed(image=(np.max(raw_img)-raw_img), 
-                                                      markers=label_uint16(ots), 
+                                                      markers=label(ots), 
                                                       mask=seg_img,
-                                                      connectivity=np.ones((3, 3, 3), bool))).astype(np.uint16)
+                                                      connectivity=np.ones((3, 3, 3), bool)))
     else:
         return seg_img
