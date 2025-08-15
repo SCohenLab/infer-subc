@@ -505,7 +505,7 @@ def find_radius(cell_mask: np.ndarray, method: str) -> np.ndarray:
     zz, yy, xx = cell_mask_resize.shape
 
     cell_nums = np.unique(cell_mask[cell_mask != 0])
-    label_factor = 10 ** cell_nums.max()
+    label_factor = 10 ** len(str(cell_nums.max()))
 
     for cell_num in cell_nums:
         test_img = (cell_mask_resize == cell_num)
@@ -550,7 +550,7 @@ def infer_soma_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, method: 
     soma_out_1 = np.zeros_like(cell_mask)
 
     cell_nums = np.unique(cell_mask[cell_mask != 0])
-    label_factor = 10 ** cell_nums.max()
+    label_factor = 10 ** len(str(cell_nums.max()))
 
     for cell_num in cell_nums:
         soma_img_solo = (cell_mask == cell_num)
@@ -578,7 +578,7 @@ def infer_neurites_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, soma
     neurites_out_1 = np.zeros_like(cell_mask)
 
     cell_nums = np.unique(cell_mask[cell_mask != 0])
-    label_factor = 10 ** cell_nums.max()
+    label_factor = 10 ** len(str(cell_nums.max()))
     binary_soma = soma_out_1 > 0
 
     for cell_num in cell_nums:
@@ -603,7 +603,7 @@ def clean_soma_from_neurites(cell_mask: np.ndarray, neurites_out_1: np.ndarray) 
     soma_out_2 = np.zeros_like(cell_mask)
 
     cell_nums = np.unique(cell_mask[cell_mask != 0])
-    label_factor = 10 ** cell_nums.max()
+    label_factor = 10 ** len(str(cell_nums.max()))
 
     # Create a mask for all neurites at once
     neurites_mask = (neurites_out_1 % label_factor) > 0
@@ -634,7 +634,7 @@ def clean_neurites_from_soma(cell_mask: np.ndarray, soma_out_2: np.ndarray):
     neurites_labels = label(neurites_mask)
 
     # Relabel to encode cell number
-    label_factor = 10 ** cell_nums.max()
+    label_factor = 10 ** len(str(cell_nums.max()))
     neurites_out_2 = np.zeros_like(cell_mask)
     for cell_num in cell_nums:
         neurites_out_2[(cell_mask == cell_num) & (neurites_mask > 0)] = (neurites_labels[(cell_mask == cell_num) & (neurites_mask > 0)] * label_factor) + cell_num
