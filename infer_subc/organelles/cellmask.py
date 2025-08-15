@@ -12,7 +12,7 @@ from skimage.morphology import (isotropic_opening,
                                 binary_erosion)
 
 from skimage.morphology.footprints import ball, disk
-
+from skimage.measure import label
 
 from scipy.ndimage import zoom
 
@@ -29,7 +29,6 @@ from infer_subc.core.img import (
     fill_and_filter_linear_size,
     get_max_label,
     get_interior_labels,
-    label,
     select_cellmask_from_img
 )
 
@@ -503,119 +502,142 @@ def select_highest_intensity_cell(raw_image: np.ndarray,
 def find_radius(cell_mask: np.ndarray, method: str) -> np.ndarray:
     radii_mask = np.zeros_like(cell_mask)
     cell_mask_resize = zoom(cell_mask.copy(), (1, 0.5, 0.5))
-    zz, yy, xx = np.shape(cell_mask_resize)
-    for cell_num in np.unique(cell_mask_resize[cell_mask_resize != 0]):
-        rad_range = [i+1 for i in list(range(yy // 4))] #determines a range of radii to test for each cell
-                                                        # Dividing by 4 because the cell mask is resized to half the original size
-        test_img = np.zeros_like(cell_mask_resize)
-        test_img[cell_mask_resize == cell_num] = 1
+    zz, yy, xx = cell_mask_resize.shape
+
+    cell_nums = np.unique(cell_mask[cell_mask != 0])
+    label_factor = 10 ** cell_nums.max()
+
+    for cell_num in cell_nums:
+        test_img = (cell_mask_resize == cell_num)
+        rad_range = [i+1 for i in range(yy // 4)]  # Dividing by 4 because mask is resized
+
         if method == 'isotropic':
             while len(rad_range) > 2:
-                rad = rad_range[((len(rad_range)) // 2)]
+                rad = rad_range[len(rad_range) // 2]
                 print(f"Trying radius of {rad}")
-                if np.array_equal(isotropic_erosion(test_img.copy(), rad), np.zeros_like(test_img)):
-                    rad_range = rad_range[:(rad_range.index(rad))]
+                if np.all(isotropic_erosion(test_img.astype(np.uint8), rad) == 0):
+                    rad_range = rad_range[:rad_range.index(rad)]
                     print(f"{rad} is too large")
                 else:
-                    rad_range = rad_range[(rad_range.index(rad)+1):]
+                    rad_range = rad_range[rad_range.index(rad)+1:]
                     print(f"{rad} is too small")
                 print(f"{len(rad_range)} possible radii remaining")
         elif method == 'binary':
             while len(rad_range) > 2:
-                rad = rad_range[((len(rad_range)) // 2)]
+                rad = rad_range[len(rad_range) // 2]
                 print(f"Trying radius of {rad}")
-                edge = disk(rad//4)
+                edge = disk(rad // 4)
                 middle = disk(rad)
-                w = (np.shape(middle)[0] - np.shape(edge)[0])//2
-                edge = np.pad(edge, ((w,w),(w,w)), mode = 'constant', constant_values=0)
+                w = (middle.shape[0] - edge.shape[0]) // 2
+                edge = np.pad(edge, ((w, w), (w, w)), mode='constant', constant_values=0)
                 fp = np.stack((edge, middle, edge))
-                if np.array_equal(binary_erosion(test_img, fp), np.zeros_like(test_img)):
-                    rad_range = rad_range[:(rad_range.index(rad))]
+                if np.all(binary_erosion(test_img.astype(np.uint8), fp) == 0):
+                    rad_range = rad_range[:rad_range.index(rad)]
                     print(f"{rad} is too large")
                 else:
-                    rad_range = rad_range[(rad_range.index(rad)+1):]
+                    rad_range = rad_range[rad_range.index(rad)+1:]
                     print(f"{rad} is too small")
                 print(f"{len(rad_range)} possible radii remaining")
 
         if len(rad_range) == 1:
-            opti_rad = rad_range[0]//2
+            opti_rad = rad_range[0] // 2
         elif len(rad_range) == 2:
-            opti_rad = (rad_range[0] + rad_range[1])//4
-        radii_mask[cell_mask == cell_num] = (opti_rad*(10**len(str(len(np.unique(cell_mask_resize[cell_mask_resize != 0])))))) + cell_num
+            opti_rad = (rad_range[0] + rad_range[1]) // 4
+        radii_mask[cell_mask == cell_num] = (opti_rad * label_factor) + cell_num
     return radii_mask
 
 def infer_soma_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, method: str='binary'):
     soma_out_1 = np.zeros_like(cell_mask)
-    for cell_num in np.unique(cell_mask[cell_mask != 0]):
-        soma_img_solo = np.zeros_like(cell_mask)
-        soma_img_solo[cell_mask == cell_num] = 1
 
-        opti_rad = np.unique(radii_mask[cell_mask == cell_num])[0]
-        opti_rad = (opti_rad - cell_num) / (10**len(str(len(np.unique(cell_mask[cell_mask != 0])))))
+    cell_nums = np.unique(cell_mask[cell_mask != 0])
+    label_factor = 10 ** cell_nums.max()
+
+    for cell_num in cell_nums:
+        soma_img_solo = (cell_mask == cell_num)
+        opti_rad = np.unique(radii_mask[soma_img_solo])[0]
+        opti_rad = (opti_rad - cell_num) / label_factor
 
         if method == 'isotropic':
-            neurites_removed = isotropic_opening(soma_img_solo, opti_rad)
-            soma_initial = isotropic_dilation(neurites_removed, (opti_rad)) * soma_img_solo
+            neurites_removed = isotropic_opening(soma_img_solo.astype(np.uint8), opti_rad)
+            soma_initial = isotropic_dilation(neurites_removed, opti_rad) & soma_img_solo
         elif method == 'binary':
-            edge = disk(opti_rad//2)
-            middle = disk(opti_rad)
-            w = (np.shape(middle)[0] - np.shape(edge)[0])//2
-            edge = np.pad(edge, ((w,w),(w,w)), mode = 'constant', constant_values=0)
+            edge = disk(int(opti_rad // 2))
+            middle = disk(int(opti_rad))
+            w = (middle.shape[0] - edge.shape[0]) // 2
+            edge = np.pad(edge, ((w, w), (w, w)), mode='constant', constant_values=0)
             fp = np.stack((edge, middle, edge))
-            neurites_removed = binary_opening(soma_img_solo, fp)
-            soma_initial = binary_dilation(neurites_removed, footprint=ball((opti_rad)//2)) * soma_img_solo
-        else: 
+            neurites_removed = binary_opening(soma_img_solo.astype(np.uint8), fp)
+            soma_initial = binary_dilation(neurites_removed, footprint=ball(int(opti_rad // 2))) & soma_img_solo
+        else:
             raise ValueError(f"method of {method} was given, but only 'isotropic' or 'binary' is allowed.")
 
-        soma_out_1[soma_initial == 1] = cell_num #ensures that the only spot changed is the target cell
+        soma_out_1[soma_initial] = cell_num
     return soma_out_1
 
 def infer_neurites_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, soma_out_1: np.ndarray, method: str):
     neurites_out_1 = np.zeros_like(cell_mask)
-    for cell_num in np.unique(cell_mask[cell_mask != 0]):
-        solo_mask = np.zeros_like(cell_mask)
-        binary_soma = np.zeros_like(cell_mask)
-        solo_mask[cell_mask==cell_num] = 1
-        binary_soma[soma_out_1 > 0] = 1
-        opti_rad = np.unique(radii_mask[cell_mask == cell_num])[0]
-        opti_rad = (opti_rad - cell_num) / (10**len(str(len(np.unique(cell_mask[cell_mask != 0])))))
+
+    cell_nums = np.unique(cell_mask[cell_mask != 0])
+    label_factor = 10 ** cell_nums.max()
+    binary_soma = soma_out_1 > 0
+
+    for cell_num in cell_nums:
+        solo_mask = (cell_mask == cell_num)
+        opti_rad = np.unique(radii_mask[solo_mask])[0]
+        opti_rad = (opti_rad - cell_num) / label_factor
+
+        neurite_mask = ~binary_soma & solo_mask
         if method == 'isotropic':
-            neurites1 = np.invert(binary_soma.astype(bool), dtype=bool) * solo_mask
-            neurites1 = label(size_filter_linear_size(img=label(neurites1), min_size=(opti_rad*2), method='3D') * solo_mask)               #objects below a certain size are not considered neurites initially 
+            filtered = size_filter_linear_size(img=label(neurite_mask), min_size=(opti_rad*2), method='3D') * solo_mask
         elif method == 'binary':
-            neurites1 = np.invert(binary_soma.astype(bool), dtype=bool) * solo_mask
-            neurites1 = label(size_filter_linear_size(img=label(neurites1), min_size=(opti_rad//2), method='3D') * solo_mask)              #objects below a certain size are not considered neurites initially
-        else: 
+            filtered = size_filter_linear_size(img=label(neurite_mask), min_size=(opti_rad//2), method='3D') * solo_mask
+        else:
             raise ValueError(f"method of {method} was given, but only 'isotropic' or 'binary' is allowed.")
-        neurites1[neurites1 > 0] = (neurites1[neurites1 > 0] * (10**len(str(len(np.unique(cell_mask[cell_mask != 0])))))) + cell_num # relabels the neurites
-        neurites_out_1[solo_mask == 1] = neurites1[solo_mask==1] #ensures that the only spot changed is the target cell
+
+        neurite_labels = label(filtered)
+        neurite_labels[neurite_labels > 0] = (neurite_labels[neurite_labels > 0] * label_factor) + cell_num
+        neurites_out_1[solo_mask] = neurite_labels[solo_mask]
     return neurites_out_1
 
 def clean_soma_from_neurites(cell_mask: np.ndarray, neurites_out_1: np.ndarray) -> np.ndarray:
     soma_out_2 = np.zeros_like(cell_mask)
-    for cell_num in np.unique(cell_mask[cell_mask != 0]):
-        solo_mask = np.zeros_like(cell_mask)
-        solo_mask[cell_mask==cell_num] = 1
-        neurites = np.zeros_like(cell_mask)
-        neurites[(neurites_out_1 % (10**len(str(len(np.unique(cell_mask[cell_mask != 0])))))) == cell_num] = 1
-        soma = label(np.invert(neurites.astype(bool), dtype=bool) * solo_mask)
-        soma[soma!=np.bincount(np.ravel(soma)[np.ravel(soma)!= 0]).argmax()] = 0
-        soma_out_2[cell_mask == cell_num] = soma[cell_mask == cell_num] * cell_num
-        soma_out_2 = label(soma_out_2)
+
+    cell_nums = np.unique(cell_mask[cell_mask != 0])
+    label_factor = 10 ** cell_nums.max()
+
+    # Create a mask for all neurites at once
+    neurites_mask = (neurites_out_1 % label_factor) > 0
+
+    # For each cell, mask soma regions in one go
+    soma_mask = (~neurites_mask) & (cell_mask != 0)
+
+    # Find the most common value in soma_mask for each cell and assign only those pixels
+    for cell_num in cell_nums:
+        cell_region = (cell_mask == cell_num)
+        soma_region = soma_mask & cell_region
+        # Only keep the largest connected region (most common value)
+        if np.any(soma_region):
+            bincount = np.bincount(soma_region.ravel())
+            main_val = np.argmax(bincount[1:]) + 1 if len(bincount) > 1 else 1
+            soma_region = soma_region & (soma_region == main_val)
+            soma_out_2[cell_region] = soma_region[cell_region] * cell_num
     return soma_out_2
 
 def clean_neurites_from_soma(cell_mask: np.ndarray, soma_out_2: np.ndarray):
-    neurites_out_2 = np.zeros_like(cell_mask)
-    for cell_num in np.unique(cell_mask[cell_mask != 0]):
-        solo_mask = np.zeros_like(cell_mask)
-        solo_mask[cell_mask==cell_num] = 1
-        binary_soma = np.zeros_like(cell_mask)
-        binary_soma[soma_out_2 > 0] = 1
-        neurites = np.invert(binary_soma.astype(bool), dtype=bool) * solo_mask
-        neurites[neurites > 0] = (label(neurites[neurites > 0]) * (10**len(str(len(np.unique(cell_mask[cell_mask != 0])))))) + cell_num
-        neurites_out_2[solo_mask == 1] = neurites[solo_mask == 1] #ensures that the only spot changed is the target cell
+    cell_nums = np.unique(cell_mask[cell_mask != 0])
+    binary_soma = soma_out_2 > 0
 
-    neurites_out_2 = label(neurites_out_2)
+    # Create a mask for all neurites at once
+    neurites_mask = (~binary_soma) & (cell_mask != 0)
+
+    # Label all neurite regions in one call
+    neurites_labels = label(neurites_mask)
+
+    # Relabel to encode cell number
+    label_factor = 10 ** cell_nums.max()
+    neurites_out_2 = np.zeros_like(cell_mask)
+    for cell_num in cell_nums:
+        neurites_out_2[(cell_mask == cell_num) & (neurites_mask > 0)] = (neurites_labels[(cell_mask == cell_num) & (neurites_mask > 0)] * label_factor) + cell_num
     return neurites_out_2
 
 def infer_soma_neurites(in_seg: np.ndarray, multichannel_input: bool=False, chan: int=0, method: str='binary'):
