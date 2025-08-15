@@ -504,7 +504,7 @@ def find_radius(cell_mask: np.ndarray, method: str) -> np.ndarray:
     radii_mask = np.zeros_like(cell_mask)
     cell_mask_resize = zoom(cell_mask.copy(), (1, 0.5, 0.5))
     zz, yy, xx = np.shape(cell_mask_resize)
-    for cell_num in np.unique(label(cell_mask_resize)[cell_mask_resize != 0]):
+    for cell_num in np.unique(cell_mask_resize[cell_mask_resize != 0]):
         rad_range = [i+1 for i in list(range(yy // 4))] #determines a range of radii to test for each cell
                                                         # Dividing by 4 because the cell mask is resized to half the original size
         test_img = np.zeros_like(cell_mask_resize)
@@ -541,17 +541,17 @@ def find_radius(cell_mask: np.ndarray, method: str) -> np.ndarray:
             opti_rad = rad_range[0]//2
         elif len(rad_range) == 2:
             opti_rad = (rad_range[0] + rad_range[1])//4
-        radii_mask[label(cell_mask) == cell_num] = (opti_rad*(10**len(str(len(np.unique(label(cell_mask_resize)[cell_mask_resize != 0])))))) + cell_num
+        radii_mask[cell_mask == cell_num] = (opti_rad*(10**len(str(len(np.unique(cell_mask_resize[cell_mask_resize != 0])))))) + cell_num
     return radii_mask
 
 def infer_soma_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, method: str='binary'):
     soma_out_1 = np.zeros_like(cell_mask)
-    for cell_num in np.unique(label(cell_mask)[cell_mask != 0]):
+    for cell_num in np.unique(cell_mask[cell_mask != 0]):
         soma_img_solo = np.zeros_like(cell_mask)
-        soma_img_solo[label(cell_mask) == cell_num] = 1
+        soma_img_solo[cell_mask == cell_num] = 1
 
-        opti_rad = np.unique(radii_mask[label(cell_mask) == cell_num])[0]
-        opti_rad = (opti_rad - cell_num) / (10**len(str(len(np.unique(label(cell_mask)[cell_mask != 0])))))
+        opti_rad = np.unique(radii_mask[cell_mask == cell_num])[0]
+        opti_rad = (opti_rad - cell_num) / (10**len(str(len(np.unique(cell_mask[cell_mask != 0])))))
 
         if method == 'isotropic':
             neurites_removed = isotropic_opening(soma_img_solo, opti_rad)
@@ -572,13 +572,13 @@ def infer_soma_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, method: 
 
 def infer_neurites_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, soma_out_1: np.ndarray, method: str):
     neurites_out_1 = np.zeros_like(cell_mask)
-    for cell_num in np.unique(label(cell_mask)[cell_mask != 0]):
+    for cell_num in np.unique(cell_mask[cell_mask != 0]):
         solo_mask = np.zeros_like(cell_mask)
         binary_soma = np.zeros_like(cell_mask)
         solo_mask[cell_mask==cell_num] = 1
         binary_soma[soma_out_1 > 0] = 1
-        opti_rad = np.unique(radii_mask[label(cell_mask) == cell_num])[0]
-        opti_rad = (opti_rad - cell_num) / (10**len(str(len(np.unique(label(cell_mask)[cell_mask != 0])))))
+        opti_rad = np.unique(radii_mask[cell_mask == cell_num])[0]
+        opti_rad = (opti_rad - cell_num) / (10**len(str(len(np.unique(cell_mask[cell_mask != 0])))))
         if method == 'isotropic':
             neurites1 = np.invert(binary_soma.astype(bool), dtype=bool) * solo_mask
             neurites1 = label(size_filter_linear_size(img=label(neurites1), min_size=(opti_rad*2), method='3D') * solo_mask)               #objects below a certain size are not considered neurites initially 
@@ -587,17 +587,17 @@ def infer_neurites_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, soma
             neurites1 = label(size_filter_linear_size(img=label(neurites1), min_size=(opti_rad//2), method='3D') * solo_mask)              #objects below a certain size are not considered neurites initially
         else: 
             raise ValueError(f"method of {method} was given, but only 'isotropic' or 'binary' is allowed.")
-        neurites1[neurites1 > 0] = (neurites1[neurites1 > 0] * (10**len(str(len(np.unique(label(cell_mask)[cell_mask != 0])))))) + cell_num # relabels the neurites
+        neurites1[neurites1 > 0] = (neurites1[neurites1 > 0] * (10**len(str(len(np.unique(cell_mask[cell_mask != 0])))))) + cell_num # relabels the neurites
         neurites_out_1[solo_mask == 1] = neurites1[solo_mask==1] #ensures that the only spot changed is the target cell
     return neurites_out_1
 
 def clean_soma_from_neurites(cell_mask: np.ndarray, neurites_out_1: np.ndarray) -> np.ndarray:
     soma_out_2 = np.zeros_like(cell_mask)
-    for cell_num in np.unique(label(cell_mask)[cell_mask != 0]):
+    for cell_num in np.unique(cell_mask[cell_mask != 0]):
         solo_mask = np.zeros_like(cell_mask)
         solo_mask[cell_mask==cell_num] = 1
         neurites = np.zeros_like(cell_mask)
-        neurites[(neurites_out_1 % (10**len(str(len(np.unique(label(cell_mask)[cell_mask != 0])))))) == cell_num] = 1
+        neurites[(neurites_out_1 % (10**len(str(len(np.unique(cell_mask[cell_mask != 0])))))) == cell_num] = 1
         soma = label(np.invert(neurites.astype(bool), dtype=bool) * solo_mask)
         soma[soma!=np.bincount(np.ravel(soma)[np.ravel(soma)!= 0]).argmax()] = 0
         soma_out_2[cell_mask == cell_num] = soma[cell_mask == cell_num] * cell_num
@@ -606,13 +606,13 @@ def clean_soma_from_neurites(cell_mask: np.ndarray, neurites_out_1: np.ndarray) 
 
 def clean_neurites_from_soma(cell_mask: np.ndarray, soma_out_2: np.ndarray):
     neurites_out_2 = np.zeros_like(cell_mask)
-    for cell_num in np.unique(label(cell_mask)[cell_mask != 0]):
+    for cell_num in np.unique(cell_mask[cell_mask != 0]):
         solo_mask = np.zeros_like(cell_mask)
         solo_mask[cell_mask==cell_num] = 1
         binary_soma = np.zeros_like(cell_mask)
         binary_soma[soma_out_2 > 0] = 1
         neurites = np.invert(binary_soma.astype(bool), dtype=bool) * solo_mask
-        neurites[neurites > 0] = (label(neurites[neurites > 0]) * (10**len(str(len(np.unique(label(cell_mask)[cell_mask != 0])))))) + cell_num
+        neurites[neurites > 0] = (label(neurites[neurites > 0]) * (10**len(str(len(np.unique(cell_mask[cell_mask != 0])))))) + cell_num
         neurites_out_2[solo_mask == 1] = neurites[solo_mask == 1] #ensures that the only spot changed is the target cell
 
     neurites_out_2 = label(neurites_out_2)
