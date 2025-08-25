@@ -34,6 +34,7 @@ As part of goal setting we will also enumerate the specific tasks that need to b
   - 7️⃣-***peroxisome***
   - 8️⃣-***endoplasmic reticulum***
   - 9️⃣-***lipid body***
+  - 🔟-***soma and neurites***
 
 ## 2. DATA CREATION
 The second step is to get the data.  Capturing the data could be either from running the experiment, or mining a database.   Implicitly we need to also capture all the assumptions and methodologies, or _meta-data_.
