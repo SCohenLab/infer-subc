@@ -12,6 +12,7 @@ from infer_subc.organelles.lipid import infer_LD
 from infer_subc.organelles.lysosome import infer_lyso
 from infer_subc.organelles.mitochondria import infer_mito
 from infer_subc.organelles.peroxisome import infer_perox
+from infer_subc.organelles.cellmask import infer_soma_neurites
 
 
 
@@ -145,7 +146,8 @@ def batch_process_segmentation(raw_path: Union[Path,str],
                                golgi_settings: Union[List, None],
                                perox_settings: Union[List, None],
                                ER_settings: Union[List, None],
-                               LD_settings: Union[List, None]):
+                               LD_settings: Union[List, None],
+                               som_neu_settings: Union[List, None]):
     """
     This function batch processes the segmentation workflows for multiple organelles and masks across multiple images.
 
@@ -383,6 +385,10 @@ def batch_process_segmentation(raw_path: Union[Path,str],
                     max_hole_w: int,
                     small_obj_w: int,
                     fill_filter_method: str]
+    
+    For infer_soma_neurites
+    - `som_neu_settings` = [run_som_neu: bool,
+                            method: str]
 
 
     Returns:
@@ -409,6 +415,7 @@ def batch_process_segmentation(raw_path: Union[Path,str],
         count = count + 1
         print(f"Beginning segmentation of: {img}")
         seg_list = []
+        mask = None
 
         # read in raw file and metadata
         img_data, meta_dict = read_czi_image(img)
@@ -418,30 +425,50 @@ def batch_process_segmentation(raw_path: Union[Path,str],
             masks = infer_masks(img_data, *masks_settings)
             export_inferred_organelle(masks, name_suffix+"masks", meta_dict, seg_path)
             seg_list.append("masks")
+            if mask is not None:
+                mask = masks
+            else:
+                print("multiple mask segmentations made for same image")
         
         # run masks_A function
         if masks_A_settings:
             masks_A =  infer_masks_A(img_data, *masks_A_settings)
             export_inferred_organelle(masks_A, name_suffix+"masks_A", meta_dict, seg_path)
             seg_list.append("masks_A")
+            if mask is not None:
+                mask = masks_A
+            else:
+                print("multiple mask segmentations made for same image")
             
         # run masks_B function
         if masks_B_settings:
             masks_B = infer_masks_B(img_data, *masks_B_settings)
             export_inferred_organelle(masks_B, name_suffix+"masks_B", meta_dict, seg_path)
             seg_list.append("masks_B")
+            if mask is not None:
+                mask = masks_B
+            else:
+                print("multiple mask segmentations made for same image")
 
         # run masks_C function
         if masks_C_settings:
             masks_C = infer_masks_C(img_data, *masks_C_settings)
             export_inferred_organelle(masks_C, name_suffix+"masks_C", meta_dict, seg_path)
             seg_list.append("masks_C")
+            if mask is not None:
+                mask = masks_C
+            else:
+                print("multiple mask segmentations made for same image")
         
         # run masks_D function
         if masks_D_settings:
             masks_D = infer_masks_D(img_data, *masks_D_settings)
             export_inferred_organelle(masks_D, name_suffix+"masks_D", meta_dict, seg_path)
             seg_list.append("masks_D")
+            if mask is not None:
+                mask = masks_D
+            else:
+                print("multiple mask segmentations made for same image")
 
         # run 1.2_infer_lysosomes function
         if lyso_settings:
@@ -473,6 +500,11 @@ def batch_process_segmentation(raw_path: Union[Path,str],
             LD_seg = infer_LD(img_data, *LD_settings)
             export_inferred_organelle(LD_seg, name_suffix+"LD", meta_dict, seg_path)
             seg_list.append("LD")
+        
+        if som_neu_settings:
+            som_neu_seg = infer_soma_neurites(in_seg=mask, multichannel_input=True, chan=0, method=som_neu_seg[0])
+            export_inferred_organelle(som_neu_seg, name_suffix+"soma_neurites", meta_dict, seg_path)  
+            seg_list.append("soma_neurites")
 
         end = time.time()
         print(f"Processing for {img} completed in {(end - start)/60} minutes.")
@@ -480,7 +512,110 @@ def batch_process_segmentation(raw_path: Union[Path,str],
     return print(f"Batch processing complete: {count} images segmented in {(end-start)/60} minutes.")
 
 
+def batch_process_pre_segmented(raw_path: Union[Path,str],
+                                raw_file_type: str,
+                                seg_path: Union[Path, str],
+                                out_path: Union[Path, str],
+                                name_suffix: Union[str, None],
+                                mask_suffix: Union[str, None],
+                                soma_neur_settings: Union[List, None],
+                                declump_lyso_settings: Union[List, None],
+                                declump_mito_settings: Union[List, None],
+                                declump_golgi_settings: Union[List, None],
+                                declump_perox_settings: Union[List, None],
+                                declump_ER_settings: Union[List, None],
+                                declump_LD_settings: Union[List, None]):
+    """
+    This function batch processes pre-segmented files and applies further segmentation of them.
 
+    Parameters:
+    ----------
+
+    raw_path: Union[Path,str]
+        A string or a Path object of the path to your raw (e.g., intensity) images that will be used to find the corresponding segmentations
+    raw_file_type: str
+        The raw file type (e.g., ".tiff" or ".czi")
+    seg_path: Union[Path, str]
+        A string or a Path object of the path where the segmentation outputs were saved.
+    out_path: Union[Path, str]
+        A string or a Path object of the path where the additional segmentation outputs should be saved.
+        Note: saving these files to the same path as the seg_path overwrites the seg_path files
+    name_suffix: str
+        An optional string that was included before the segmentation suffix at the end of the output file. 
+        For example, if the name_suffix was "20240105", the segmentation file output from the 1.1_masks workflow would have included:
+        "{base-file-name}-20240105-masks"
+    mask_suffix: str
+        A string pertaining to the segmentation suffix at the end of the output mask file.
+        For example, if the segmentation file ran through the 1.1_infer_masks_from-composite workflow, the suffix would be "masks" 
+    {}_settings: Union[List, None]
+        For each workflow that you wish to include in the batch processing, 
+        fill out the information in the associated settings list. 
+        The necessary settings for each function are included below.
+
+    For infer_soma_neurites:
+    - `soma_neur_settings` = [multichannel_input: bool, 
+                              chan: int, 
+                              method: str]
+    """
+    start = time.time()
+    count = 0
+
+    if isinstance(raw_path, str): raw_path = Path(raw_path)
+    if isinstance(seg_path, str): seg_path = Path(seg_path)
+
+    if not Path.exists(seg_path):
+        Path.mkdir(seg_path)
+        print(f"The specified 'seg_path' was not found. Creating {seg_path}.")
+    
+    if not name_suffix:
+        name_suffix=""
+
+    # reading list of files from the raw path
+    img_file_list = list_image_files(raw_path, raw_file_type)
+
+    for fil in img_file_list:
+        count = count + 1
+        print(f"Beginning additional segmentation of {fil}'s segmentations")
+        seg_list = []
+
+        img_data, meta_dict = read_czi_image(fil)
+
+        if soma_neur_settings:
+            mask = read_tiff_image(find_segmentation_tiff_files(fil, [mask_suffix], seg_path, name_suffix)[mask_suffix])
+            som_neu_seg = infer_soma_neurites(mask, *soma_neur_settings)
+            export_inferred_organelle(som_neu_seg, name_suffix+"soma_neurites", meta_dict, out_path)  
+            seg_list.append("soma_neurites")
+        
+        if declump_lyso_settings:
+            lyso = read_tiff_image(find_segmentation_tiff_files(fil, ['lyso'], seg_path, name_suffix)['lyso'])
+            # add declumping here
+        
+        if declump_mito_settings:
+            mito = read_tiff_image(find_segmentation_tiff_files(fil, ['mito'], seg_path, name_suffix)['mito'])
+            # add declumping here
+        
+        if declump_golgi_settings:
+            golgi = read_tiff_image(find_segmentation_tiff_files(fil, ['golgi'], seg_path, name_suffix)['golgi'])
+            # add declumping here
+        
+        
+        if declump_perox_settings:
+            perox = read_tiff_image(find_segmentation_tiff_files(fil, ['perox'], seg_path, name_suffix)['perox'])
+            # add declumping here
+        
+        
+        if declump_ER_settings:
+            er = read_tiff_image(find_segmentation_tiff_files(fil, ['ER'], seg_path, name_suffix)['ER'])
+            # add declumping here
+
+        
+        if declump_LD_settings:
+            ld = read_tiff_image(find_segmentation_tiff_files(fil, ['LD'], seg_path, name_suffix)['LD'])
+            # add declumping here
+        
+        end = time.time()
+        print(f"Processing for {fil} completed in {(end - start)/60} minutes.")
+    return print(f"Batch processing complete: {count} images segmented in {(end-start)/60} minutes.")
 
 
 
