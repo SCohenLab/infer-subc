@@ -3,6 +3,11 @@ from pathlib import Path
 import time
 import numpy as np
 
+import napari
+from napari.settings import get_settings
+settings = get_settings()
+settings.application.ipy_interactive = True
+
 from infer_subc.core.file_io import list_image_files, export_tiff, read_tiff_image, read_czi_image, export_inferred_organelle
 from infer_subc.core.img import label_uint16, apply_mask, min_max_intensity_normalization, label, size_filter_linear_size
 from infer_subc.organelles.masks import infer_masks, infer_masks_A, infer_masks_B, infer_masks_C, infer_masks_D
@@ -775,3 +780,80 @@ def QC_filter(in_img: np.ndarray,
         print("No filtering applied.")
         out_img = in_img # no filtering is applied
     return out_img
+
+def filter_segmentation(suffix, filt, edited, raw, status):
+    if not (filt is None):
+        if len(np.unique(label(edited))) > 2:
+            status = "Fail"
+            viewer2 = napari.Viewer()
+            print(f"Your {suffix} segmentation contains MORE THAN ONE {suffix} object. For quantification, you must only have ONE {suffix} object, attempting to correct this automatically...")
+            filtered_obj_seg = QC_filter(edited, raw, method=filt)
+
+            if len(np.unique(filtered_obj_seg)) == 2:
+                print(f"The image has been processed to automatically remove any small objects using the {filt} method.")
+                viewer2.add_image(raw, name=f'{suffix}_raw', blending='additive')
+                viewer2.add_labels(label(edited), name=f'{suffix}_seg')
+                viewer2.add_labels(label(filtered_obj_seg), name=f'{suffix}_seg_filtered')
+                print(f"Head to the Napari window to see your filtered {suffix} segmentation output!")
+                print(f"Note: if further edits are desired, please edit the {suffix}_seg layer instead of the {suffix}_seg_filtered layer.")
+                print("Please close the Napari window to continue.")
+                napari.run()
+
+                if not (label(filtered_obj_seg) == label(viewer2.layers[f'{suffix}_seg_filtered'].data)).all():
+                    print(f"You have erroneously eddited the {suffix}_seg_filtered layer, restarting from beginning of the filtering process...")
+                    return filter_segmentation(suffix, filt, edited, raw, status)
+
+                if (label(viewer2.layers[f'{suffix}_seg'].data) == label(edited)).all():
+                    print(f"You appear satsified with the {suffix} segmentation, saving...")     
+                    status = "Pass"
+                    return filtered_obj_seg, status
+                else:
+                    print(f"You have edited the {suffix}_seg layer, now retrying the filtering process...")
+                    return filter_segmentation(suffix, filt, viewer2.layers[f'{suffix}_seg'].data, raw, status)
+            elif len(np.unique(filtered_obj_seg)) > 2:
+                print("We tried to remove small objects, but there are still multiple cell mask objects in the image. Please try other 'filter_cell' values above or edit the segmentation manually in Napari again.")
+                viewer2.add_image(raw, name=f'{suffix}_raw', blending='additive')
+                viewer2.add_labels(label(edited), name=f'{suffix}_seg')
+                viewer2.add_labels(label(filtered_obj_seg), name=f'{suffix}_seg_filtered')
+                print(f"Head to the Napari window to see your filtered {suffix} segmentation output!")
+                print(f"Note: please edit the {suffix}_seg layer instead of the {suffix}_seg_filtered layer, or change the filter type chosen for this segmentation and rerun the block when prompted later.")
+                print("Please close the Napari window to continue.")
+                napari.run()
+                if not (label(filtered_obj_seg) == label(viewer2.layers[f'{suffix}_seg_filtered'].data)).all():
+                    print(f"You have erroneously eddited the {suffix}_seg_filtered layer, restarting from beginning of the filtering process...")
+                    return filter_segmentation(suffix, filt, edited, raw, status)
+
+                if not (label(viewer2.layers[f'{suffix}_seg'].data) == label(edited)).all():
+                    print(f"You have edited the {suffix}_seg layer, now retrying the filtering process...")
+                    return filter_segmentation(suffix, filt, viewer2.layers[f'{suffix}_seg'].data, viewer2.layers[f'raw'].data, status)
+                else:
+                    print(f"As you have not chosen to edit the {suffix}_seg layer, we will now return the previous segmentation.")
+                    return edited, status
+            else:
+                print("There are no objects in the segmentation... Please check your segmentation files, and/or obj_filter value. We will now return the prior segmentation.")
+                return edited, status
+        else:
+            print(f"Your {suffix} segmentation looks good, no corrections needed!")
+            status = "Pass"
+            return edited, status
+    else:
+        print(f"You have chosen not to filter the {suffix} segmentation, returning original segmentation...")
+        return edited, status
+    
+def edit_segmentation(suffix, viewer, edit):
+    if edit:
+        settings = get_settings()
+        settings.application.ipy_interactive = False
+        viewer2 = napari.Viewer()
+        print("You have chosen to edit the segmentation for", suffix)
+        try:
+            viewer2.add_image(viewer.layers[f'{suffix}_raw'].data, name=f'{suffix}_raw', blending='additive')
+        except (ValueError, KeyError):
+            print(f"No raw image found for {suffix}, adding the 'raw' layer instead.")
+            viewer2.add_image(viewer.layers['raw'].data, name=f'raw')
+        viewer2.add_labels(label(viewer.layers[f'{suffix}_seg'].data), name=f'{suffix}_seg')
+        napari.run()
+        settings.application.ipy_interactive = True
+        return viewer2.layers[f'{suffix}_seg'].data
+    else:
+        return viewer.layers[f'{suffix}_seg'].data
