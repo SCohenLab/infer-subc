@@ -758,12 +758,16 @@ def QC_filter(in_img: np.ndarray,
     Filter the input image based on the specified method."""
     out_img = np.zeros_like(in_img, dtype=np.uint16)
     if (type(method) is int) and (method > 0):
-        print("Applying size filter with linear size...")
-        out_img = size_filter_linear_size(in_img, min_size=method, method='3D') #simple size filtering
+        # when we have multicellular images, this can be used to filter by size
+        # print("Applying size filter with linear size...")
+        # out_img = size_filter_linear_size(in_img, min_size=method, method='3D') #simple size filtering
+        print("incorrect setting")
     elif type(method) is str:
         if method.isdigit():
-            print("Applying size filter with linear size...")
-            out_img = size_filter_linear_size(in_img, min_size=int(method), method='3D')
+            # when we have multicellular images, this can be used to filter by size
+            # print("Applying size filter with linear size...")
+            # out_img = size_filter_linear_size(in_img, min_size=int(method), method='3D')
+            print("incorrect setting")
         elif method.lower() == 'largest':
             print("Applying the largest object filter...")
             size_per_label = [counts for val, counts in np.unique(label(in_img), return_counts=True) if val != 0]
@@ -786,6 +790,8 @@ def filter_segmentation(suffix, filt, edited, raw, status):
         if len(np.unique(label(edited))) > 2:
             
             status = "Fail"
+            settings = get_settings()
+            settings.application.ipy_interactive = False
             viewer2 = napari.Viewer()
             print(f"Your {suffix} segmentation contains MORE THAN ONE {suffix} object. For quantification, you must only have ONE {suffix} object, attempting to correct this automatically...")
             filtered_obj_seg = QC_filter(edited, raw, method=filt)
@@ -820,11 +826,11 @@ def filter_segmentation(suffix, filt, edited, raw, status):
                 viewer2.add_image(raw, name=f'{suffix}_raw', blending='additive')
                 viewer2.add_labels(edited, name=f'{suffix}_seg')
                 viewer2.add_labels(filtered_obj_seg, name=f'{suffix}_seg_filtered')
-                settings = get_settings()
-                settings.application.ipy_interactive = False
+
                 print(f"Head to the Napari window to see your filtered {suffix} segmentation output!")
                 print(f"Note: please edit the {suffix}_seg layer instead of the {suffix}_seg_filtered layer, or change the filter type chosen for this segmentation and rerun the block when prompted later.")
                 print("Please close the Napari window to continue.")
+
                 napari.run()
 
                 if not (filtered_obj_seg == viewer2.layers[f'{suffix}_seg_filtered'].data).all():
@@ -860,6 +866,8 @@ def edit_segmentation(suffix, viewer, edit):
             print(f"No raw image found for {suffix}, adding the 'raw' layer instead.")
             viewer2.add_image(viewer.layers['raw'].data, name=f'raw')
         viewer2.add_labels(viewer.layers[f'{suffix}_seg'].data, name=f'{suffix}_seg')
+        print(f"Head to the Napari window to edit your {suffix} segmentation output!")
+        print(f"When you close out of the viewer, the edited {suffix} segmentation will be saved automatically")
         napari.run()
         settings.application.ipy_interactive = True
         return viewer2.layers[f'{suffix}_seg'].data
