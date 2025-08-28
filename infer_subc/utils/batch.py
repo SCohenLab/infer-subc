@@ -770,12 +770,12 @@ def QC_filter(in_img: np.ndarray,
             print("incorrect setting")
         elif method.lower() == 'largest':
             print("Applying the largest object filter...")
-            counts_per_label = np.bincount(label(in_img[in_img!=0]))
+            counts_per_label = np.bincount(label(in_img)[label(in_img)!=0])
             out_img[label(in_img) == np.argmax(counts_per_label)] = 1
         elif method.lower() == 'brightest':
             print("Applying the brightest object filter...")
             composite = apply_mask(min_max_intensity_normalization(raw_img).sum(axis=0), in_img)
-            intensity_per_label = [composite[in_img == i].sum()/(in_img == i).sum() for i in np.unique(label(in_img))]
+            intensity_per_label = [composite[label(in_img) == i].sum()/(label(in_img) == i).sum() for i in np.unique(label(in_img))]
             out_img[label(in_img) == (np.argmax(intensity_per_label[1:])+1)] = 1 
         elif method.lower() == 'none':
             print("No filtering applied.")
@@ -799,8 +799,8 @@ def filter_segmentation(suffix, filt, edited, raw, status):
             if len(np.unique(filtered_obj_seg)) == 2:
                 print(f"The image has been processed to automatically remove any small objects using the {filt} method.")
                 viewer2.add_image(raw, name=f'{suffix}_raw', blending='additive')
-                viewer2.add_labels(edited, name=f'{suffix}_seg')
-                viewer2.add_labels(filtered_obj_seg, name=f'{suffix}_seg_filtered')
+                viewer2.add_labels(edited.copy(), name=f'{suffix}_seg')
+                viewer2.add_labels(filtered_obj_seg.copy(), name=f'{suffix}_seg_filtered')
                 settings = get_settings()
                 settings.application.ipy_interactive = False
                 print(f"Head to the Napari window to see your filtered {suffix} segmentation output!")
@@ -809,18 +809,21 @@ def filter_segmentation(suffix, filt, edited, raw, status):
                 
                 napari.run()
                 settings.application.ipy_interactive = True
+                seg_edited = viewer2.layers[f'{suffix}_seg'].data
+                seg_filtered = viewer2.layers[f'{suffix}_seg_filtered'].data
 
-                if not (filtered_obj_seg == viewer2.layers[f'{suffix}_seg_filtered'].data).all():
+                if not (filtered_obj_seg.copy() == seg_filtered).all():
                     print(f"You have erroneously eddited the {suffix}_seg_filtered layer, restarting from beginning of the filtering process...")
                     return filter_segmentation(suffix, filt, edited, raw, status)
 
-                if (viewer2.layers[f'{suffix}_seg'].data == edited).all():
+                if not (edited.copy() == seg_edited).all():
+                    print(f"You have edited the {suffix}_seg layer, now retrying the filtering process...")
+                    return filter_segmentation(suffix, filt, seg_edited, raw, status)
+                else:
                     print(f"You appear satsified with the {suffix} segmentation, saving...")     
                     status = "Pass"
                     return (filtered_obj_seg, status)
-                else:
-                    print(f"You have edited the {suffix}_seg layer, now retrying the filtering process...")
-                    return filter_segmentation(suffix, filt, viewer2.layers[f'{suffix}_seg'].data, raw, status)
+                    
             elif len(np.unique(filtered_obj_seg)) > 2:
                 print("We tried to remove small objects, but there are still multiple cell mask objects in the image. Please try other 'filter_cell' values above or edit the segmentation manually in Napari again.")
                 viewer2.add_image(raw, name=f'{suffix}_raw', blending='additive')
@@ -852,7 +855,7 @@ def filter_segmentation(suffix, filt, edited, raw, status):
             return (edited, status)
     else:
         print(f"You have chosen not to filter the {suffix} segmentation, returning original segmentation...")
-        return (edited, status)
+        return (edited, "N/A")
     
 def edit_segmentation(suffix, viewer, edit):
     if edit:
