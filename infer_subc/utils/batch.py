@@ -770,8 +770,8 @@ def QC_filter(in_img: np.ndarray,
             print("incorrect setting")
         elif method.lower() == 'largest':
             print("Applying the largest object filter...")
-            size_per_label = [counts for val, counts in np.unique(label(in_img), return_counts=True) if val != 0]
-            out_img[label(in_img) == (np.argmax(size_per_label)+1)] = 1  # +1 because size_per_label starts at label of 1
+            counts_per_label = np.bincount(label(in_img[in_img!=0]))
+            out_img[label(in_img) == np.argmax(counts_per_label)] = 1
         elif method.lower() == 'brightest':
             print("Applying the brightest object filter...")
             composite = apply_mask(min_max_intensity_normalization(raw_img).sum(axis=0), in_img)
