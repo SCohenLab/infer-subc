@@ -775,8 +775,8 @@ def QC_filter(in_img: np.ndarray,
         elif method.lower() == 'brightest':
             print("Applying the brightest object filter...")
             composite = apply_mask(min_max_intensity_normalization(raw_img).sum(axis=0), in_img)
-            intensity_per_label = [composite[in_img == i].sum() for i in np.unique(label(in_img)) if i != 0]
-            out_img[label(in_img) == (np.argmax(intensity_per_label)+1)] = 1 # +1 because intensity_per_label starts at label of 1
+            intensity_per_label = [composite[in_img == i].sum()/(in_img == i).sum() for i in np.unique(label(in_img))]
+            out_img[label(in_img) == (np.argmax(intensity_per_label[1:])+1)] = 1 
         elif method.lower() == 'none':
             print("No filtering applied.")
             out_img = in_img # option to not apply any filtering given user error
