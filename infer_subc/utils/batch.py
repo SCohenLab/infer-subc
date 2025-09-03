@@ -823,7 +823,7 @@ def filter_segmentation(suffix, filt, edited, raw, status="Fail"):
     Returns:
     -------
     Tuple[np.ndarray, str]
-        A tuple containing the filtered segmentation and the status ("Pass" or "Fail").
+        A tuple containing the filtered segmentation and the status ("Pass" or "Fail" or "N/A").
 
     """
 
