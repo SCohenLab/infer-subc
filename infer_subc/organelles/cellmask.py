@@ -500,6 +500,21 @@ def select_highest_intensity_cell(raw_image: np.ndarray,
     return good_cell
 
 def find_radius(cell_mask: np.ndarray, method: str) -> np.ndarray:
+    """
+    Determines the radius of the cells in the mask, and outputs a copy of the mask with the radii encoded as their labels.
+
+    Parameters:
+    ----------
+    cell_mask : np.ndarray
+        A mask of the cells.
+    method : str
+        The method to use for finding the radius. Can be 'isotropic' or 'binary'.
+
+    Returns:
+    -------
+    np.ndarray
+        A mask of the cells with their radii encoded as labels.
+    """
     radii_mask = np.zeros_like(cell_mask)
     cell_mask_resize = zoom(cell_mask.copy(), (1, 0.5, 0.5))
     zz, yy, xx = cell_mask_resize.shape
@@ -547,6 +562,24 @@ def find_radius(cell_mask: np.ndarray, method: str) -> np.ndarray:
     return radii_mask
 
 def infer_soma_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, method: str='binary'):
+    """
+    Infers the soma region from the cell mask and radii mask by deriving the radius of each cell.
+
+    Parameters:
+    ----------
+
+    cell_mask : np.ndarray
+        A mask of the cells.
+    radii_mask : np.ndarray
+        A mask of the cells with their radii encoded as labels.
+    method : str
+        The method to use for inferring the soma. Can be 'isotropic' or 'binary'.
+
+    Returns:
+    -------
+    np.ndarray
+        A mask of the inferred soma regions.
+    """
     soma_out_1 = np.zeros_like(cell_mask)
 
     cell_nums = np.unique(cell_mask[cell_mask != 0])
@@ -575,6 +608,26 @@ def infer_soma_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, method: 
     return soma_out_1
 
 def infer_neurites_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, soma_out_1: np.ndarray, method: str):
+    """
+    Uses the cell mask and the soma output to infer the neurite regions.
+
+    Parameters:
+    ----------
+
+    cell_mask : np.ndarray
+        A mask of the cells.
+    radii_mask : np.ndarray
+        A mask of the cells with their radii encoded as labels.
+    soma_out_1 : np.ndarray
+        A mask of the inferred soma regions.
+    method : str
+        The method to use for inferring the neurites. Can be 'isotropic' or 'binary'.
+
+    Returns:
+    -------
+    np.ndarray
+        A mask of the inferred neurite regions.
+    """
     neurites_out_1 = np.zeros_like(cell_mask)
 
     cell_nums = np.unique(cell_mask[cell_mask != 0])
@@ -600,6 +653,22 @@ def infer_neurites_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, soma
     return neurites_out_1
 
 def clean_soma_from_neurites(cell_mask: np.ndarray, neurites_out_1: np.ndarray) -> np.ndarray:
+    """
+    Cleans the soma regions from the neurites by masking out the neurites from the cell mask.
+
+    Parameters:
+    ----------
+
+    cell_mask : np.ndarray
+        A mask of the cells.
+    neurites_out_1 : np.ndarray
+        A mask of the inferred neurite regions.
+
+    Returns:
+    -------
+    np.ndarray
+        A cleaned mask of the soma regions.
+    """
     soma_out_2 = np.zeros_like(cell_mask)
 
     cell_nums = np.unique(cell_mask[cell_mask != 0])
@@ -624,6 +693,23 @@ def clean_soma_from_neurites(cell_mask: np.ndarray, neurites_out_1: np.ndarray) 
     return soma_out_2
 
 def clean_neurites_from_soma(cell_mask: np.ndarray, soma_out_2: np.ndarray):
+    """
+    Cleans the neurite regions from the soma by masking out the soma from the neurite mask.
+
+    Parameters:
+    ----------
+    cell_mask : np.ndarray
+        A mask of the cells.
+    soma_out_2 : np.ndarray
+        A mask of the cleaned soma regions.
+
+    Returns:
+    -------
+    np.ndarray
+        A cleaned mask of the neurite regions.
+    """
+    neurites_out_2 = np.zeros_like(cell_mask)
+
     cell_nums = np.unique(cell_mask[cell_mask != 0])
     binary_soma = soma_out_2 > 0
 
@@ -641,7 +727,25 @@ def clean_neurites_from_soma(cell_mask: np.ndarray, soma_out_2: np.ndarray):
     return neurites_out_2
 
 def infer_soma_neurites(in_seg: np.ndarray, multichannel_input: bool=False, chan: int=0, method: str='binary'):
+    """
+    Infers the soma and neurite regions from the input segmentation based on either the binary or isotropic filtering method.
 
+    Parameters:
+    ----------
+    in_seg : np.ndarray
+        The input segmentation mask.
+    multichannel_input : bool
+        Whether the input is a multichannel image.
+    chan : int
+        The channel to use for segmentation if it is a multichannel image.
+    method : str
+        The method to use for inference ('binary' or 'isotropic').
+
+    Returns:
+    -------
+    np.ndarray
+        A stack of the inferred soma and neurite regions.
+    """
     ###################
     # EXTRACT
     ###################  
