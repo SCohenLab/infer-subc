@@ -755,7 +755,23 @@ def QC_filter(in_img: np.ndarray,
               raw_img: np.ndarray,
               method: Union[int, str, None]):
     """
-    Filter the input image based on the specified method."""
+    Filter the input image based on the specified method.
+    
+    Parameters:
+    ----------
+
+    in_img : np.ndarray
+        The input image to be filtered.
+    raw_img : np.ndarray
+        The raw input image.
+    method : Union[int, str, None]
+        The filtering method to apply.
+    
+    Returns:
+    -------
+    np.ndarray
+        The filtered output image.
+    """
     out_img = np.zeros_like(in_img, dtype=np.uint16)
     if (type(method) is int) and (method > 0):
         # when we have multicellular images, this can be used to filter by size
@@ -785,7 +801,32 @@ def QC_filter(in_img: np.ndarray,
         out_img = in_img # no filtering is applied
     return out_img
 
-def filter_segmentation(suffix, filt, edited, raw, status):
+def filter_segmentation(suffix, filt, edited, raw, status="Fail"):
+    """
+    This function applies filters to the object segmentations to ensure they meet criteria to run the quantification.
+    After the filter is performed, users may view the filtered image, and choose to keep it or edit the previously edited image and rerun the filter. 
+
+    Parameters:
+    ----------
+
+    suffix : str
+        The suffix to identify the specific segmentation being filtered.
+    filt : Union[int, str, None]
+        The method of filtering to apply in the QC_filter function. The value must equal either an integer, 'Largest', or 'Brightest'.
+    edited : np.ndarray
+        The edited segmentation image.
+    raw : np.ndarray
+        The raw input image.
+    status : str
+        The current status of the segmentation. Defaults to "Fail".
+
+    Returns:
+    -------
+    Tuple[np.ndarray, str]
+        A tuple containing the filtered segmentation and the status ("Pass" or "Fail").
+
+    """
+
     if not (filt is None):
         if len(np.unique(label(edited))) > 2:
             
@@ -858,6 +899,24 @@ def filter_segmentation(suffix, filt, edited, raw, status):
         return (edited, "N/A")
     
 def edit_segmentation(suffix, viewer, edit):
+    """
+    This function enables editing of segmentation masks in Napari based on chosen segmentations.
+
+    Parameters:
+    ---------- 
+
+    suffix : str
+        The suffix of the segmentation file that is also used to name the layers in the Napari viewer.
+    viewer : napari.Viewer
+        The Napari viewer instance used previously for displaying all segmentations for an image.
+    edit : bool
+        A True/False flag to indicate whether editing of the image is desired or not.
+
+    Returns:
+    -------
+    np.ndarray
+        The edited segmentation mask as a NumPy array.
+    """
     if edit:
         settings = get_settings()
         settings.application.ipy_interactive = False
