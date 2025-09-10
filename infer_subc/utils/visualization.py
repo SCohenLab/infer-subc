@@ -347,18 +347,21 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
     HO_MERGE = '#FFFFFF'
     LO_MERGE = '#999999'
     ORG_COLORS = [ORG_A_COL, ORG_B_COL, ORG_C_COL, ORG_D_COL, ORG_E_COL, ORG_F_COL, ORG_G_COL]
-    viewer = napari.Viewer() # Initializes the viewer
+    viewer = napari.Viewer()# Initializes the viewer
     viewer.window.resize(width=800, height=800)
-    plt_org = {}             # Dictionary of the images to plot
-    axes = {}                # Dictionary of the axes to plot on
+    plt_org = {}            # Dictionary of the images to plot
+    axes = {}               # Dictionary of the axes to plot on
     counts = []
 
     if view == '3D':
         dim = 3
+        op = 0.5
     elif view == '2D':
         dim = 2
+        op = 1.0
     elif type(view) == int:
         dim = 2
+        op = 1.0
     else:
         raise ValueError("view must be either '2D' or '3D'")
 
@@ -377,20 +380,20 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
     # Adds organelles and their combinations to the viewer, and exports the images to the plt_org dictionary
     for i, org in enumerate(orgs.split(splitter) + possib):
         if org in organelle_segs.keys():
-            viewer.add_labels(organelle_segs[org]>0, name=f"{org}_LO", scale=scale, colormap={1:ORG_COLORS[i]}, visible=True)
+            viewer.add_labels(organelle_segs[org]>0, name=f"{org}_LO", scale=scale, opacity=op, colormap={1:ORG_COLORS[i]}, visible=True)
             viewer.dims.ndisplay = dim
             if type(view) == int:
                 viewer.dims.set_point(0, view)
             plt_org[org] = crop_to_square(viewer.screenshot(canvas_only=True))
         else:
             viewer.add_labels((create_overlap(org, organelle_segs, splitter)>0), name=f"{org}_LO", scale=scale, opacity=1.0, colormap={1:LO_MERGE}, visible=False)
-            viewer.add_labels((create_overlap(org, organelle_segs, splitter)>0), name=f"{org}_HO", scale=scale, opacity=1.0, colormap={1:HO_MERGE}, visible=False)
-            for sub_org in (org.split(splitter) + [inter for inter in possib if (all(sub in org for sub in inter.split(splitter)) and inter != org)]):
-                viewer.layers[f"{sub_org}_LO"].visible = True
-            viewer.layers[f"{org}_HO"].visible = True
+            viewer.add_labels((create_overlap(org, organelle_segs, splitter)>0), name=f"{org}_HO", scale=scale, opacity=1.0, colormap={1:HO_MERGE}, visible=True)
             viewer.dims.ndisplay = dim
             if type(view) == int:
                 viewer.dims.set_point(0, view)
+            plt_org[f"{org}_ol"] = crop_to_square(viewer.screenshot(canvas_only=True))
+            for sub_org in (org.split(splitter) + [inter for inter in possib if (all(sub in org for sub in inter.split(splitter)) and inter != org)]):
+                viewer.layers[f"{sub_org}_LO"].visible = True
             plt_org[org] = crop_to_square(viewer.screenshot(canvas_only=True))
         for layer in viewer.layers:
             layer.visible = False
@@ -398,31 +401,37 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
     if close_viewer:
         viewer.close()
 
-    fig = plt.figure(figsize=(grid_width,grid_height))                              # Initialize the figure
+    fig = plt.figure(figsize=(2*grid_width,grid_height))                              # Initialize the figure
 
     # Initialize the grid spec
     if grid_width > grid_height:
-        gs = fig.add_gridspec(int(grid_height), int(grid_width), wspace=(padding*(grid_width/grid_height)), hspace=padding)
+        gs = fig.add_gridspec(int(grid_height), int(2*grid_width), wspace=(padding*2*(grid_width/grid_height)), hspace=padding)
     elif grid_height > grid_width:
-        gs = fig.add_gridspec(int(grid_height), int(grid_width), wspace=padding, hspace=(padding*(grid_height/grid_width)))  
+        gs = fig.add_gridspec(int(grid_height), int(2*grid_width), wspace=padding, hspace=(padding*2*(grid_height/grid_width)))  
     else:
-        gs = fig.add_gridspec(int(grid_height), int(grid_width), wspace=padding, hspace=padding)
+        gs = fig.add_gridspec(int(grid_height), int(2*grid_width), wspace=padding, hspace=padding)
 
     # Merge Plots
     for n in list(map(lambda x:x+2, (range(len(orgs.split(splitter))-1)))): # n = overlap order number
         if n == (len(orgs.split(splitter))):
             # Single organelle 
             axes[orgs] = fig.add_subplot(gs[int(grid_height - (len(orgs.split(splitter))*(grid_width/(len(orgs.split(splitter))+1)))):,
-                                            int(grid_width/(len(orgs.split(splitter))+1)):])
+                                            int(grid_width/(len(orgs.split(splitter))+1)):int(grid_width)])
+            axes[f"{orgs}_ol"] = fig.add_subplot(gs[int(grid_height - (len(orgs.split(splitter))*(grid_width/(len(orgs.split(splitter))+1)))):,
+                                                    int(grid_width):int((2*grid_width)-(grid_width/(len(orgs.split(splitter))+1)))])
             y = int(sum((grid_width/counts[j-1]) for j in range(1, len(orgs.split(splitter)))))
             for i, org in enumerate(orgs.split(splitter)):
                 axes[org] = fig.add_subplot(gs[int((y-(grid_width/(len(orgs.split(splitter))+1))+(i*(grid_width/(len(orgs.split(splitter))+1))))):int(y+((i)*(grid_width/(len(orgs.split(splitter))+1)))),
                                                int(0):int(grid_width/(len(orgs.split(splitter))+1))])
+                axes[org].set_ylabel(org)
+
         else:
             y = int(sum((grid_width/counts[j-1]) for j in range(1, n)))
             for i, org in enumerate([splitter.join(inter) for inter in itertools.combinations(orgs.split(splitter), n)]):   # i = overlap image number within the order
                 axes[org] = fig.add_subplot(gs[int(y - (grid_width/counts[n-2])):y,
-                                            int((i*(grid_width/counts[n-2]))):int(((i*(grid_width/counts[n-2]))+(grid_width/counts[n-2])))])
+                                            int(((2*i)*(grid_width/counts[n-2]))):int(((2*i*(grid_width/counts[n-2]))+(grid_width/counts[n-2])))])
+                axes[f"{org}_ol"] = fig.add_subplot(gs[int(y - (grid_width/counts[n-2])):y,
+                                                       int(((2*i)*(grid_width/counts[n-2]))+(grid_width/counts[n-2])):int(((2*i)*((grid_width/counts[n-2]))+(2*(grid_width/counts[n-2]))))])
                 if i == 0:
                     axes[org].set_ylabel(f"Contact Order: {n}")
                 
@@ -436,8 +445,12 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
         axes[org].set_yticks([])
         axes[org].set_aspect('equal')
         axes[org].imshow(plt_org[org], interpolation='nearest')
+    
+    axes["key"] = fig.add_subplot(gs[int((y-(grid_width/(len(orgs.split(splitter))+1))+(i*(grid_width/(len(orgs.split(splitter))+1))))):,
+                                     int((2*grid_width)-(grid_width/(len(orgs.split(splitter))+1))):])
+    axes["key"].set_xticks([])
+    axes["key"].set_yticks([])
+    legend_ele = [Patch(facecolor=ORG_COLORS[i], edgecolor="#000000", label=org) for i, org in enumerate(orgs.split(splitter))]
+    axes["key"].legend(handles=legend_ele)
 
-    for org in orgs.split(splitter):
-        axes[org].set_ylabel(org)
-
-    return fig.tight_layout()
+    return fig
