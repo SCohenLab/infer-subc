@@ -516,8 +516,8 @@ def find_radius(cell_mask: np.ndarray, method: str) -> np.ndarray:
         A mask of the cells with their radii encoded as labels.
     """
     radii_mask = np.zeros_like(cell_mask)
-    cell_mask_resize = zoom(cell_mask.copy(), (1, 0.5, 0.5))
-    zz, yy, xx = cell_mask_resize.shape
+    cell_mask_resize = zoom(cell_mask.copy(), (1, 0.5, 0.5)) # resizing cell mask to speed up processing
+    zz, yy, xx = cell_mask_resize.shape                      # collecting y-length of image NOTE: may want to collect sqrt(yy^2 + xx^2) and use in place of yy   
 
     cell_nums = np.unique(cell_mask[cell_mask != 0])
     label_factor = 10 ** len(str(cell_nums.max()))
@@ -527,9 +527,11 @@ def find_radius(cell_mask: np.ndarray, method: str) -> np.ndarray:
         rad_range = [i+1 for i in range(yy // 4)]  # Dividing by 4 because mask is resized
 
         if method == 'isotropic':
-            while len(rad_range) > 2:
-                rad = rad_range[len(rad_range) // 2]
+            while len(rad_range) > 2:                   # repeats code until only 1 or 2 radii remain
+                rad = rad_range[len(rad_range) // 2]    # sets test radius to radius in middle of rad_range list
                 print(f"Trying radius of {rad}")
+
+                # testing erosion with test radius
                 if np.all(isotropic_erosion(test_img.astype(np.uint8), rad) == 0):
                     rad_range = rad_range[:rad_range.index(rad)]
                     print(f"{rad} is too large")
@@ -538,14 +540,18 @@ def find_radius(cell_mask: np.ndarray, method: str) -> np.ndarray:
                     print(f"{rad} is too small")
                 print(f"{len(rad_range)} possible radii remaining")
         elif method == 'binary':
-            while len(rad_range) > 2:
-                rad = rad_range[len(rad_range) // 2]
+            while len(rad_range) > 2:                   # repeats code until only 1 or 2 radii remain
+                rad = rad_range[len(rad_range) // 2]    # sets test radius to radius in middle of rad_range list
                 print(f"Trying radius of {rad}")
+
+                #creates 'saucer'
                 edge = disk(rad // 4)
                 middle = disk(rad)
                 w = (middle.shape[0] - edge.shape[0]) // 2
                 edge = np.pad(edge, ((w, w), (w, w)), mode='constant', constant_values=0)
                 fp = np.stack((edge, middle, edge))
+
+                # testing erosion using test radius
                 if np.all(binary_erosion(test_img.astype(np.uint8), fp) == 0):
                     rad_range = rad_range[:rad_range.index(rad)]
                     print(f"{rad} is too large")
@@ -585,20 +591,26 @@ def infer_soma_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, method: 
     cell_nums = np.unique(cell_mask[cell_mask != 0])
     label_factor = 10 ** len(str(cell_nums.max()))
 
-    for cell_num in cell_nums:
+    for cell_num in cell_nums:                              # repeat for each cell in the image
+        # determine the radius of the chosen cell
         soma_img_solo = (cell_mask == cell_num)
         opti_rad = np.unique(radii_mask[soma_img_solo])[0]
         opti_rad = (opti_rad - cell_num) / label_factor
 
-        if method == 'isotropic':
+        if method == 'isotropic': 
+            # opening and dilation to ensure removal of neurites
             neurites_removed = isotropic_opening(soma_img_solo.astype(np.uint8), opti_rad)
             soma_initial = isotropic_dilation(neurites_removed, opti_rad) & soma_img_solo
         elif method == 'binary':
+
+            # creation of 'saucer'
             edge = disk(int(opti_rad // 2))
             middle = disk(int(opti_rad))
             w = (middle.shape[0] - edge.shape[0]) // 2
             edge = np.pad(edge, ((w, w), (w, w)), mode='constant', constant_values=0)
             fp = np.stack((edge, middle, edge))
+
+            #opening and dilation to ensure removal of neurites
             neurites_removed = binary_opening(soma_img_solo.astype(np.uint8), fp)
             soma_initial = binary_dilation(neurites_removed, footprint=ball(int(opti_rad // 2))) & soma_img_solo
         else:
@@ -634,12 +646,16 @@ def infer_neurites_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, soma
     label_factor = 10 ** len(str(cell_nums.max()))
     binary_soma = soma_out_1 > 0
 
-    for cell_num in cell_nums:
+    for cell_num in cell_nums:                          # repeat across cell numbers
+        # determine radius for cell
         solo_mask = (cell_mask == cell_num)
         opti_rad = np.unique(radii_mask[solo_mask])[0]
         opti_rad = (opti_rad - cell_num) / label_factor
 
+        # mask out soma from full cell mask
         neurite_mask = ~binary_soma & solo_mask
+
+        # filter out small objects that may instead be missing outcrops from the soma
         if method == 'isotropic':
             filtered = size_filter_linear_size(img=label(neurite_mask), min_size=(opti_rad*2), method='3D') * solo_mask
         elif method == 'binary':
@@ -647,6 +663,7 @@ def infer_neurites_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, soma
         else:
             raise ValueError(f"method of {method} was given, but only 'isotropic' or 'binary' is allowed.")
 
+        # label the neurites to unique IDs while also encoding their cell radius
         neurite_labels = label(filtered)
         neurite_labels[neurite_labels > 0] = (neurite_labels[neurite_labels > 0] * label_factor) + cell_num
         neurites_out_1[solo_mask] = neurite_labels[solo_mask]
