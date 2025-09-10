@@ -25,14 +25,15 @@ BLACK = '#000000'
 ##############################
 ## Determines Ideal Font Size
 ##############################
-def find_size(width: float, text: str, base_size:float, fig, multiplier:float=1.00):
+def find_size(width: float, text: str, base_size:float, fig, multiplier:float=1.00, weight = None):
     base_size = int(base_size/multiplier)
     r = fig.canvas.get_renderer()
     for fs in list(range(base_size+1))[::-1]:
-        t = plt.text(0.5, 0.5,text, fontsize=fs*multiplier)
+        t = plt.text(0.5, 0.5,text, fontsize=fs*multiplier, fontweight=weight)
         tw = t.get_window_extent(renderer=r).width
         if width >= tw:
             t.remove()
+            print(fs*multiplier)
             return fs*multiplier, multiplier
         t.remove()
     return find_size(width, text, 10, fig, multiplier*0.1)
@@ -337,13 +338,23 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
         Figure displaying the nth dimensional image alongside the lower order interactions
 
     """
-    ORG_A_COL = '#E69F00'
-    ORG_B_COL = '#0072B2'
-    ORG_C_COL = '#CC79A7'
-    ORG_D_COL = '#009E73'
+    # ORG_A_COL = '#E69F00'
+    # ORG_B_COL = '#0072B2'
+    # ORG_C_COL = '#CC79A7'
+    # ORG_D_COL = '#009E73'
+    # ORG_E_COL = '#F0E442'
+    # ORG_F_COL = '#D55E00'
+    # ORG_G_COL = '#56B4E9'
+    # HO_MERGE = '#FFFFFF'
+    # LO_MERGE = '#999999'
+
+    ORG_A_COL = "#FFAE00"
+    ORG_B_COL = "#00A0FC"
+    ORG_C_COL = "#FF93CE"
+    ORG_D_COL = "#01CE97"
     ORG_E_COL = '#F0E442'
-    ORG_F_COL = '#D55E00'
-    ORG_G_COL = '#56B4E9'
+    ORG_F_COL = "#FF6F01"
+    ORG_G_COL = "#60C5FF"
     HO_MERGE = '#FFFFFF'
     LO_MERGE = '#999999'
     ORG_COLORS = [ORG_A_COL, ORG_B_COL, ORG_C_COL, ORG_D_COL, ORG_E_COL, ORG_F_COL, ORG_G_COL]
@@ -351,7 +362,9 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
     viewer.window.resize(width=800, height=800)
     plt_org = {}            # Dictionary of the images to plot
     axes = {}               # Dictionary of the axes to plot on
-    counts = []
+    counts = []             # List of number of plots per section
+    y_titles = {}           # Dictionary of titles used vertically
+    x_titles = {}           # Dictionary of titles used horizontally
 
     if view == '3D':
         dim = 3
@@ -377,17 +390,21 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
 
     grid_width = math.lcm(*counts)
     grid_height = sum(grid_width/h for h in counts[:-1]) + ((grid_width/(len(orgs.split(splitter))+1))*(len(orgs.split(splitter)))) # height of large plot
+    
+    # Determine the minimum gridspec area
+    min_spec = grid_width//max(counts)
+
     # Adds organelles and their combinations to the viewer, and exports the images to the plt_org dictionary
     for i, org in enumerate(orgs.split(splitter) + possib):
         if org in organelle_segs.keys():
-            viewer.add_labels(organelle_segs[org]>0, name=f"{org}_LO", scale=scale, opacity=op, colormap={1:ORG_COLORS[i]}, visible=True)
+            viewer.add_labels(organelle_segs[org]>0, name=f"{org}_LO", scale=scale, opacity=op, colormap={0:None,1:ORG_COLORS[i]}, visible=True)
             viewer.dims.ndisplay = dim
             if type(view) == int:
                 viewer.dims.set_point(0, view)
             plt_org[org] = crop_to_square(viewer.screenshot(canvas_only=True))
         else:
-            viewer.add_labels((create_overlap(org, organelle_segs, splitter)>0), name=f"{org}_LO", scale=scale, opacity=1.0, colormap={1:LO_MERGE}, visible=False)
-            viewer.add_labels((create_overlap(org, organelle_segs, splitter)>0), name=f"{org}_HO", scale=scale, opacity=1.0, colormap={1:HO_MERGE}, visible=True)
+            viewer.add_labels((create_overlap(org, organelle_segs, splitter)>0), name=f"{org}_LO", scale=scale, opacity=1.0, colormap={0:None,1:LO_MERGE}, visible=False)
+            viewer.add_labels((create_overlap(org, organelle_segs, splitter)>0), name=f"{org}_HO", scale=scale, opacity=1.0, colormap={0:None,1:HO_MERGE}, visible=True)
             viewer.dims.ndisplay = dim
             if type(view) == int:
                 viewer.dims.set_point(0, view)
@@ -401,14 +418,17 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
     if close_viewer:
         viewer.close()
 
-    fig = plt.figure(figsize=(2*grid_width,grid_height))                              # Initialize the figure
+    fig = plt.figure(figsize=((2*grid_width),grid_height)) 
 
     # Initialize the grid spec
     if grid_width > grid_height:
+        # fig = plt.figure(figsize=((2*grid_width/grid_height)*12,12)) 
         gs = fig.add_gridspec(int(grid_height), int(2*grid_width), wspace=(padding*2*(grid_width/grid_height)), hspace=padding)
     elif grid_height > grid_width:
+        # fig = plt.figure(figsize=((2)*12,(grid_height/grid_width)*12)) 
         gs = fig.add_gridspec(int(grid_height), int(2*grid_width), wspace=padding, hspace=(padding*2*(grid_height/grid_width)))  
     else:
+        # fig = plt.figure(figsize=((2)*12,12)) 
         gs = fig.add_gridspec(int(grid_height), int(2*grid_width), wspace=padding, hspace=padding)
 
     # Merge Plots
@@ -420,10 +440,12 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
             axes[f"{orgs}_ol"] = fig.add_subplot(gs[int(grid_height - (len(orgs.split(splitter))*(grid_width/(len(orgs.split(splitter))+1)))):,
                                                     int(grid_width):int((2*grid_width)-(grid_width/(len(orgs.split(splitter))+1)))])
             y = int(sum((grid_width/counts[j-1]) for j in range(1, len(orgs.split(splitter)))))
+            x_titles[orgs] = orgs
+            x_titles["orgs"] = "Organelles"
             for i, org in enumerate(orgs.split(splitter)):
                 axes[org] = fig.add_subplot(gs[int((y-(grid_width/(len(orgs.split(splitter))+1))+(i*(grid_width/(len(orgs.split(splitter))+1))))):int(y+((i)*(grid_width/(len(orgs.split(splitter))+1)))),
                                                int(0):int(grid_width/(len(orgs.split(splitter))+1))])
-                axes[org].set_ylabel(org)
+                y_titles[org] = org
 
         else:
             y = int(sum((grid_width/counts[j-1]) for j in range(1, n)))
@@ -432,10 +454,40 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
                                             int(((2*i)*(grid_width/counts[n-2]))):int(((2*i*(grid_width/counts[n-2]))+(grid_width/counts[n-2])))])
                 axes[f"{org}_ol"] = fig.add_subplot(gs[int(y - (grid_width/counts[n-2])):y,
                                                        int(((2*i)*(grid_width/counts[n-2]))+(grid_width/counts[n-2])):int(((2*i)*((grid_width/counts[n-2]))+(2*(grid_width/counts[n-2]))))])
+                x_titles[org] = org
                 if i == 0:
-                    axes[org].set_ylabel(f"Contact Order: {n}")
-                
+                    y_titles[org] = f"Interaction Order: {n}"
+    
+    # combine dictionaries of titles
+    all_titles = {"Key":"Legend"}
+    all_titles.update(x_titles)
+    all_titles.update(y_titles)
 
+    #######################
+    # Determine Font Size #
+    #######################
+    # bbox = axes[list(axes.keys())[0]].get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+    # width = bbox.width * fig.dpi
+    width = min([axes[ax].get_window_extent().transformed(fig.dpi_scale_trans.inverted()).width * fig.dpi for ax in axes.keys()])
+    fs = grid_width
+    m = 1.00
+    for title in all_titles.keys():
+        if m == 1.00:
+            f, m = find_size(width, all_titles[title], grid_width*2, fig, m)
+        else:
+            f, m = find_size(width, all_titles[title], fs, fig, m)
+        if f < fs:
+            fs = f
+    
+    ######################
+    # Assigning Y Titles #
+    ###################### 
+    for title in y_titles.keys():
+        axes[title].set_ylabel(y_titles[title], size=fs)
+
+    ########################
+    # Cleaning Image Plots #
+    ########################
     for org in axes.keys():
         axes[org].spines['top'].set_visible(False)
         axes[org].spines['bottom'].set_visible(False)
@@ -446,11 +498,21 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
         axes[org].set_aspect('equal')
         axes[org].imshow(plt_org[org], interpolation='nearest')
     
-    axes["key"] = fig.add_subplot(gs[int((y-(grid_width/(len(orgs.split(splitter))+1))+(i*(grid_width/(len(orgs.split(splitter))+1))))):,
+    #####################
+    # Setting Up Legend #
+    #####################
+    axes["key"] = fig.add_subplot(gs[int(grid_height - (len(orgs.split(splitter))*(grid_width/(len(orgs.split(splitter))+1)))):,
                                      int((2*grid_width)-(grid_width/(len(orgs.split(splitter))+1))):])
     axes["key"].set_xticks([])
     axes["key"].set_yticks([])
+    axes["key"].spines['top'].set_visible(False)
+    axes["key"].spines['bottom'].set_visible(False)
+    axes["key"].spines['right'].set_visible(False)
+    axes["key"].spines['left'].set_visible(False)
     legend_ele = [Patch(facecolor=ORG_COLORS[i], edgecolor="#000000", label=org) for i, org in enumerate(orgs.split(splitter))]
-    axes["key"].legend(handles=legend_ele)
-
+    legend_ele += [Patch(facecolor=HO_MERGE, edgecolor="#000000", label="Nth Order Overlap"), 
+                   Patch(facecolor=LO_MERGE, edgecolor="#000000", label="Lower Order Overlap")]
+    axes["key"].legend(handles=legend_ele, fontsize=((3*fs)//4), loc='right', 
+                       frameon=False, mode='expand', title="Legend", title_fontsize=fs)
+    print("Done")
     return fig
