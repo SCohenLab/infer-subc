@@ -33,7 +33,6 @@ def find_size(width: float, text: str, base_size:float, fig, multiplier:float=1.
         tw = t.get_window_extent(renderer=r).width
         if width >= tw:
             t.remove()
-            print(fs*multiplier)
             return fs*multiplier, multiplier
         t.remove()
     return find_size(width, text, 10, fig, multiplier*0.1)
@@ -362,6 +361,7 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
     viewer.window.resize(width=800, height=800)
     plt_org = {}            # Dictionary of the images to plot
     axes = {}               # Dictionary of the axes to plot on
+    title_axes = {}         # Dictionary of the title axes
     counts = []             # List of number of plots per section
     y_titles = {}           # Dictionary of titles used vertically
     x_titles = {}           # Dictionary of titles used horizontally
@@ -393,6 +393,7 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
     
     # Determine the minimum gridspec area
     min_spec = grid_width//max(counts)
+    ti_spec = min_spec//(len(orgs.split(splitter))-1)
 
     # Adds organelles and their combinations to the viewer, and exports the images to the plt_org dictionary
     for i, org in enumerate(orgs.split(splitter) + possib):
@@ -418,29 +419,31 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
     if close_viewer:
         viewer.close()
 
-    fig = plt.figure(figsize=((2*grid_width),grid_height)) 
+    fig = plt.figure(figsize=((2*grid_width),(grid_height+(ti_spec*len(counts))))) 
 
     # Initialize the grid spec
     if grid_width > grid_height:
         # fig = plt.figure(figsize=((2*grid_width/grid_height)*12,12)) 
-        gs = fig.add_gridspec(int(grid_height), int(2*grid_width), wspace=(padding*2*(grid_width/grid_height)), hspace=padding)
+        gs = fig.add_gridspec(int(grid_height+(ti_spec*len(counts))), int(2*grid_width), wspace=(padding*2*(grid_width/grid_height)), hspace=padding)
     elif grid_height > grid_width:
         # fig = plt.figure(figsize=((2)*12,(grid_height/grid_width)*12)) 
-        gs = fig.add_gridspec(int(grid_height), int(2*grid_width), wspace=padding, hspace=(padding*2*(grid_height/grid_width)))  
+        gs = fig.add_gridspec(int(grid_height+(ti_spec*len(counts))), int(2*grid_width), wspace=padding, hspace=(padding*2*(grid_height/grid_width)))  
     else:
         # fig = plt.figure(figsize=((2)*12,12)) 
-        gs = fig.add_gridspec(int(grid_height), int(2*grid_width), wspace=padding, hspace=padding)
+        gs = fig.add_gridspec(int(grid_height+(ti_spec*len(counts))), int(2*grid_width), wspace=padding, hspace=padding)
 
     # Merge Plots
     for n in list(map(lambda x:x+2, (range(len(orgs.split(splitter))-1)))): # n = overlap order number
         if n == (len(orgs.split(splitter))):
-            # Single organelle 
-            axes[orgs] = fig.add_subplot(gs[int(grid_height - (len(orgs.split(splitter))*(grid_width/(len(orgs.split(splitter))+1)))):,
+            # Full Merge
+            axes[orgs] = fig.add_subplot(gs[int(grid_height-(len(orgs.split(splitter))*(grid_width/(len(orgs.split(splitter))+1)))+(ti_spec*(n-1))):,
                                             int(grid_width/(len(orgs.split(splitter))+1)):int(grid_width)])
-            axes[f"{orgs}_ol"] = fig.add_subplot(gs[int(grid_height - (len(orgs.split(splitter))*(grid_width/(len(orgs.split(splitter))+1)))):,
+            axes[f"{orgs}_ol"] = fig.add_subplot(gs[int(grid_height - (len(orgs.split(splitter))*(grid_width/(len(orgs.split(splitter))+1)))+(ti_spec*(n-1))):,
                                                     int(grid_width):int((2*grid_width)-(grid_width/(len(orgs.split(splitter))+1)))])
-            y = int(sum((grid_width/counts[j-1]) for j in range(1, len(orgs.split(splitter)))))
             x_titles[orgs] = orgs
+            
+            # Single organelles
+            y = int(sum((grid_width/counts[j-1]) for j in range(1, len(orgs.split(splitter))))) + (ti_spec*(n-1))
             x_titles["orgs"] = "Organelles"
             for i, org in enumerate(orgs.split(splitter)):
                 axes[org] = fig.add_subplot(gs[int((y-(grid_width/(len(orgs.split(splitter))+1))+(i*(grid_width/(len(orgs.split(splitter))+1))))):int(y+((i)*(grid_width/(len(orgs.split(splitter))+1)))),
@@ -448,15 +451,20 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
                 y_titles[org] = org
 
         else:
-            y = int(sum((grid_width/counts[j-1]) for j in range(1, n)))
+            # Lower order interactions
+            y = int(sum((grid_width/counts[j-1]) for j in range(1, n))) + (ti_spec*(n-1))
             for i, org in enumerate([splitter.join(inter) for inter in itertools.combinations(orgs.split(splitter), n)]):   # i = overlap image number within the order
                 axes[org] = fig.add_subplot(gs[int(y - (grid_width/counts[n-2])):y,
                                             int(((2*i)*(grid_width/counts[n-2]))):int(((2*i*(grid_width/counts[n-2]))+(grid_width/counts[n-2])))])
                 axes[f"{org}_ol"] = fig.add_subplot(gs[int(y - (grid_width/counts[n-2])):y,
                                                        int(((2*i)*(grid_width/counts[n-2]))+(grid_width/counts[n-2])):int(((2*i)*((grid_width/counts[n-2]))+(2*(grid_width/counts[n-2]))))])
+                # Titles
                 x_titles[org] = org
                 if i == 0:
                     y_titles[org] = f"Interaction Order: {n}"
+
+                title_axes[org] = fig.add_subplot(gs[int((y - (grid_width/counts[n-2])) - (ti_spec)):int(y - (grid_width/counts[n-2])),
+                                                     int(((2*i)*(grid_width/counts[n-2]))):int(((2*i)*((grid_width/counts[n-2]))+(2*(grid_width/counts[n-2]))))])
     
     # combine dictionaries of titles
     all_titles = {"Key":"Legend"}
@@ -497,11 +505,27 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
         axes[org].set_yticks([])
         axes[org].set_aspect('equal')
         axes[org].imshow(plt_org[org], interpolation='nearest')
+
+    for org in title_axes.keys():
+        title_axes[org].text(0.5, 0.75, x_titles[org], fontsize=fs, 
+                             horizontalalignment='center', 
+                             verticalalignment='center')
+        title_axes[org].text(0.25, 0, 'Merge', fontsize=(3*fs//4),
+                             horizontalalignment='center')
+        title_axes[org].text(0.75, 0, 'Overlap Only', fontsize=(3*fs//4),
+                             horizontalalignment='center')
+        title_axes[org].spines['top'].set_visible(False)
+        title_axes[org].spines['bottom'].set_visible(False)
+        title_axes[org].spines['right'].set_visible(False)
+        title_axes[org].spines['left'].set_visible(False)
+        title_axes[org].set_xticks([])
+        title_axes[org].set_yticks([])
+        title_axes[org].set_aspect('equal')
     
     #####################
     # Setting Up Legend #
     #####################
-    axes["key"] = fig.add_subplot(gs[int(grid_height - (len(orgs.split(splitter))*(grid_width/(len(orgs.split(splitter))+1)))):,
+    axes["key"] = fig.add_subplot(gs[int(grid_height - (len(orgs.split(splitter))*(grid_width/(len(orgs.split(splitter))+1))) + (ti_spec*((len(orgs.split(splitter)))-1))):,
                                      int((2*grid_width)-(grid_width/(len(orgs.split(splitter))+1))):])
     axes["key"].set_xticks([])
     axes["key"].set_yticks([])
