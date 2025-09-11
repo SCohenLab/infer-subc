@@ -499,7 +499,7 @@ def select_highest_intensity_cell(raw_image: np.ndarray,
 
     return good_cell
 
-def find_radius(cell_mask: np.ndarray, method: str) -> np.ndarray:
+def find_radius(cell_mask: np.ndarray, method: str, verbose: bool=False) -> np.ndarray:
     """
     Determines the radius of the cells in the mask, and outputs a copy of the mask with the radii encoded as their labels.
 
@@ -509,7 +509,14 @@ def find_radius(cell_mask: np.ndarray, method: str) -> np.ndarray:
         A mask of the cells.
     method : str
         The method to use for finding the radius. Can be 'isotropic' or 'binary'.
-
+        The `binary` method uses a saucer-like shape to remove the soma from the neurites. 
+        The "saucer" is comprised of 3 2-Dimensional disks stacked into a 3-Dimensional space. 
+        This method is more likely to oversegment the soma as compared to the `isotropic` methods. 
+        This results in the initial portions of the neurites possibly being included in the soma segmentation. 
+        Using the `binary` method will allow for the selection of more irregularly shaped soma objects.
+    verbose: bool
+        If True, prints out information about the radius finding process.
+        
     Returns:
     -------
     np.ndarray
@@ -529,20 +536,20 @@ def find_radius(cell_mask: np.ndarray, method: str) -> np.ndarray:
         if method == 'isotropic':
             while len(rad_range) > 2:                   # repeats code until only 1 or 2 radii remain
                 rad = rad_range[len(rad_range) // 2]    # sets test radius to radius in middle of rad_range list
-                print(f"Trying radius of {rad}")
+                if verbose: print(f"Trying radius of {rad}")
 
                 # testing erosion with test radius
                 if np.all(isotropic_erosion(test_img.astype(np.uint8), rad) == 0):
                     rad_range = rad_range[:rad_range.index(rad)]
-                    print(f"{rad} is too large")
+                    if verbose: print(f"{rad} is too large")
                 else:
                     rad_range = rad_range[rad_range.index(rad)+1:]
-                    print(f"{rad} is too small")
-                print(f"{len(rad_range)} possible radii remaining")
+                    if verbose: print(f"{rad} is too small")
+                if verbose: print(f"{len(rad_range)} possible radii remaining")
         elif method == 'binary':
             while len(rad_range) > 2:                   # repeats code until only 1 or 2 radii remain
                 rad = rad_range[len(rad_range) // 2]    # sets test radius to radius in middle of rad_range list
-                print(f"Trying radius of {rad}")
+                if verbose: print(f"Trying radius of {rad}")
 
                 #creates 'saucer'
                 edge = disk(rad // 4)
@@ -554,11 +561,11 @@ def find_radius(cell_mask: np.ndarray, method: str) -> np.ndarray:
                 # testing erosion using test radius
                 if np.all(binary_erosion(test_img.astype(np.uint8), fp) == 0):
                     rad_range = rad_range[:rad_range.index(rad)]
-                    print(f"{rad} is too large")
+                    if verbose: print(f"{rad} is too large")
                 else:
                     rad_range = rad_range[rad_range.index(rad)+1:]
-                    print(f"{rad} is too small")
-                print(f"{len(rad_range)} possible radii remaining")
+                    if verbose: print(f"{rad} is too small")
+                if verbose: print(f"{len(rad_range)} possible radii remaining")
 
         if len(rad_range) == 1:
             opti_rad = rad_range[0] // 2
@@ -656,6 +663,8 @@ def infer_neurites_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, soma
         neurite_mask = ~binary_soma & solo_mask
 
         # filter out small objects that may instead be missing outcrops from the soma
+        # size exclusion was determined imperically on example neurons from 63X magnification images.
+        # TODO: add optional parameter to adjust size filteringre
         if method == 'isotropic':
             filtered = size_filter_linear_size(img=label(neurite_mask), min_size=(opti_rad*2), method='3D') * solo_mask
         elif method == 'binary':
