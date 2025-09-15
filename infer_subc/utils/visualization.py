@@ -6,6 +6,7 @@ import math
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 import matplotlib.gridspec as gridspec
+from matplotlib import rc
 
 import numpy as np
 
@@ -25,7 +26,8 @@ BLACK = '#000000'
 ##############################
 ## Determines Ideal Font Size
 ##############################
-def find_size(width: float, text: str, base_size:float, fig, multiplier:float=1.00, weight = None):
+def find_size(width: float, text: str, base_size:float, fig, multiplier:float=1.00, weight = None, style='Arial'):
+    rc('font',family=style)
     base_size = int(base_size/multiplier)
     r = fig.canvas.get_renderer()
     for fs in list(range(base_size+1))[::-1]:
@@ -36,6 +38,28 @@ def find_size(width: float, text: str, base_size:float, fig, multiplier:float=1.
             return fs*multiplier, multiplier
         t.remove()
     return find_size(width, text, 10, fig, multiplier*0.1)
+
+def get_bounded_font_size(width: float, height:float, text: str, base_size:float, fig, weight = None, style='Arial'):
+    rc('font',family=style)
+    r = fig.canvas.get_renderer()
+    fsr = list(range(base_size+1))
+    while (len(fsr) > 2):
+        idx = len(fsr)//2
+        fs = fsr[idx]
+        t = plt.text(0.5, 0.5,text, fontsize=fs, fontweight=weight)
+        if width <= t.get_window_extent(renderer=r).width:
+            fsr = fsr[:idx+1]
+        elif height <= t.get_window_extent(renderer=r).height:
+            fsr = fsr[:idx+1]
+        elif width >= t.get_window_extent(renderer=r).width:
+            fsr = fsr[idx:]
+        elif height >= t.get_window_extent(renderer=r).height:
+            fsr = fsr[idx:]
+        t.remove()
+    if len(fsr) == 2:
+        return (fsr[0]+fsr[1])/2
+    else:
+        return fs
 
 #####################
 ## Plots Overlaps
@@ -324,9 +348,18 @@ def crop_to_square(img):
     return img[slices]
 
 
-def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, padding: float=0.05, close_viewer: bool=False, view='2D', colorblind:bool=False):
+def plot_n_overlaps(orgs: str, 
+                    splitter: str, 
+                    organelle_segs: dict, 
+                    scale: any, 
+                    padding: float=0.05, 
+                    close_viewer: bool=False, 
+                    view='2D', 
+                    colorblind:bool=False,
+                    fontstyle:str='Arial',
+                    dpi:int=300):
     """
-    Plots nth order overlaps of organelles in a grid format. Only works for up to 7 organelles.
+    Plots nth order overlaps of organelles in a grid format. Only works for up to 6 organelles.
 
     Parameters
     ----------
@@ -337,14 +370,13 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
         Figure displaying the nth dimensional image alongside the lower order interactions
 
     """
-    # ORG_A_COL = '#E69F00'
-    # ORG_B_COL = '#0072B2'
-    # ORG_C_COL = '#CC79A7'
-    # ORG_D_COL = '#009E73'
-    # ORG_E_COL = '#F0E442'
-    # ORG_F_COL = '#D55E00'
-    # ORG_G_COL = '#56B4E9'
+    # Assigning Font Constant
+    rc('font',family=fontstyle)
 
+    # Assigning DPI constnat
+    plt.rcParams['figure.dpi']=dpi
+
+    # Assigning Color Constants
     if colorblind:
         ORG_A_COL = "#FFAE00"
         ORG_B_COL = "#00A0FC"
@@ -363,10 +395,9 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
     LO_MERGE = '#999999'
     ORG_COLORS = [ORG_A_COL, ORG_B_COL, ORG_C_COL, ORG_D_COL, ORG_E_COL, ORG_F_COL]
 
-
-    viewer = napari.Viewer()# Initializes the viewer
+    # Initializing the viewer
+    viewer = napari.Viewer()
     viewer.add_labels(np.zeros_like(organelle_segs[list(organelle_segs.keys())[0]]), visible = False, scale=scale)
-
 
     plt_org = {}            # Dictionary of the images to plot
     axes = {}               # Dictionary of the axes to plot on
@@ -396,13 +427,17 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
     # Determine number of each order of LO overlaps
     counts = counts[:-1] + [len(orgs.split(splitter))+1]
 
-    grid_width = math.lcm(*counts)
-    grid_height = sum(grid_width/h for h in counts[:-1]) + ((grid_width/(len(orgs.split(splitter))+1))*(len(orgs.split(splitter)))) # height of large plot
-    
     # Determine the minimum gridspec area
-    min_spec = grid_width//max(counts)
-    ti_spec = min_spec//(len(orgs.split(splitter))-1)
+    grid_width = math.lcm(*counts)
+    ti_spec = 0
 
+    # Determine title area size, and adjust grid_width as needed to get a non-zero number
+    while ti_spec == 0:
+        min_spec = grid_width//max(counts)
+        ti_spec = min_spec//(len(orgs.split(splitter))-1)
+        if ti_spec == 0:
+            grid_width *= 2
+    grid_height = sum((grid_width//h) for h in counts[:-1]) + ((grid_width//(len(orgs.split(splitter))+1))*(len(orgs.split(splitter)))) # height of large plot
     # Adds organelles and their combinations to the viewer, and exports the images to the plt_org dictionary
     for i, org in enumerate(orgs.split(splitter) + possib):
         if org in organelle_segs.keys():
@@ -425,13 +460,13 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
 
     # Initialize the grid spec
     if grid_width > grid_height:
-        # fig = plt.figure(figsize=((2*grid_width/grid_height)*12,12)) 
-        gs = fig.add_gridspec(int(grid_height+(ti_spec*len(counts))), int(2*grid_width), wspace=(padding*2*(grid_width/grid_height)), hspace=padding)
+        fig = plt.figure(figsize=((2*grid_width/(grid_height+(ti_spec*len(counts))))*36,36)) 
+        gs = fig.add_gridspec(int(grid_height+(ti_spec*len(counts))), int(2*grid_width), wspace=(padding*2*(grid_width/(grid_height+(ti_spec*len(counts))))), hspace=padding)
     elif grid_height > grid_width:
-        # fig = plt.figure(figsize=((2)*12,(grid_height/grid_width)*12)) 
-        gs = fig.add_gridspec(int(grid_height+(ti_spec*len(counts))), int(2*grid_width), wspace=padding, hspace=(padding*2*(grid_height/grid_width)))  
+        fig = plt.figure(figsize=((2)*36,((grid_height+(ti_spec*len(counts)))/(grid_width))*36)) 
+        gs = fig.add_gridspec(int(grid_height+(ti_spec*len(counts))), int(2*grid_width), wspace=padding, hspace=(padding*2*((grid_height+(ti_spec*len(counts)))/grid_width)))  
     else:
-        # fig = plt.figure(figsize=((2)*12,12)) 
+        fig = plt.figure(figsize=((2)*36,36)) 
         gs = fig.add_gridspec(int(grid_height+(ti_spec*len(counts))), int(2*grid_width), wspace=padding, hspace=padding)
 
     # Merge Plots
@@ -449,6 +484,9 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
             y = int(sum((grid_width/counts[j-1]) for j in range(1, len(orgs.split(splitter))))) + (ti_spec*(n-1))
             x_titles["orgs"] = "Organelles"
             for i, org in enumerate(orgs.split(splitter)):
+                if i == 0:
+                    title_axes["orgs"] = fig.add_subplot(gs[int((y-(grid_width/(len(orgs.split(splitter))+1))+(i*(grid_width/(len(orgs.split(splitter))+1))))-ti_spec):int((y-(grid_width/(len(orgs.split(splitter))+1))+(i*(grid_width/(len(orgs.split(splitter))+1))))),
+                                                            int(0):int(grid_width/(len(orgs.split(splitter))+1))])
                 y_titles[org] = org
                 axes[org] = fig.add_subplot(gs[int((y-(grid_width/(len(orgs.split(splitter))+1))+(i*(grid_width/(len(orgs.split(splitter))+1))))):int(y+((i)*(grid_width/(len(orgs.split(splitter))+1)))),
                                                int(0):int(grid_width/(len(orgs.split(splitter))+1))])
@@ -468,19 +506,16 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
                                                      int(((2*i)*(grid_width/counts[n-2]))):int(((2*i)*((grid_width/counts[n-2]))+(2*(grid_width/counts[n-2]))))])
     
     # combine dictionaries of titles
-    all_titles = ['Legend'] + list(x_titles.values()) + list(y_titles.values())
+    key_titles = ['Legend', 'Overlap Only', 'Merge'] + list(y_titles.values())
 
     #######################
     # Determine Font Size #
     #######################
     width = min([axes[ax].get_window_extent().transformed(fig.dpi_scale_trans.inverted()).width * fig.dpi for ax in axes.keys()])
-    fs = grid_width
-    m = 1.00
-    for title in all_titles:
-        if m == 1.00:
-            f, m = find_size(width, title, grid_width, fig, m)
-        else:
-            f, m = find_size(width, title, fs, fig, m)
+    height = (title_axes[orgs].get_window_extent().transformed(fig.dpi_scale_trans.inverted()).height * fig.dpi) / 2.5
+    fs = grid_width*2
+    for title in key_titles:
+        f = get_bounded_font_size(width=width, height=height, text=title, base_size=int(fs*2), fig=fig, style=fontstyle)
         if f < fs:
             fs = f
 
@@ -510,15 +545,21 @@ def plot_n_overlaps(orgs: str, splitter: str, organelle_segs: dict, scale: any, 
     for org in title_axes.keys():
         title_axes[org].set_xlim([0,1])
         title_axes[org].set_ylim([0,1])
-        title_axes[org].plot([0.1, 0.9], [0.5, 0.5], color='#000000', lw=(lw))
-        title_axes[org].text(0.5, 0.6, x_titles[org], fontsize=fs, 
-                             horizontalalignment='center')
-        title_axes[org].text(0.25, 0.4, 'Merge', fontsize=(fs),
-                             horizontalalignment='center',
-                             verticalalignment='top')
-        title_axes[org].text(0.75, 0.4, 'Overlap Only', fontsize=(fs),
-                             horizontalalignment='center',
-                             verticalalignment='top')
+        if org != "orgs":
+            title_axes[org].plot([0.1, 0.9], [0.5, 0.5], color='#000000', lw=(lw))
+            title_axes[org].text(0.5, 0.75, x_titles[org], fontsize=fs, 
+                                horizontalalignment='center',
+                                verticalalignment='center')
+            title_axes[org].text(0.25, 0.25, 'Merge', fontsize=(fs),
+                                horizontalalignment='center',
+                                verticalalignment='center')
+            title_axes[org].text(0.75, 0.25, 'Overlap Only', fontsize=(fs),
+                                horizontalalignment='center',
+                                verticalalignment='center')
+        else:
+            title_axes[org].text(0.5, 0.25, x_titles[org], fontsize=fs,
+                                 horizontalalignment='center',
+                                 verticalalignment='center')
         title_axes[org].spines['top'].set_visible(False)
         title_axes[org].spines['bottom'].set_visible(False)
         title_axes[org].spines['right'].set_visible(False)
