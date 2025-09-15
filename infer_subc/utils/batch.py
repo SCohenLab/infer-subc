@@ -124,11 +124,11 @@ def find_segmentation_tiff_files(prototype:Union[Path,str],
 
     # segmentations
     for org_n in name_list:
-        org_name = Path(seg_path) / f"{prototype.stem}{suffix}{org_n}.tiff"
+        org_name = Path(seg_path) / f"{prototype.stem}{suffix}-{org_n}.tiff"
         if org_name.exists(): 
             out_files[org_n] = org_name
         elif org_name.exists() == False: 
-            org_name = Path(seg_path) / f"{prototype.stem}{suffix}{org_n}.tif"
+            org_name = Path(seg_path) / f"{prototype.stem}{suffix}-{org_n}.tif"
             out_files[org_n] = org_name
         else: 
             print(f"{org_n} .tiff file not found in {seg_path} returning")
@@ -520,7 +520,6 @@ def batch_process_segmentation(raw_path: Union[Path,str],
 def batch_process_pre_segmented(raw_path: Union[Path,str],
                                 raw_file_type: str,
                                 seg_path: Union[Path, str],
-                                out_path: Union[Path, str],
                                 name_suffix: Union[str, None],
                                 mask_suffix: Union[str, None],
                                 soma_neur_settings: Union[List, None],
@@ -541,10 +540,8 @@ def batch_process_pre_segmented(raw_path: Union[Path,str],
     raw_file_type: str
         The raw file type (e.g., ".tiff" or ".czi")
     seg_path: Union[Path, str]
-        A string or a Path object of the path where the segmentation outputs were saved.
-    out_path: Union[Path, str]
-        A string or a Path object of the path where the additional segmentation outputs should be saved.
-        Note: saving these files to the same path as the seg_path overwrites the seg_path files
+        A string or a Path object of the path where the segmentation outputs were saved. 
+        The new edited segmentaitons will be saved here as well.
     name_suffix: str
         An optional string that was included before the segmentation suffix at the end of the output file. 
         For example, if the name_suffix was "20240105", the segmentation file output from the 1.1_masks workflow would have included:
@@ -588,34 +585,40 @@ def batch_process_pre_segmented(raw_path: Union[Path,str],
         if soma_neur_settings:
             mask = read_tiff_image(find_segmentation_tiff_files(fil, [mask_suffix], seg_path, name_suffix)[mask_suffix])
             som_neu_seg = infer_soma_neurites(mask, *soma_neur_settings)
-            export_inferred_organelle(som_neu_seg, name_suffix+"soma_neurites", meta_dict, out_path)  
+            export_inferred_organelle(som_neu_seg, name_suffix+"soma_neurites", meta_dict, seg_path)  
             seg_list.append("soma_neurites")
         
         if declump_lyso_settings:
             lyso = read_tiff_image(find_segmentation_tiff_files(fil, ['lyso'], seg_path, name_suffix)['lyso'])
+            # export_inferred_organelle(lyso, name_suffix+"lsyo_declump", meta_dict, seg_path)  
             # add declumping here
         
         if declump_mito_settings:
             mito = read_tiff_image(find_segmentation_tiff_files(fil, ['mito'], seg_path, name_suffix)['mito'])
+            # export_inferred_organelle(mito, name_suffix+"lsyo_declump", meta_dict, seg_path)  
             # add declumping here
         
         if declump_golgi_settings:
             golgi = read_tiff_image(find_segmentation_tiff_files(fil, ['golgi'], seg_path, name_suffix)['golgi'])
+            # export_inferred_organelle(golgi, name_suffix+"lsyo_declump", meta_dict, seg_path)  
             # add declumping here
         
         
         if declump_perox_settings:
             perox = read_tiff_image(find_segmentation_tiff_files(fil, ['perox'], seg_path, name_suffix)['perox'])
+            # export_inferred_organelle(perox, name_suffix+"lsyo_declump", meta_dict, seg_path)  
             # add declumping here
         
         
         if declump_ER_settings:
             er = read_tiff_image(find_segmentation_tiff_files(fil, ['ER'], seg_path, name_suffix)['ER'])
+            # export_inferred_organelle(er, name_suffix+"lsyo_declump", meta_dict, seg_path)  
             # add declumping here
 
         
         if declump_LD_settings:
             ld = read_tiff_image(find_segmentation_tiff_files(fil, ['LD'], seg_path, name_suffix)['LD'])
+            # export_inferred_organelle(ld, name_suffix+"lsyo_declump", meta_dict, seg_path)  
             # add declumping here
         
         end = time.time()
