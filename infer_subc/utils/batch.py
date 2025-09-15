@@ -796,6 +796,9 @@ def QC_filter(in_img: np.ndarray,
             composite = apply_mask(min_max_intensity_normalization(raw_img).sum(axis=0), in_img)
             intensity_per_label = [composite[label(in_img) == i].sum()/(label(in_img) == i).sum() for i in np.unique(label(in_img))]
             out_img[label(in_img) == (np.argmax(intensity_per_label[1:])+1)] = 1 
+        elif method.lower() == 'er':
+            out_img = in_img.copy()
+            out_img[out_img>0] = 1
         elif method.lower() == 'none':
             print("No filtering applied.")
             out_img = in_img # option to not apply any filtering given user error
@@ -815,7 +818,7 @@ def filter_segmentation(suffix, filt, edited, raw, status="Fail"):
     suffix : str
         The suffix to identify the specific segmentation being filtered.
     filt : Union[int, str, None]
-        The method of filtering to apply in the QC_filter function. The value must equal either an integer, 'Largest', or 'Brightest'.
+        The method of filtering to apply in the QC_filter function. The value must equal either an integer, 'Largest', 'Brightest', or 'ER'.
     edited : np.ndarray
         The edited segmentation image.
     raw : np.ndarray
@@ -925,13 +928,13 @@ def edit_segmentation(suffix, viewer, edit):
         settings.application.ipy_interactive = False
         viewer2 = napari.Viewer()
         print("You have chosen to edit the segmentation for", suffix)
+        viewer2.add_image(viewer.layers['raw'].data, name=f'raw')
         try:
             viewer2.add_image(viewer.layers[f'{suffix}_raw'].data, name=f'{suffix}_raw', blending='additive')
         except (ValueError, KeyError):
-            print(f"No raw image found for {suffix}, adding the 'raw' layer instead.")
-            viewer2.add_image(viewer.layers['raw'].data, name=f'raw')
+            print(f"No raw image found for {suffix}.")
         viewer2.add_labels(viewer.layers[f'{suffix}_seg'].data, name=f'{suffix}_seg')
-        print(f"Head to the Napari window to edit your {suffix} segmentation output!")
+        print(f"Head to the Napari window to edit your {suffix} segmentation output in the {suffix}_seg layer.")
         print(f"When you close out of the viewer, the edited {suffix} segmentation will be saved automatically")
         napari.run()
         settings.application.ipy_interactive = True
