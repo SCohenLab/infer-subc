@@ -392,8 +392,7 @@ def batch_process_segmentation(raw_path: Union[Path,str],
                     fill_filter_method: str]
     
     For infer_soma_neurites
-    - `som_neu_settings` = [run_som_neu: bool,
-                            method: str]
+    - `som_neu_settings` = [method: str]
 
 
     Returns:
@@ -430,7 +429,7 @@ def batch_process_segmentation(raw_path: Union[Path,str],
             masks = infer_masks(img_data, *masks_settings)
             export_inferred_organelle(masks, name_suffix+"masks", meta_dict, seg_path)
             seg_list.append("masks")
-            if mask is not None:
+            if mask is None:
                 mask = masks
             else:
                 print("multiple mask segmentations made for same image")
@@ -440,7 +439,7 @@ def batch_process_segmentation(raw_path: Union[Path,str],
             masks_A =  infer_masks_A(img_data, *masks_A_settings)
             export_inferred_organelle(masks_A, name_suffix+"masks_A", meta_dict, seg_path)
             seg_list.append("masks_A")
-            if mask is not None:
+            if mask is None:
                 mask = masks_A
             else:
                 print("multiple mask segmentations made for same image")
@@ -450,7 +449,7 @@ def batch_process_segmentation(raw_path: Union[Path,str],
             masks_B = infer_masks_B(img_data, *masks_B_settings)
             export_inferred_organelle(masks_B, name_suffix+"masks_B", meta_dict, seg_path)
             seg_list.append("masks_B")
-            if mask is not None:
+            if mask is None:
                 mask = masks_B
             else:
                 print("multiple mask segmentations made for same image")
@@ -460,7 +459,7 @@ def batch_process_segmentation(raw_path: Union[Path,str],
             masks_C = infer_masks_C(img_data, *masks_C_settings)
             export_inferred_organelle(masks_C, name_suffix+"masks_C", meta_dict, seg_path)
             seg_list.append("masks_C")
-            if mask is not None:
+            if mask is None:
                 mask = masks_C
             else:
                 print("multiple mask segmentations made for same image")
@@ -470,7 +469,7 @@ def batch_process_segmentation(raw_path: Union[Path,str],
             masks_D = infer_masks_D(img_data, *masks_D_settings)
             export_inferred_organelle(masks_D, name_suffix+"masks_D", meta_dict, seg_path)
             seg_list.append("masks_D")
-            if mask is not None:
+            if mask is None:
                 mask = masks_D
             else:
                 print("multiple mask segmentations made for same image")
@@ -507,9 +506,14 @@ def batch_process_segmentation(raw_path: Union[Path,str],
             seg_list.append("LD")
         
         if som_neu_settings:
-            som_neu_seg = infer_soma_neurites(in_seg=mask, multichannel_input=True, chan=0, method=som_neu_seg[0])
+            som_neu_seg = infer_soma_neurites(in_seg=mask, multichannel_input=True, chan=1, method=som_neu_settings[0])
             export_inferred_organelle(som_neu_seg, name_suffix+"soma_neurites", meta_dict, seg_path)  
             seg_list.append("soma_neurites")
+
+        # if som_neu_settings:
+        #     som_neu_seg = infer_soma_neurites(in_seg=mask, multichannel_input=True, chan=0, method=som_neu_seg[0])
+        #     export_inferred_organelle(som_neu_seg, name_suffix+"soma_neurites", meta_dict, seg_path)  
+        #     seg_list.append("soma_neurites")
 
         end = time.time()
         print(f"Processing for {img} completed in {(end - start)/60} minutes.")
