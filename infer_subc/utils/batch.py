@@ -840,7 +840,7 @@ def filter_segmentation(suffix, filt, edited, raw, status="Fail"):
             settings = get_settings()
             settings.application.ipy_interactive = False
             viewer2 = napari.Viewer()
-            print(f"Your {suffix} segmentation contains MORE THAN ONE {suffix} object. For quantification, you must only have ONE {suffix} object, attempting to correct this automatically...")
+            print(f"\nYour {suffix} segmentation contains MORE THAN ONE {suffix} object. For quantification, you must only have ONE {suffix} object, attempting to correct this automatically...")
             filtered_obj_seg = QC_filter(edited, raw, method=filt)
 
             if len(np.unique(filtered_obj_seg)) == 2:
@@ -927,7 +927,7 @@ def edit_segmentation(suffix, viewer, edit):
         settings = get_settings()
         settings.application.ipy_interactive = False
         viewer2 = napari.Viewer()
-        print("You have chosen to edit the segmentation for", suffix)
+        print("\nYou have chosen to edit the segmentation for", suffix)
         viewer2.add_image(viewer.layers['raw'].data, name=f'raw')
         try:
             viewer2.add_image(viewer.layers[f'{suffix}_raw'].data, name=f'{suffix}_raw', blending='additive')
