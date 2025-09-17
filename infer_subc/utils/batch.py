@@ -392,7 +392,9 @@ def batch_process_segmentation(raw_path: Union[Path,str],
                     fill_filter_method: str]
     
     For infer_soma_neurites
-    - `som_neu_settings` = [method: str]
+    - `som_neu_settings` = [rad_method: str,
+                            soma_method: str,
+                            neurite_method: str]
 
 
     Returns:
@@ -561,7 +563,9 @@ def batch_process_pre_segmented(raw_path: Union[Path,str],
     For infer_soma_neurites:
     - `soma_neur_settings` = [multichannel_input: bool, 
                               chan: int, 
-                              method: str]
+                              rad_method: str,
+                              soma_method: str,
+                              neurite_method: str]
     """
     start = time.time()
     count = 0
