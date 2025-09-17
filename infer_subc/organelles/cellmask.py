@@ -764,8 +764,14 @@ def infer_soma_neurites(in_seg: np.ndarray, multichannel_input: bool=False, chan
         Whether the input is a multichannel image.
     chan : int
         The channel to use for segmentation if it is a multichannel image.
+    rad_method: str
+        The method used to approximate the radius ('binary' or 'isotropic').
+    soma_method: str
+        The method used to approximate the soma ('binary' or 'isotropic').
+    neurite_method: str
+        The method used to approximate the neurites ('binary' or 'isotropic').
     method : str
-        The method to use for inference ('binary' or 'isotropic').
+        The optional method to used for all unassigned methods ('binary' or 'isotropic') (optional).
 
     Returns:
     -------
