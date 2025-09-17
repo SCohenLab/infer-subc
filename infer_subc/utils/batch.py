@@ -506,7 +506,7 @@ def batch_process_segmentation(raw_path: Union[Path,str],
             seg_list.append("LD")
         
         if som_neu_settings:
-            som_neu_seg = infer_soma_neurites(in_seg=mask, multichannel_input=True, chan=1, method=som_neu_settings[0])
+            som_neu_seg = infer_soma_neurites(in_seg=mask, multichannel_input=True, chan=1, *som_neu_settings)
             export_inferred_organelle(som_neu_seg, name_suffix+"soma_neurites", meta_dict, seg_path)  
             seg_list.append("soma_neurites")
 

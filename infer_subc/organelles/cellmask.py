@@ -752,7 +752,7 @@ def clean_neurites_from_soma(cell_mask: np.ndarray, soma_out_2: np.ndarray):
         neurites_out_2[(cell_mask == cell_num) & (neurites_mask > 0)] = (neurites_labels[(cell_mask == cell_num) & (neurites_mask > 0)] * label_factor) + cell_num
     return neurites_out_2
 
-def infer_soma_neurites(in_seg: np.ndarray, multichannel_input: bool=False, chan: int=0, method: str='binary'):
+def infer_soma_neurites(in_seg: np.ndarray, multichannel_input: bool=False, chan: int=0, rad_method: str='method', soma_method: str='method', neurite_method: str='method', method='binary'):
     """
     Infers the soma and neurite regions from the input segmentation based on either the binary or isotropic filtering method.
 
@@ -775,19 +775,27 @@ def infer_soma_neurites(in_seg: np.ndarray, multichannel_input: bool=False, chan
     ###################
     # EXTRACT
     ###################  
+
+    if (rad_method == 'method'):
+        rad_method = method
+    if (soma_method == 'method'):
+        soma_method = method
+    if (neurite_method == 'method'):
+        neurite_method = method
+
     cell_mask = select_cellmask_from_img(in_seg, multichannel_input=multichannel_input, chan=chan)
 
     ###################
     # PRE_PROCESSING
     ################### 
-    radii_mask = find_radius(cell_mask, method)
+    radii_mask = find_radius(cell_mask, rad_method)
 
     ###################
     # CORE_PROCESSING
     ###################
-    soma_initial = infer_soma_from_mask(cell_mask, radii_mask, method)
+    soma_initial = infer_soma_from_mask(cell_mask, radii_mask, soma_method)
 
-    neurites_initial = infer_neurites_from_mask(cell_mask, radii_mask, soma_initial, method)
+    neurites_initial = infer_neurites_from_mask(cell_mask, radii_mask, soma_initial, neurite_method)
 
     ###################
     # POST_PROCESSING
