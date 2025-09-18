@@ -50,7 +50,7 @@
     },
     "7": {
         "category": "postpostprocessing",
-        "function": "stack_layers",
+        "function": "stack_masks",
         "parent": [5,6],
         "annotation": "stack soma and neurites layers"
     }
