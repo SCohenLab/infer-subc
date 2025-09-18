@@ -709,7 +709,7 @@ def clean_soma_from_neurites(cell_mask: np.ndarray, neurites_out_1: np.ndarray) 
     # Find the most common value in soma_mask for each cell and assign only those pixels
     for cell_num in cell_nums:
         cell_region = (cell_mask == cell_num)
-        soma_region = soma_mask & cell_region
+        soma_region = label(soma_mask & cell_region)
         # Only keep the largest connected region (most common value)
         if np.any(soma_region):
             bincount = np.bincount(soma_region.ravel())
