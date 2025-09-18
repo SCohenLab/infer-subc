@@ -112,7 +112,7 @@ Use one of the following notebooks to segment (or infer) the `cellmask` and `nuc
     - [one cell per field of view FOV](/notebooks/part_1_segmentation_workflows/1.1a_infer_masks_from-composite_single_cell.ipynb)
     - [one or more cells per FOV](/notebooks/part_1_segmentation_workflows/1.1b_infer_masks_from-composite_multiple-cells.ipynb)
 
-**Step 2️⃣: Segment organelles**
+**Step 2️⃣: Segment organelles and regions**
 
 Each of the organelles you wish to include in your analysis should be segmented from a single fluorescently labeled structure. Use the following notebooks to segment each organelle from a single intensity channel in the input image.
 
@@ -122,11 +122,12 @@ Each of the organelles you wish to include in your analysis should be segmented 
 5. Infer [`peroxisomes`](/notebooks/part_1_segmentation_workflows/1.5_infer_peroxisome.ipynb)
 6. Infer [`endoplasmic reticulum (ER)`](/notebooks/part_1_segmentation_workflows/1.6_infer_ER.ipynb)
 7. Infer [`lipid droplets`](/notebooks/part_1_segmentation_workflows/1.7_infer_lipid_droplet.ipynb)
+8. Infer [`soma and neurites`](/notebooks/part_1_segmentation_workflows/1.8_infer_soma_neurites.ipynb)
 
 ### <ins>Quality Check and Mask Separation:</ins> [Validate segmentation results]()🔎
 After segmenting all the cells in your dataset, we recommend you quality check your segmentation results by visually inspecting the images. The Segmentation Validation pipeline is included in the [Full Quantification Pipeline Notebook](/notebooks/part_2_quantification/full_quantification_pipeline.ipynb) to streamline the validation process.
 
-**REQUIRED:** This notebook will also separate the `masks` segmentation output into separate `cell` and `nuc` (i.e., nucleus) segmentation files. This is ***required*** for Part 2 – Organelle Quantification.
+**REQUIRED:** This notebook will also separate the `masks` segmentation output into separate `cell` and `nuc` (i.e., nucleus) segmentation files as well as the optional `soma_neurite` segmentation output into separate `soma` and `neurite` segmentation files. This is ***required*** for Part 2 – Organelle Quantification.
 
 🚧 *In a future version, this notebook will also include quality checks for assumptions made during quantification (i.e., only one nucleus and ER per cell, etc.).*
 
