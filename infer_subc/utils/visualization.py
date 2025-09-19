@@ -370,6 +370,22 @@ def plot_n_overlaps(orgs: str,
         Figure displaying the nth dimensional image alongside the lower order interactions
 
     """
+    # Notes for future development:
+    #   Try to add sphere shapes of the colors taken from napari as the plot markers in the legend for 3D images to give a better representation of the colors. 2D should remain as is
+    #       Using a black circle with radius same as sphere in a single layer and above that creating a sphere of chosen color with the 3D opacity setup should allow for an image that still displays on the white background
+    #       Note that the overlap colors are not translucent
+    #   Try to include multiple versions of contact visualization
+    #   Enable automatic rescaling of DPI for larger overlap orders to ensure matplotlib is able to properly plot everything
+    #   Better formatting of colors
+    #   Better formatting of organization to ensure everything is visible
+    #   Adjustable angles of the viewed image
+    #   Cutouts of key points automatically determined by the code to ensure zoomed in images of desired overlap regions are visible to viewers
+    #       This can be achieved with the slicing of numpy arrays around chosen point similar to the crop to square function above
+    #   Automatic zooming of numpy arrays to remove empty edges
+    #       This can be achieved with the slicing of numpy arrays around chosen point similar to the crop to square function above
+    #   Add in the alive progress bar 
+    #   Multithread the interactions to allow each core to perform the calculations for each interaction
+
     # Assigning Font Constant
     rc('font',family=fontstyle)
 
