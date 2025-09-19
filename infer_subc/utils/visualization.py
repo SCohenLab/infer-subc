@@ -504,16 +504,18 @@ def plot_n_overlaps(orgs: str,
                 x_titles[org] = org
                 title_axes[org] = fig.add_subplot(gs[int((y - (grid_width/counts[n-2])) - (ti_spec)):int(y - (grid_width/counts[n-2])),
                                                      int(((2*i)*(grid_width/counts[n-2]))):int(((2*i)*((grid_width/counts[n-2]))+(2*(grid_width/counts[n-2]))))])
-    
-    # combine dictionaries of titles
-    key_titles = ['Legend', 'Overlap Only', 'Merge'] + list(y_titles.values())
+    # determine line width
+    lw = title_axes[list(title_axes.keys())[0]].get_window_extent().height * 0.01
+
+    # combine dictionaries of titles and legends
+    key_titles = ['Legend', 'Overlap Only', 'Merge', '      Nth Order Overlap', '      Lower Order Overlap'] + list(y_titles.values())
 
     #######################
     # Determine Font Size #
     #######################
     width = min([axes[ax].get_window_extent().transformed(fig.dpi_scale_trans.inverted()).width * fig.dpi for ax in axes.keys()])
-    height = (title_axes[orgs].get_window_extent().transformed(fig.dpi_scale_trans.inverted()).height * fig.dpi) / 2.5
-    fs = grid_width*2
+    height = (((title_axes[orgs].get_window_extent().transformed(fig.dpi_scale_trans.inverted()).height - (lw/72)) * fig.dpi) / 2)
+    fs = width
     for title in key_titles:
         f = get_bounded_font_size(width=width, height=height, text=title, base_size=int(fs*2), fig=fig, style=fontstyle)
         if f < fs:
@@ -541,12 +543,11 @@ def plot_n_overlaps(orgs: str,
     ######################
     # Assigning X Titles #
     ######################
-    lw = title_axes[list(title_axes.keys())[0]].get_window_extent().height * 0.01
     for org in title_axes.keys():
         title_axes[org].set_xlim([0,1])
         title_axes[org].set_ylim([0,1])
         if org != "orgs":
-            title_axes[org].plot([0.1, 0.9], [0.5, 0.5], color='#000000', lw=(lw))
+            title_axes[org].plot([0.05, 0.95], [0.5, 0.5], color='#000000', lw=(lw), solid_capstyle='round')
             title_axes[org].text(0.5, 0.75, x_titles[org], fontsize=fs, 
                                 horizontalalignment='center',
                                 verticalalignment='center')
