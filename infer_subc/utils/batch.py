@@ -18,6 +18,7 @@ from infer_subc.organelles.lysosome import infer_lyso
 from infer_subc.organelles.mitochondria import infer_mito
 from infer_subc.organelles.peroxisome import infer_perox
 from infer_subc.organelles.cellmask import infer_soma_neurites
+from infer_subc.organelles.declumping import watershed_declumping
 
 
 
@@ -598,36 +599,41 @@ def batch_process_pre_segmented(raw_path: Union[Path,str],
         
         if declump_lyso_settings:
             lyso = read_tiff_image(find_segmentation_tiff_files(fil, ['lyso'], seg_path, name_suffix)['lyso'])
-            # export_inferred_organelle(lyso, name_suffix+"lsyo_declump", meta_dict, seg_path)  
-            # add declumping here
+            lyso = watershed_declumping(img_data, lyso, *declump_lyso_settings)
+            export_inferred_organelle(lyso, name_suffix+"lyso_declump", meta_dict, seg_path)  
+            seg_list.append("lyso_declump")
         
         if declump_mito_settings:
             mito = read_tiff_image(find_segmentation_tiff_files(fil, ['mito'], seg_path, name_suffix)['mito'])
-            # export_inferred_organelle(mito, name_suffix+"lsyo_declump", meta_dict, seg_path)  
-            # add declumping here
+            mito = watershed_declumping(img_data, mito, *declump_mito_settings)
+            export_inferred_organelle(mito, name_suffix+"mito_declump", meta_dict, seg_path)  
+            seg_list.append("mito_declump")
         
         if declump_golgi_settings:
             golgi = read_tiff_image(find_segmentation_tiff_files(fil, ['golgi'], seg_path, name_suffix)['golgi'])
-            # export_inferred_organelle(golgi, name_suffix+"lsyo_declump", meta_dict, seg_path)  
-            # add declumping here
-        
+            golgi = watershed_declumping(img_data, golgi, *declump_golgi_settings)
+            export_inferred_organelle(golgi, name_suffix+"golgi_declump", meta_dict, seg_path)  
+            seg_list.append("golgi_declump")
         
         if declump_perox_settings:
             perox = read_tiff_image(find_segmentation_tiff_files(fil, ['perox'], seg_path, name_suffix)['perox'])
-            # export_inferred_organelle(perox, name_suffix+"lsyo_declump", meta_dict, seg_path)  
-            # add declumping here
+            perox = watershed_declumping(img_data, perox, *declump_perox_settings)
+            export_inferred_organelle(perox, name_suffix+"perox_declump", meta_dict, seg_path)  
+            seg_list.append("perox_declump")
         
         
         if declump_ER_settings:
             er = read_tiff_image(find_segmentation_tiff_files(fil, ['ER'], seg_path, name_suffix)['ER'])
-            # export_inferred_organelle(er, name_suffix+"lsyo_declump", meta_dict, seg_path)  
-            # add declumping here
+            er = watershed_declumping(img_data, er, *declump_ER_settings)
+            export_inferred_organelle(er, name_suffix+"ER_declump", meta_dict, seg_path)  
+            seg_list.append("ER_declump")
 
         
         if declump_LD_settings:
             ld = read_tiff_image(find_segmentation_tiff_files(fil, ['LD'], seg_path, name_suffix)['LD'])
-            # export_inferred_organelle(ld, name_suffix+"lsyo_declump", meta_dict, seg_path)  
-            # add declumping here
+            ld = watershed_declumping(img_data, ld, *declump_LD_settings)
+            export_inferred_organelle(ld, name_suffix+"LD_declump", meta_dict, seg_path)  
+            seg_list.append("LD_declump")
         
         end = time.time()
         print(f"Processing for {fil} completed in {(end - start)/60} minutes.")
