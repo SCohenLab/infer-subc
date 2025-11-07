@@ -155,101 +155,6 @@ def get_normalized_distance_and_mask(labels: np.ndarray,
     else:
         return normalized_distance, good_mask, i_center, j_center
     
-# def get_normalized_distance_and_mask(labels: np.ndarray, 
-#                                       center_objects: Union[np.ndarray, None], 
-#                                       center_on: bool):
-#     """
-#     helper for radial distribution
-#     Parameters:
-#     ----------
-#     labels:
-#         2D (YX) np.ndarray - normally the result of a binary ZYX segmentation of the cell mask after a sum projection across the Z dimension
-#     center_object:
-#         2D (YX) np.ndarray - normally the result of a binary ZYX segmentation of the nucleus after a sum projection across the Z dimension.
-#         If no centering object is included, the center of the labels will be used.
-#     center_on:
-#         True = the center of the centering object will be used as the starting point to calculate the distance from the center
-#         False = the edge of the centering object will be used as the starting point to calculate the distance from the center
-    
-#     Output:
-#     ----------
-#     normalized_distance:
-#         2D (YX) np.ndarray with intensity values representing the distance btween the edge of the "labels" and the centering object
-#     good_mask:
-#         mask of the areas that were included in the normalized_distance output
-#     i_center
-#     j_center
-#     """
-
-#     d_to_edge = centrosome.cpmorphology.distance_to_edge(labels)
-
-#     if center_objects is not None:
-#         center_labels = label(center_objects)
-#         pixel_counts = centrosome.cpmorphology.fixup_scipy_ndimage_result(ndi_sum(np.ones(center_labels.shape), 
-#                                                                                   center_labels, 
-#                                                                                   np.arange(1, np.max(center_labels) + 1, dtype=np.int32)))
-#         good = pixel_counts > 0
-#         i, j = (centrosome.cpmorphology.centers_of_labels(center_labels) + 0.5).astype(int)
-#         ig = i[good]
-#         jg = j[good]
-#         lg = np.arange(1, len(i) + 1)[good]
-        
-#         if center_on:  # Reduce the propagation labels to the centers of the centering objects
-#             center_labels = np.zeros(center_labels.shape, int)
-#             center_labels[ig, jg] = lg
-
-#         cl, d_from_center = centrosome.propagate.propagate(np.zeros(center_labels.shape), center_labels, labels != 0, 1)
-#         cl[labels == 0] = 0
-
-#         missing_mask = (labels != 0) & (cl == 0)
-#         missing_labels = np.unique(labels[missing_mask])
-        
-#         if len(missing_labels):
-#             print("WTF!!  how did we have missing labels?")
-#             all_centers = centrosome.cpmorphology.centers_of_labels(labels)
-#             missing_i_centers, missing_j_centers = all_centers[:, missing_labels-1]
-#             di = missing_i_centers[:, np.newaxis] - ig[np.newaxis, :]
-#             dj = missing_j_centers[:, np.newaxis] - jg[np.newaxis, :]
-#             missing_best = lg[np.argsort(di * di + dj * dj)[:, 0]]
-#             best = np.zeros(np.max(labels) + 1, int)
-#             best[missing_labels] = missing_best
-#             cl[missing_mask] = best[labels[missing_mask]]
-
-#             iii, jjj = np.mgrid[0 : labels.shape[0], 0 : labels.shape[1]]
-#             di = iii[missing_mask] - i[cl[missing_mask] - 1]
-#             dj = jjj[missing_mask] - j[cl[missing_mask] - 1]
-#             d_from_center[missing_mask] = np.sqrt(di * di + dj * dj)
-
-#         good_mask = cl > 0
-            
-#     else:
-#         i, j = centrosome.cpmorphology.maximum_position_of_labels(d_to_edge, labels, [1])
-#         center_labels = np.zeros(labels.shape, int)
-#         center_labels[i, j] = labels[i, j]
-#         colors = centrosome.cpmorphology.color_labels(labels)
-#         ncolors = np.max(colors)
-#         d_from_center = np.zeros(labels.shape)
-#         cl = np.zeros(labels.shape, int)
-
-#         for color in range(1, ncolors + 1):
-#             mask = colors == color
-#             l, d = centrosome.propagate.propagate( np.zeros(center_labels.shape), center_labels, mask, 1)
-#             d_from_center[mask] = d[mask]
-#             cl[mask] = l[mask]
-
-#         good_mask = cl > 0
-
-#     i_center = np.zeros(cl.shape)
-#     i_center[good_mask] = i[cl[good_mask] - 1]
-
-#     j_center = np.zeros(cl.shape)
-#     j_center[good_mask] = j[cl[good_mask] - 1]
-
-#     normalized_distance = np.zeros(labels.shape)
-#     total_distance = d_from_center + d_to_edge
-#     normalized_distance[good_mask] = d_from_center[good_mask] / (total_distance[good_mask] + 0.001)
-    
-#     return normalized_distance, good_mask, i_center, j_center
 
 ### USED ###
 def get_concentric_distribution(
@@ -554,43 +459,6 @@ def zernike_polynomial(labels, zernike_is):
     return z
     
 
-   
-# def get_zernike_metrics(        
-#         cellmask_proj: np.ndarray,
-#         nucleus_proj: Union[np.ndarray, None], 
-#         org_proj: np.ndarray,
-#         organelle_name: str,
-#         zernike_degree: int = 9 
-#         ):
-
-#     """
-    
-#     """
-
-#     labels = label(cellmask_proj>0) #extent as 0,1 rather than bool
-#     zernike_indexes = centrosome.zernike.get_zernike_indexes( zernike_degree + 1)
-
-
-#     z = zernike_polynomial(labels, zernike_indexes)
-
-#     z_cm = zernike_metrics(cellmask_proj, z)
-#     z_org = zernike_metrics(org_proj, z)
-#     z_nuc = zernike_metrics(nucleus_proj, z)
-
-
-#     # nm_labels = [f"{n}_{m}" for (n, m) in (zernike_indexes)
-#     stats_tab = pd.DataFrame({'organelle':organelle_name,
-#                                 'mask':'cell',
-#                                 'zernike_n':[zernike_indexes[:,0].tolist()],
-#                                 'zernike_m':[zernike_indexes[:,1].tolist()],
-#                                 'zernike_cm_mag':[z_cm[0].tolist()],
-#                                 'zernike_cm_phs':[z_cm[1].tolist()],   
-#                                 'zernike_obj_mag':[z_org[0].tolist()],
-#                                 'zernike_obj_phs':[z_org[1].tolist()],
-#                                 'zernike_nuc_mag':[z_nuc[0].tolist()],
-#                                 'zernike_nuc_phs':[z_nuc[1].tolist()]})
-
-#     return stats_tab
 
 ### USED ###
 def get_zernike_metrics(        
@@ -629,6 +497,293 @@ def get_zernike_metrics(
                                 **({'zernike_center_phs':[z_nuc[1].tolist()]} if nucleus_proj is not None else {})})
 
     return stats_tab
+
+
+
+### USED ###
+def get_XY_distribution(        
+        mask: np.ndarray,
+        centering_obj: np.ndarray,
+        obj:np.ndarray,
+        obj_name: str,
+        scale: Union[tuple, None]=None,
+        num_bins: Union[int, None] = 5,
+        center_on: bool = False,
+        keep_center_as_bin: bool = True,
+        zernike_degrees: Union[int, None] = None):
+
+    """
+    Params
+    ----------
+    mask_obj: np.ndarray,
+        a binary 3D (ZYX) np.ndarray of the area that will be measured from
+    centering_obj: np.ndarray
+        a binary 3D (ZYX) np.ndarray of the object that will be used as the center of the concentric rins ("bins")
+    obj: np.ndarray
+        a 3D (ZYX) np.ndarray image of what will be measured within the masked area
+    obj_name: str
+        the name or nickname for the obj being measured; this will appear as a column in the output datasheet
+    scale: Union[tuple, None]=None
+        a tuple that contains the real world dimensions for each dimension in the image (Z, Y, X)
+    num_bins: Union[int,None] = None
+        the number of concentric rings to draw between the centering object and edge of the mask; None will result in 5 bins
+    center_on: bool = False
+        True = distribute the bins from the center of the centering object
+        False = distribute the bins from the edge of the centering object
+    keep_center_as_bin: bool = True
+        True = include the centering object area when creating the bins
+        False = do not include the centering object area when creating the bins
+    zernike_degrees: Union[int,None] = None
+        the number of zernike degrees to include for the zernike shape descriptors; if None, the zernike measurements will not 
+        be included in the output
+
+
+    Returns
+    -----------
+    XY_metrics:
+        a pandas Dataframe of bin, wedge, and zernike measurements
+    dist_bin_mask:
+        an np.ndarray mask of the concentric ring bins
+    dist_wedge_mask 
+        an np.ndarray mask of the 8 radial wedges
+
+    """
+
+    mask_proj = create_masked_sum_projection(mask)
+    center_proj = create_masked_sum_projection(centering_obj,mask.astype(bool)) if centering_obj is not None else None
+    obj_proj = create_masked_sum_projection(obj,mask.astype(bool))
+ 
+
+    XY_metrics, dist_bin_mask, dist_wedge_mask = get_concentric_distribution(mask_proj=mask_proj, 
+                                                        centering_proj=center_proj, 
+                                                        obj_proj=obj_proj, 
+                                                        obj_name=obj_name, 
+                                                        scale=scale,
+                                                        bin_count=num_bins, 
+                                                        center_on=center_on,
+                                                        keep_center_as_bin=keep_center_as_bin)
+    
+    if zernike_degrees is not None:
+        zernike_metrics = get_zernike_metrics(cellmask_proj=mask_proj, 
+                                            org_proj=obj_proj,
+                                            organelle_name=obj_name, 
+                                            nucleus_proj=center_proj, 
+                                            zernike_degree=zernike_degrees)
+        
+        XY_metrics = pd.merge(XY_metrics, zernike_metrics, on="object")
+
+    return XY_metrics, dist_bin_mask, dist_wedge_mask
+
+###################################
+### Z DISTRIBUTION
+###################################
+
+### USED ###
+def create_masked_depth_projection(img_in:np.ndarray, mask:Union[np.ndarray, None]=None, to_bool:bool=True) -> np.ndarray:
+    """
+    create a masked projection by summing together all XY pixels per Z plane/slice
+    """
+    img_out = img_in.astype(bool) if to_bool else img_in
+    if mask is not None:
+        img_out = apply_mask(img_out, mask)
+    
+    return img_out.sum(axis=(1,2))
+
+### USED ###
+def get_Z_distribution(        
+        mask: np.ndarray,
+        obj:np.ndarray,
+        obj_name: str,
+        center_obj: Union[np.ndarray, None],
+        scale: Union[tuple, None] = None
+        ):
+    """
+    quantification of distribution along the Z axis; all XY pixels are summed together per Z slice and then quantified
+
+    Parameters
+    ------------
+    mask_obj: np.ndarray,
+        a binary 3D (ZYX) np.ndarray of the area that will be measured from
+    obj: np.ndarray
+        a 3D (ZYX) np.ndarray image of what will be measured within the masked area
+    obj_name: str
+        the name or nickname for the obj being measured; this will appear as a column in the output datasheet
+    centering_obj: np.ndarray
+        optional - a binary 3D (ZYX) np.ndarray utilized as the center/reference point of the area; for cells, this is usually the nucleus
+    scale: Union[tuple, None]=None
+        a tuple that contains the real world dimensions for each dimension in the image (Z, Y, X)
+
+    Returns
+    -----------
+    Z_tab:
+        a pandas Dataframe of measurements for each z slice
+
+    """
+
+    # flattened
+    mask_proj = create_masked_depth_projection(mask)
+    obj_proj = create_masked_depth_projection(obj, mask.astype(bool))
+    center_proj = create_masked_depth_projection(center_obj, mask.astype(bool)) if center_obj is not None else None
+
+    Zdist_tab = pd.DataFrame({'object':obj_name,
+                            # non-scaled measurments
+                            'Z_n_slices':mask.shape[0],
+                            'Z_slices':[[i for i in range(mask.shape[0])]],
+                            'Z_mask_vox_cnt':[mask_proj.tolist()],
+                            'Z_obj_vox_cnt':[obj_proj.tolist()]})
+    if center_proj is not None:
+        Zdist_tab['Z_center_vox_cnt'] = [center_proj.tolist()]
+    
+    # scaled measurements added if applicable
+    if scale is not None:
+        round_scale = (round(scale[0], 4), round(scale[1], 4), round(scale[2], 4))
+        Zdist_tab.insert(loc=1, column="scale", value=f"{round_scale}")
+
+        Zdist_tab['Z_height'] = mask.shape[0] * scale[0]
+        Zdist_tab['Z_mask_volume'] = [(mask_proj * np.prod(scale)).tolist()]
+        Zdist_tab['Z_obj_volume'] = [(obj_proj * np.prod(scale)).tolist()]
+        if center_proj is not None:
+            Zdist_tab['Z_center_volume'] = [(center_proj * np.prod(scale)).tolist()]
+    else: 
+        Zdist_tab.insert(loc=2, column="scale", value=f"{tuple(np.ones(3))}")
+
+    return Zdist_tab
+
+
+########## DEPRICATED ##########
+# def get_normalized_distance_and_mask(labels: np.ndarray, 
+#                                       center_objects: Union[np.ndarray, None], 
+#                                       center_on: bool):
+#     """
+#     helper for radial distribution
+#     Parameters:
+#     ----------
+#     labels:
+#         2D (YX) np.ndarray - normally the result of a binary ZYX segmentation of the cell mask after a sum projection across the Z dimension
+#     center_object:
+#         2D (YX) np.ndarray - normally the result of a binary ZYX segmentation of the nucleus after a sum projection across the Z dimension.
+#         If no centering object is included, the center of the labels will be used.
+#     center_on:
+#         True = the center of the centering object will be used as the starting point to calculate the distance from the center
+#         False = the edge of the centering object will be used as the starting point to calculate the distance from the center
+    
+#     Output:
+#     ----------
+#     normalized_distance:
+#         2D (YX) np.ndarray with intensity values representing the distance btween the edge of the "labels" and the centering object
+#     good_mask:
+#         mask of the areas that were included in the normalized_distance output
+#     i_center
+#     j_center
+#     """
+
+#     d_to_edge = centrosome.cpmorphology.distance_to_edge(labels)
+
+#     if center_objects is not None:
+#         center_labels = label(center_objects)
+#         pixel_counts = centrosome.cpmorphology.fixup_scipy_ndimage_result(ndi_sum(np.ones(center_labels.shape), 
+#                                                                                   center_labels, 
+#                                                                                   np.arange(1, np.max(center_labels) + 1, dtype=np.int32)))
+#         good = pixel_counts > 0
+#         i, j = (centrosome.cpmorphology.centers_of_labels(center_labels) + 0.5).astype(int)
+#         ig = i[good]
+#         jg = j[good]
+#         lg = np.arange(1, len(i) + 1)[good]
+        
+#         if center_on:  # Reduce the propagation labels to the centers of the centering objects
+#             center_labels = np.zeros(center_labels.shape, int)
+#             center_labels[ig, jg] = lg
+
+#         cl, d_from_center = centrosome.propagate.propagate(np.zeros(center_labels.shape), center_labels, labels != 0, 1)
+#         cl[labels == 0] = 0
+
+#         missing_mask = (labels != 0) & (cl == 0)
+#         missing_labels = np.unique(labels[missing_mask])
+        
+#         if len(missing_labels):
+#             print("WTF!!  how did we have missing labels?")
+#             all_centers = centrosome.cpmorphology.centers_of_labels(labels)
+#             missing_i_centers, missing_j_centers = all_centers[:, missing_labels-1]
+#             di = missing_i_centers[:, np.newaxis] - ig[np.newaxis, :]
+#             dj = missing_j_centers[:, np.newaxis] - jg[np.newaxis, :]
+#             missing_best = lg[np.argsort(di * di + dj * dj)[:, 0]]
+#             best = np.zeros(np.max(labels) + 1, int)
+#             best[missing_labels] = missing_best
+#             cl[missing_mask] = best[labels[missing_mask]]
+
+#             iii, jjj = np.mgrid[0 : labels.shape[0], 0 : labels.shape[1]]
+#             di = iii[missing_mask] - i[cl[missing_mask] - 1]
+#             dj = jjj[missing_mask] - j[cl[missing_mask] - 1]
+#             d_from_center[missing_mask] = np.sqrt(di * di + dj * dj)
+
+#         good_mask = cl > 0
+            
+#     else:
+#         i, j = centrosome.cpmorphology.maximum_position_of_labels(d_to_edge, labels, [1])
+#         center_labels = np.zeros(labels.shape, int)
+#         center_labels[i, j] = labels[i, j]
+#         colors = centrosome.cpmorphology.color_labels(labels)
+#         ncolors = np.max(colors)
+#         d_from_center = np.zeros(labels.shape)
+#         cl = np.zeros(labels.shape, int)
+
+#         for color in range(1, ncolors + 1):
+#             mask = colors == color
+#             l, d = centrosome.propagate.propagate( np.zeros(center_labels.shape), center_labels, mask, 1)
+#             d_from_center[mask] = d[mask]
+#             cl[mask] = l[mask]
+
+#         good_mask = cl > 0
+
+#     i_center = np.zeros(cl.shape)
+#     i_center[good_mask] = i[cl[good_mask] - 1]
+
+#     j_center = np.zeros(cl.shape)
+#     j_center[good_mask] = j[cl[good_mask] - 1]
+
+#     normalized_distance = np.zeros(labels.shape)
+#     total_distance = d_from_center + d_to_edge
+#     normalized_distance[good_mask] = d_from_center[good_mask] / (total_distance[good_mask] + 0.001)
+    
+#     return normalized_distance, good_mask, i_center, j_center
+   
+# def get_zernike_metrics(        
+#         cellmask_proj: np.ndarray,
+#         nucleus_proj: Union[np.ndarray, None], 
+#         org_proj: np.ndarray,
+#         organelle_name: str,
+#         zernike_degree: int = 9 
+#         ):
+
+#     """
+    
+#     """
+
+#     labels = label(cellmask_proj>0) #extent as 0,1 rather than bool
+#     zernike_indexes = centrosome.zernike.get_zernike_indexes( zernike_degree + 1)
+
+
+#     z = zernike_polynomial(labels, zernike_indexes)
+
+#     z_cm = zernike_metrics(cellmask_proj, z)
+#     z_org = zernike_metrics(org_proj, z)
+#     z_nuc = zernike_metrics(nucleus_proj, z)
+
+
+#     # nm_labels = [f"{n}_{m}" for (n, m) in (zernike_indexes)
+#     stats_tab = pd.DataFrame({'organelle':organelle_name,
+#                                 'mask':'cell',
+#                                 'zernike_n':[zernike_indexes[:,0].tolist()],
+#                                 'zernike_m':[zernike_indexes[:,1].tolist()],
+#                                 'zernike_cm_mag':[z_cm[0].tolist()],
+#                                 'zernike_cm_phs':[z_cm[1].tolist()],   
+#                                 'zernike_obj_mag':[z_org[0].tolist()],
+#                                 'zernike_obj_phs':[z_org[1].tolist()],
+#                                 'zernike_nuc_mag':[z_nuc[0].tolist()],
+#                                 'zernike_nuc_phs':[z_nuc[1].tolist()]})
+
+#     return stats_tab
+
 
 # def get_XY_distribution(        
 #         mask: np.ndarray,
@@ -1071,152 +1226,3 @@ def get_zernike_metrics(
 #     # stats_tab = pd.DataFrame(statistics,columns=col_names)
 #     stats_tab = pd.DataFrame(stats_dict)  
 #     return stats_tab, bin_indexes
-
-### USED ###
-def get_XY_distribution(        
-        mask: np.ndarray,
-        centering_obj: np.ndarray,
-        obj:np.ndarray,
-        obj_name: str,
-        scale: Union[tuple, None]=None,
-        num_bins: Union[int, None] = 5,
-        center_on: bool = False,
-        keep_center_as_bin: bool = True,
-        zernike_degrees: Union[int, None] = None):
-
-    """
-    Params
-    ----------
-    mask_obj: np.ndarray,
-        a binary 3D (ZYX) np.ndarray of the area that will be measured from
-    centering_obj: np.ndarray
-        a binary 3D (ZYX) np.ndarray of the object that will be used as the center of the concentric rins ("bins")
-    obj: np.ndarray
-        a 3D (ZYX) np.ndarray image of what will be measured within the masked area
-    obj_name: str
-        the name or nickname for the obj being measured; this will appear as a column in the output datasheet
-    scale: Union[tuple, None]=None
-        a tuple that contains the real world dimensions for each dimension in the image (Z, Y, X)
-    num_bins: Union[int,None] = None
-        the number of concentric rings to draw between the centering object and edge of the mask; None will result in 5 bins
-    center_on: bool = False
-        True = distribute the bins from the center of the centering object
-        False = distribute the bins from the edge of the centering object
-    keep_center_as_bin: bool = True
-        True = include the centering object area when creating the bins
-        False = do not include the centering object area when creating the bins
-    zernike_degrees: Union[int,None] = None
-        the number of zernike degrees to include for the zernike shape descriptors; if None, the zernike measurements will not 
-        be included in the output
-
-
-    Returns
-    -----------
-    XY_metrics:
-        a pandas Dataframe of bin, wedge, and zernike measurements
-    dist_bin_mask:
-        an np.ndarray mask of the concentric ring bins
-    dist_wedge_mask 
-        an np.ndarray mask of the 8 radial wedges
-
-    """
-
-    mask_proj = create_masked_sum_projection(mask)
-    center_proj = create_masked_sum_projection(centering_obj,mask.astype(bool)) if centering_obj is not None else None
-    obj_proj = create_masked_sum_projection(obj,mask.astype(bool))
- 
-
-    XY_metrics, dist_bin_mask, dist_wedge_mask = get_concentric_distribution(mask_proj=mask_proj, 
-                                                        centering_proj=center_proj, 
-                                                        obj_proj=obj_proj, 
-                                                        obj_name=obj_name, 
-                                                        scale=scale,
-                                                        bin_count=num_bins, 
-                                                        center_on=center_on,
-                                                        keep_center_as_bin=keep_center_as_bin)
-    
-    if zernike_degrees is not None:
-        zernike_metrics = get_zernike_metrics(cellmask_proj=mask_proj, 
-                                            org_proj=obj_proj,
-                                            organelle_name=obj_name, 
-                                            nucleus_proj=center_proj, 
-                                            zernike_degree=zernike_degrees)
-        
-        XY_metrics = pd.merge(XY_metrics, zernike_metrics, on="object")
-
-    return XY_metrics, dist_bin_mask, dist_wedge_mask
-
-###################################
-### Z DISTRIBUTION
-###################################
-
-### USED ###
-def create_masked_depth_projection(img_in:np.ndarray, mask:Union[np.ndarray, None]=None, to_bool:bool=True) -> np.ndarray:
-    """
-    create a masked projection by summing together all XY pixels per Z plane/slice
-    """
-    img_out = img_in.astype(bool) if to_bool else img_in
-    if mask is not None:
-        img_out = apply_mask(img_out, mask)
-    
-    return img_out.sum(axis=(1,2))
-
-### USED ###
-def get_Z_distribution(        
-        mask: np.ndarray,
-        obj:np.ndarray,
-        obj_name: str,
-        center_obj: Union[np.ndarray, None],
-        scale: Union[tuple, None] = None
-        ):
-    """
-    quantification of distribution along the Z axis; all XY pixels are summed together per Z slice and then quantified
-
-    Parameters
-    ------------
-    mask_obj: np.ndarray,
-        a binary 3D (ZYX) np.ndarray of the area that will be measured from
-    obj: np.ndarray
-        a 3D (ZYX) np.ndarray image of what will be measured within the masked area
-    obj_name: str
-        the name or nickname for the obj being measured; this will appear as a column in the output datasheet
-    centering_obj: np.ndarray
-        optional - a binary 3D (ZYX) np.ndarray utilized as the center/reference point of the area; for cells, this is usually the nucleus
-    scale: Union[tuple, None]=None
-        a tuple that contains the real world dimensions for each dimension in the image (Z, Y, X)
-
-    Returns
-    -----------
-    Z_tab:
-        a pandas Dataframe of measurements for each z slice
-
-    """
-
-    # flattened
-    mask_proj = create_masked_depth_projection(mask)
-    obj_proj = create_masked_depth_projection(obj, mask.astype(bool))
-    center_proj = create_masked_depth_projection(center_obj, mask.astype(bool)) if center_obj is not None else None
-
-    Zdist_tab = pd.DataFrame({'object':obj_name,
-                            # non-scaled measurments
-                            'Z_n_slices':mask.shape[0],
-                            'Z_slices':[[i for i in range(mask.shape[0])]],
-                            'Z_mask_vox_cnt':[mask_proj.tolist()],
-                            'Z_obj_vox_cnt':[obj_proj.tolist()]})
-    if center_proj is not None:
-        Zdist_tab['Z_center_vox_cnt'] = [center_proj.tolist()]
-    
-    # scaled measurements added if applicable
-    if scale is not None:
-        round_scale = (round(scale[0], 4), round(scale[1], 4), round(scale[2], 4))
-        Zdist_tab.insert(loc=1, column="scale", value=f"{round_scale}")
-
-        Zdist_tab['Z_height'] = mask.shape[0] * scale[0]
-        Zdist_tab['Z_mask_volume'] = [(mask_proj * np.prod(scale)).tolist()]
-        Zdist_tab['Z_obj_volume'] = [(obj_proj * np.prod(scale)).tolist()]
-        if center_proj is not None:
-            Zdist_tab['Z_center_volume'] = [(center_proj * np.prod(scale)).tolist()]
-    else: 
-        Zdist_tab.insert(loc=2, column="scale", value=f"{tuple(np.ones(3))}")
-
-    return Zdist_tab
