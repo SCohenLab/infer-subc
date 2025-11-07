@@ -12,6 +12,7 @@ from infer_subc.core.img import (
     fill_and_filter_linear_size,
     label_uint16,
 )
+from infer_subc.organelles.declumping import watershed_declumping
 
 
 ##########################
@@ -33,7 +34,13 @@ def infer_perox(
         hole_min_width: int,
         hole_max_width: int,
         small_object_width: int,
-        fill_filter_method: str
+        fill_filter_method: str,
+                declump: bool,
+                dec_sig: float,
+                dec_iter: int,
+                dec_open: float,
+                dec_adj: float,
+                dec_min_size: int
         ) -> np.ndarray:
     """
     Procedure to infer peroxisome from linearly unmixed input.
@@ -106,7 +113,14 @@ def infer_perox(
     ###################
     # LABELING
     ###################
-    struct_obj1 = label_uint16(struct_obj)
+    struct_obj1 = watershed_declumping(raw_img = peroxi,
+                                       seg_img = struct_obj,
+                                       declump = declump,
+                                       sigma = dec_sig,
+                                       iterations = dec_iter,
+                                       open = dec_open,
+                                       thresh_adj = dec_adj,
+                                       min_size = dec_min_size)
 
     return struct_obj1
 
