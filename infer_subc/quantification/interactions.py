@@ -230,6 +230,6 @@ def create_interaction_sites(org_name_list:List[str],
         inter_tab = find_inter_labels(overlap_img, interaction_name, org_dict)
 
         # determine if each site is also involved in a higher order interaction (there are more than the specified organelles involved)
-        unique_sites, inter_tab = assess_if_higher_order_int(overlap_img, interaction_name, inter_tab, org_dict)
+        lower_order_sites, inter_tab = assess_if_higher_order_int(overlap_img, interaction_name, inter_tab, org_dict)
 
-        return overlap_img, inter_tab
+        return overlap_img, lower_order_sites, inter_tab
