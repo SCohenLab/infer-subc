@@ -538,7 +538,7 @@ def create_quant(create: bool):
             Path.mkdir(qfol)
             
             # create sub folders
-            for sub in ["raw", "seg","edit_seg" "quant"]:
+            for sub in ["raw", "seg","edit_seg", "quant"]:
                 Path.mkdir(qfol / sub)
                 print(f"making {qfol / sub}")
         else:
