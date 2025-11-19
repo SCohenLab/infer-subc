@@ -12,6 +12,8 @@
       - nuclei
       - cellmask
       - cytoplasm
+      - soma
+      - neurites
     - organelles:
       - lyso
       - mito
