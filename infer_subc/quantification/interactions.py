@@ -1,6 +1,7 @@
 
 import pandas as pd
 import numpy as np
+import math
 
 from skimage.measure import regionprops_table
 
@@ -233,3 +234,92 @@ def create_interaction_sites(org_name_list:List[str],
         lower_order_sites, inter_tab = assess_if_higher_order_int(overlap_img, interaction_name, inter_tab, org_dict)
 
         return overlap_img, lower_order_sites, inter_tab
+    
+
+def create_interaction_degrees(org_name_list:List[str],
+                                org_seg_list: List[np.ndarray],
+                                mask: Union[np.ndarray, None]=None,
+                                mask_name: Union[str, None]=None,
+                                scale: Union[tuple, None]=None) -> (np.ndarray, pd.DataFrame):
+    '''
+    Create interaction degree image and quantification table for a set of organelle segmentations within a cell mask.
+
+    Parameters
+    ----------
+    org_name_list : List[str]
+        A list of organelle names as strings. These will be the organelles used to create interaction sites.
+    org_seg_list : List[np.ndarray]
+        A list of organelle segmentation images as numpy ndarrays. These should be in the same order as the org_name_list list.
+    mask : np.ndarray
+        A binary image array representing the cell (or other) mask. 
+        If None is provided, a whole image mask will be used.
+    mask_name : str, optional
+        The name of the cell mask, by default "cell".
+        If None, "whole_image" will be used.
+    scale : Union[tuple, None], optional
+        A tuple representing the scale of the image in ZYX dimensions, by default None. 
+        If None, a scale of (1,1,1) will be used.   
+    
+    Returns
+    -------
+    all_orgs : np.ndarray
+        An image array representing the degree of interactions between the organelles.
+        The cell mask was not applied to this image, but was applied prior to quantification below.
+        Each voxel value indicates the number of organelles present at that location.
+    final_quant_tab : pd.DataFrame
+        A pandas DataFrame table with quantification of the interaction degrees for each organelle and the cell mask.
+        The table includes voxel counts and volumes for each degree of interaction.
+    '''
+    # add all binary organelle segmentation masks together into the new all_orgs object
+    all_orgs = np.zeros_like(org_seg_list[0], dtype=np.uint8)
+    for o in org_seg_list:
+        all_orgs = all_orgs + (o>0)
+    
+    # create empty dictionary to hold quantification results
+    quant_tabs = [] 
+
+    # fill in a scale value if none is specified
+    if scale is None:
+        scale = (1,1,1) 
+
+    # safe guard against no mask being provided
+    if mask is None:
+        mask = np.ones_like(org_seg_list[0], dtype=bool)
+        mask_name = "whole image"
+    
+    # loop through each organelle and the cell mask
+    for reg_name, reg in zip(([mask_name]+org_name_list), ([mask]+org_seg_list)):
+        # mask with cell mask and then with region of interest
+        masked = apply_mask(reg, mask.astype(bool))
+        all_orgs_masked = apply_mask(all_orgs, masked.astype(bool))
+
+        # count the number of voxels with each degree of interaction per cell
+        degrees, counts = np.unique(all_orgs_masked, return_counts=True)
+        nway_quant = dict(zip(degrees, counts))
+        nway_quant.pop(0, None)  # remove background count
+
+        # calculate additional metrics
+        tot_org_vox = np.sum(list(nway_quant.values()))
+        tot_reg_vox = np.count_nonzero(masked>0)
+
+        # create dictionary of unscaled results
+        nway_quant = {'voxel_count_with_0_org(s)': tot_reg_vox - tot_org_vox,
+                      **{"voxel_count_with_" + str(key) + "_orgs(s)": value for key, value in nway_quant.items()},
+                      'voxel_count_region': tot_reg_vox}
+
+        # created scaled dictionary
+        prod_scale = math.prod(scale)
+        nway_quant_scaled = {k.replace('voxel_count', 'volume'): v * prod_scale for k, v in nway_quant.items() if 'voxel_count' in k}
+
+        # combinde unscaled and scale results
+        final_dict = {'scale': (round(scale[0], 4), round(scale[1], 4), round(scale[2], 4)),
+                      'object': reg_name,
+                      **nway_quant, **nway_quant_scaled}
+
+        # make it into a dataframe
+        quant_tabs.append(final_dict)
+
+    # combine into one table
+    final_quant_tab = pd.DataFrame(quant_tabs)
+
+    return all_orgs, final_quant_tab
