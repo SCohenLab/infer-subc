@@ -122,81 +122,88 @@ def find_inter_labels(overlap_img: np.ndarray,
     return inter_tab
 
 def assess_if_higher_order_int(site: np.ndarray,
-                               site_name: str,
-                               inter_labels_tab: pd.DataFrame,
-                               organelle_segs: dict[str:np.ndarray],
-                               splitter: str="X"):
-    
-    '''
+                                site_name: str,
+                                inter_labels_tab: pd.DataFrame,
+                                organelle_segs: dict[str:np.ndarray],
+                                splitter: str="X"):
+    """
     Determine which interaction sites are included in higher order interactions.
-    An interaction site is considered to be part of a higher order interaction if it overlaps with an additional organelle not included in the original interaction site definition.
-    For example, if the interaction site you are creating is mitoXlyso, and a specific interaction site in the image also overlaps with ER, then that interaction site is considered to be part of a higher order interaction.
-    The output is an image array of the interaction sites with unique integer IDs for each site that is NOT part of a higher order interaction.
-
+    
+    An interaction site is considered part of a higher order interaction if it overlaps 
+    with an additional organelle not included in the original interaction site definition.
+    
     Parameters
     ----------
     site : np.ndarray
-        An image array of the overlap regions between the organelles included in the organelle_segs variable;
-        each interaction site should be labeled with unique integer IDs that will be included in the output image.
+        Labeled image of interaction sites with unique integer IDs
     site_name : str
-        A string of organelle names separated by the specified splitter.
+        Interaction site name (organelle names joined by splitter)
     inter_labels_tab : pd.DataFrame
-        A pandas DataFrame table with unique identifiers (integer IDs and labels) associated to each interaction site.
-        `ID`: unique integer identifier for each interaction site in the overlap image. Each site will have a different ID number.
-        `object`: the name of the interaction sites being examined, created by joining the organelle names with the specified splitter.
-        `label`: a string of organelle ID numbers involved in each interaction site, joined by underscores. 
+        Table with columns: 'ID', 'object', 'label'
     organelle_segs : dict[str:np.ndarray]
-        A dictionary of organelle segmentations for all organelles from the same cell, including the ones in the interaction site and other organelles to check against for higher order interactions.
-        The dictionary has organelle names as keys and segmentation image arrays as values.
-    splitter : str, optional
-        The character used to split the organelle names in the orgs string, by default "X". 
-        For example, "mitoXlyso" would indicate an interaction between mito and lyso.
+        Dictionary of all organelle segmentations {name: image_array}
+    splitter : str, default="X"
+        Character separating organelle names in site_name
     
     Returns
     -------
     LOi_NR : np.ndarray
-        An image array of the interaction sites with unique integer IDs for each site that is NOT part of a higher order interaction.
-    inter_labels_tab : pd.DataFrame
-        The input pandas DataFrame table with an additional column indicating if the interaction site is part of a higher order interaction.
-        `in_higher_order`: a boolean value where True/1 indicates the interaction site is part of a higher order interaction, and False/0 indicates it is not.
-    '''
-    # remove any interaction sites that are involved in higher order interactions
-    LOc_NR = site.copy()            
-    for org, val in organelle_segs.items():         
-        if (org not in site_name.split(splitter)
-            and np.any(site.astype(int)*val.astype(int))):
-            HOc = site.copy()       
-            valid = (LOc_NR>0)*(val>0)                  
-            HOc[valid.astype(bool)==False]=0
-            for id in np.unique(HOc):
-                LOc_NR[LOc_NR==id] = 0    
-
-    # ensure the original site IDs are preserved
-    LOi_NR = (LOc_NR>0).astype(int) * site
-
-    # select only the positive integer values within the array
-    redundancy = inter_labels_tab['ID'].isin(np.unique(LOi_NR[LOi_NR>0]).tolist())
-
-    # add new column to the interaction table indicating if the site is in a higher order interaction
+        Image containing only sites NOT in higher-order interactions
+    new_tab : pd.DataFrame
+        Input table with added 'in_higher_order' boolean column
+    """
+    
+    # Get organelles not in current site
+    site_orgs = set(site_name.split(splitter))
+    other_orgs = {name: seg for name, seg in organelle_segs.items() if name not in site_orgs}
+    
+    if not other_orgs:
+        # No other organelles to check, all sites are non-redundant
+        in_higher_order = pd.Series([False] * len(inter_labels_tab))
+        new_tab = inter_labels_tab.copy()
+        new_tab.insert(inter_labels_tab.columns.get_loc('label') + 1, "in_higher_order", in_higher_order)
+        return site.copy(), new_tab
+    
+    # Create combined mask of all other organelles
+    other_orgs_mask = np.zeros_like(site, dtype=bool)
+    for org_seg in other_orgs.values():
+        other_orgs_mask |= (org_seg > 0)
+    
+    # Find sites that overlap with any other organelle
+    overlap_mask = (site > 0) & other_orgs_mask
+    higher_order_ids = set(np.unique(site[overlap_mask])) - {0}
+    
+    # Create output image (zero out higher-order sites)
+    LOi_NR = site.copy()
+    if higher_order_ids:
+        mask_to_remove = np.isin(site, list(higher_order_ids))
+        LOi_NR[mask_to_remove] = 0
+    
+    # Mark higher-order sites in table
+    in_higher_order = inter_labels_tab['ID'].isin(higher_order_ids)
     new_tab = inter_labels_tab.copy()
-    new_tab.insert((inter_labels_tab.columns.get_loc('label')+1), "in_higher_order", list(map(bool, ~redundancy)))
-
+    new_tab.insert(inter_labels_tab.columns.get_loc('label') + 1, "in_higher_order", in_higher_order)
+    
     return LOi_NR, new_tab
 
 
-def create_interaction_sites(org_name_list:List[str],
-                             org_seg_list: List[np.ndarray],
-                             name_splitter: str="X") -> tuple[np.ndarray, pd.DataFrame]:
+def create_interaction_sites(interaction_orgs: List[str], 
+                              org_name_list:List[str],
+                              org_seg_list: List[np.ndarray],
+                              name_splitter: str="X") -> tuple[np.ndarray, pd.DataFrame]:
     
     '''
-    Create an image of the overlap regions between the selected organelles and a table of unique identifiers associated to each interaction site.
+    Create an image of the overlap regions between the selected organelles and a table of unique identifiers 
+    associated to each interaction site. The entire image is used to create the interaction sites; no mask is applied.
     
     Parameters 
     ----------
+    interaction_orgs : List[str]
+        A list of organelle names as strings to be included in the interaction site.
     org_name_list : List[str]
-        A list of organelle names as strings. These will be the organelles used to create interaction sites.
+        A list of all organelle names as strings. These will be the organelles used to create interaction sites.
     org_seg_list : List[np.ndarray]
-        A list of organelle segmentation images as numpy ndarrays. These should be in the same order as the org_name_list list.
+        A list of all organelle segmentation images as numpy ndarrays. These should be in the same order as the org_name_list list.
     name_splitter : str, optional
         The character used to separate the organelle names in the org_name_list string, by default "X". 
         For example, "mitoXlyso" would indicate an interaction between mito and lyso. 
@@ -215,13 +222,13 @@ def create_interaction_sites(org_name_list:List[str],
         TODO: consider changing label "splitter" to "X" to be consistent with the name_splitter.
     '''
     
-    if len(org_name_list)<2:
+    if len(interaction_orgs)<2:
         raise ValueError("Please select at least two organelles to define an interaction site.")
     else:
-        # create name for interaction site
-        interaction_name = name_splitter.join(org_name_list)
+        # create name for interaction site of just organelles to include in the interaction site
+        interaction_name = name_splitter.join(interaction_orgs)
 
-        # run function to create dictionary of organelle segmentations
+        # run function to create dictionary of organelle segmentations - including all organelles
         org_dict = make_dict(org_name_list, org_seg_list)
 
         # create the overlap image
@@ -237,10 +244,10 @@ def create_interaction_sites(org_name_list:List[str],
     
 
 def create_interaction_degrees(org_name_list:List[str],
-                                org_seg_list: List[np.ndarray],
-                                mask: Union[np.ndarray, None]=None,
-                                mask_name: Union[str, None]=None,
-                                scale: Union[tuple, None]=None) -> (np.ndarray, pd.DataFrame):
+                               org_seg_list: List[np.ndarray],
+                               mask: Union[np.ndarray, None]=None,
+                               mask_name: Union[str, None]=None,
+                               scale: Union[tuple, None]=None) -> (np.ndarray, pd.DataFrame):
     '''
     Create interaction degree image and quantification table for a set of organelle segmentations within a cell mask.
 
@@ -321,5 +328,6 @@ def create_interaction_degrees(org_name_list:List[str],
 
     # combine into one table
     final_quant_tab = pd.DataFrame(quant_tabs)
+    final_quant_tab.insert(0, column="mask_name", value=mask_name)
 
     return all_orgs, final_quant_tab
