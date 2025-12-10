@@ -2,6 +2,10 @@
 import pandas as pd
 import numpy as np
 import math
+from pathlib import Path
+import os
+from typing import List, Union
+
 
 from skimage.measure import regionprops_table
 
@@ -9,6 +13,7 @@ from infer_subc.core.img import *
 from infer_subc.quantification.stats import *
 from infer_subc.quantification.stats_helpers import *
 from infer_subc.organelles import * 
+from infer_subc.quantification.morphology import get_morphology_metrics
 
 
 def make_dict(list_obj_names: list[str],
@@ -70,7 +75,9 @@ def create_overlap(inter_name:str,
 
 def find_inter_labels(overlap_img: np.ndarray,
                        interaction_name: str,
-                       org_dict: dict[str, np.ndarray]) -> pd.DataFrame:
+                       org_dict: dict[str, np.ndarray],
+                       mask_name: Union[str, None]=None,
+                       mask: Union[np.ndarray, None]=None) -> pd.DataFrame:
     '''
     Identify which organelle IDs are involved in each unique interaction site; 
     the organelle ID numbers are joined by underscores and returned in a table of 
@@ -85,7 +92,11 @@ def find_inter_labels(overlap_img: np.ndarray,
         A string of organelle names separated by the specified splitter.
     org_dict : dict[str:np.ndarray]
         A dictionary of organelle segmentations with organelle names as keys and segmentation image arrays as values.
-
+    mask_name : Union[str, None]
+        The name of the mask region being analyzed. If None, the whole image is analyzed.
+    mask : Union[np.ndarray, None]
+        The mask image array being analyzed. If None, the whole image is analyzed.
+        
     Returns
     -------
     inter_tab : pd.DataFrame
@@ -94,9 +105,17 @@ def find_inter_labels(overlap_img: np.ndarray,
         `object`: the name of the interaction sites being examined, created by joining the organelle names with the specified splitter.
         `label`: a string of organelle ID numbers involved in each interaction site, joined by underscores.
     '''
+    # apply mask to overlap image if provided
+    if mask_name is None and mask is not None:
+        raise ValueError("The mask_name parameter must be provided if mask is not None")
+    elif mask is None and mask_name is None:
+        input_labels = overlap_img
+        mask_name = "whole_image"
+    else:
+        input_labels = apply_mask(overlap_img, mask)
 
     # use regionprops table to list interaction sites by unique index and extract slice for each object
-    props = regionprops_table(overlap_img, properties=['label', 'slice'])
+    props = regionprops_table(input_labels, properties=['label', 'slice'])
 
     # create a list of the organelle ID numbers involved in each interaction site
     involved = interaction_name.split("X")
@@ -118,7 +137,8 @@ def find_inter_labels(overlap_img: np.ndarray,
 
     inter_tab = pd.DataFrame(indexes)
     inter_tab.insert(0, 'object', interaction_name, True)
-
+    inter_tab.insert(0, 'mask_name', mask_name, True)
+    
     return inter_tab
 
 def assess_if_higher_order_int(site: np.ndarray,
@@ -190,7 +210,9 @@ def assess_if_higher_order_int(site: np.ndarray,
 def create_interaction_sites(interaction_orgs: List[str], 
                               org_name_list:List[str],
                               org_seg_list: List[np.ndarray],
-                              name_splitter: str="X") -> tuple[np.ndarray, pd.DataFrame]:
+                              name_splitter: str="X",
+                              mask: Union[np.ndarray, None]=None,
+                              mask_name: Union[str, None]=None) -> tuple[np.ndarray, pd.DataFrame]:
     
     '''
     Create an image of the overlap regions between the selected organelles and a table of unique identifiers 
@@ -203,21 +225,32 @@ def create_interaction_sites(interaction_orgs: List[str],
     org_name_list : List[str]
         A list of all organelle names as strings. These will be the organelles used to create interaction sites.
     org_seg_list : List[np.ndarray]
-        A list of all organelle segmentation images as numpy ndarrays. These should be in the same order as the org_name_list list.
+        A list of all organelle segmentation images as numpy ndarrays. These should be in the same order as the 
+        org_name_list list.
     name_splitter : str, optional
-        The character used to separate the organelle names in the org_name_list string, by default "X". 
-        For example, "mitoXlyso" would indicate an interaction between mito and lyso. 
+        The character used to separate the organelle names in the org_name_list string within the new interaction 
+        site name, by default "X". For example, "mitoXlyso" would indicate an interaction between mito and lyso. 
         Use of other splitters may cause issues during downstream analysis in infer-subc. 
         Specifically, avoid using "_" or "-" as a splitter as they are used in other parts of the analysis.
-    
+    mask : Union[np.ndarray, None], optional
+        A binary np.ndarray mask of the area to measure from. If None, the whole image is analyzed.
+    mask_name : Union[str, None], optional
+        The name of the mask region being analyzed. If None, the whole image is analyzed.
+
+        
     Returns
     -------
     overlap_img : np.ndarray
-        An image array of the overlap regions between the selected organelles, with unique integer IDs for each interaction site.   
+        An image array of the overlap regions between the selected organelles, with unique integer IDs for each 
+        interaction site.   
+    lower_order_sites : np.ndarray
+        An image array of the interaction sites that are NOT involved in higher order interactions
     inter_tab : pd.DataFrame
         A pandas DataFrame table with unique identifiers (integer IDs and labels) associated to each interaction site.
-        `ID`: unique integer identifier for each interaction site in the overlap image. Each site will have a different ID number.
-        `object`: the name of the interaction sites being examined, created by joining the organelle names with the specified splitter.
+        `ID`: unique integer identifier for each interaction site in the overlap image. Each site will have a 
+        different ID number.
+        `object`: the name of the interaction sites being examined, created by joining the organelle names with the 
+        specified splitter.
         `label`: a string of organelle ID numbers involved in each interaction site, joined by underscores.
         TODO: consider changing label "splitter" to "X" to be consistent with the name_splitter.
     '''
@@ -235,7 +268,7 @@ def create_interaction_sites(interaction_orgs: List[str],
         overlap_img = create_overlap(interaction_name, org_dict)
 
         # use regionprops table to list interaction sites by unique index and extract slice for each object
-        inter_tab = find_inter_labels(overlap_img, interaction_name, org_dict)
+        inter_tab = find_inter_labels(overlap_img, interaction_name, org_dict, mask_name, mask)
 
         # determine if each site is also involved in a higher order interaction (there are more than the specified organelles involved)
         lower_order_sites, inter_tab = assess_if_higher_order_int(overlap_img, interaction_name, inter_tab, org_dict)
@@ -331,3 +364,745 @@ def create_interaction_degrees(org_name_list:List[str],
     final_quant_tab.insert(0, column="mask_name", value=mask_name)
 
     return all_orgs, final_quant_tab
+
+
+def all_combos(list_obj_names: list[str], 
+               splitter: str="X") -> list:
+    """
+    Create names for all possible combinations of organelle interaction site types from a list of organelles
+
+    Parameters
+    ----------
+    list_obj_names: list[str], 
+        a list of names as strings for the organelles segmented in the image being analyzed; organelle names should match the naming suffix on the organelle segmentation file
+        ex) mitochondria file name: "img1-mito.tiff" 
+            naming suffix: "mito"
+            list of organelles: ["mito", "lyso", "perox", ...]
+    splitter: str="X"
+        a character you wish to use as the seperator between organelle names when creating interaction site names
+        "X" is the recommended splitter
+
+    Output
+    ------
+    possib: dict
+        a list of the names for all possible organelle interaction site combinations
+
+    """
+    all_pos = []
+    for n in list(map(lambda x:x+2, (range(len(list_obj_names)-1)))):
+        all_pos += itertools.combinations(list_obj_names, n)
+    possib = [splitter.join(inter) for inter in all_pos]
+    return possib
+
+
+def get_interaction_metrics(source_file_path: str,
+                             list_obj_names: List[str],
+                             list_obj_segs: List[np.ndarray],
+                             list_intensity_img: Union[List[np.ndarray], None]=None,
+                             list_region_names: Union[List[str], None]=None,
+                             list_region_segs: Union[List[np.ndarray], None]=None,
+                             mask_name: Union[str, None]=None,
+                             scale: Union[tuple, None]=None,
+                             splitter: str="X",
+                             include_morpho:bool=True,
+                             include_interaction_degrees:bool=True,
+                             include_dist:bool=True, 
+                             dist_centering_obj: Union[str, None]=None,
+                             dist_num_bins: Union[int, None]=5,
+                             dist_center_on: Union[bool, None]=False,
+                             dist_keep_center_as_bin: Union[bool, None]=True,
+                             dist_zernike_degrees: Union[int, None]=9):
+   
+    """
+    Quantify organelle interaction metrics including morphology, distribution, and degree of interactions for a image or region
+    (e.g., cell) within an image.
+    
+    Parameters
+    ----------
+    source_file_path : str or Path
+        Path to the source image file. This will be used as part of the metadata information in the output tables. 
+        The input images are not derived from this path, but rather are provided directly as arrays in the list_obj_segs and 
+        list_intensity_img variables below.
+    list_obj_names : List[str]
+        List of organelle names. These names should match the suffix on the segmentation image files.
+    list_obj_segs : List[np.ndarray]
+        List of 3D organelle segmentation arrays matching the order included in list_obj_names.
+    list_intensity_img : Union[List[np.ndarray], None]=None
+        List of 3D intensity channels from the raw image used to produce the segmentations in list_obj_segs.
+        The order here should match the list_obj_segs and list_obj_names variables.
+        Additional intensity channels not matching one of the segmented organelles/included in list_obj_names should not be included.
+        If no intensity analysis is to be included, specify None here.
+    list_region_names : Union[List[str], None]=None
+        List of segmented region/mask names. These names should match the suffix on the segmentation image files.
+        This should include:
+            - a mask segmentation, such as the cell mask, for masking during all interactions analysis; else, the entire image will be 
+            quantified. Only one objects per mask image will be analyzed. If there are more than one included, they will be combined 
+            prior to analysis and the entire region will be quantified. If no mask is provided, the entire image will be quantified.
+            - a centering object, such as the nucleus, for distribution analysis; else the center of the mask region will be used as 
+            the XY distribution centering point if distribution analysis is included.
+    list_region_segs : Union[List[np.ndarray], None]=None
+        List of 3D region segmentation arrays matching the order specified in list_region_names. Specify None if no regions are provided.
+    mask_name : Union[str, None]=None
+        Name of the region to use as the mask for analysis; if not specified, the entire image will be quantified.
+    splitter : str, default="X"
+        Character used to separate organelles within the interaction site names
+        Ex) "mitoXlyso" for mito-lyso interactions
+    scale : Union[tuple, None], default=None
+        Voxel dimensions (Z, Y, X); if not specified, an isotropic (1,1,1) scale will be used resulting in all output metrics in voxel 
+        units.
+    include_morpho : bool, default=True
+        Whether to compute morphology metrics for each interaction site.
+    include_interaction_degrees : bool, default=True
+        Whether to compute interaction degree analysis for the entire image or mask region.
+    include_dist : bool, default=True
+        Whether to compute distribution metrics for the each interaction site type.
+    dist_centering_obj : Union[str, None], default=None
+        Name of the region to use for centering distribution analysis.
+        This region should be included in the list_region_names and list_region_segs variables.
+        If not specified, the center of the mask, or entire image if no mask was specified, will be used as the centering object.
+    dist_num_bins : Union[int, None], default=5
+        Number of radial bins to create in the XY distribution analysis.
+    dist_center_on : Union[bool, None], default=True
+        Whether to start creation of the XY bins from the center (True) or the edge (False) of the centering object.
+    dist_keep_center_as_bin : Union[bool, None], default=True
+        Whether to keep the centering object as the first XY bin. 
+    dist_zernike_degrees : Union[int, None], default=9
+        Zernike polynomial degree for circular shape/pattern analysis in the XY distribution analysis.
+        If None and include_dist=True, no Zernike features will be calculated.
+    
+    Returns
+    -------
+    inter_sites : dict
+        Dictionary of interaction site name, np.ndarray image pairs for all possible interaction site combinations in the cell
+    morph_final_combo : pd.DataFrame
+        Combined morphology metrics for all interaction sites of each interaction type.
+        If include_morpho=False, this will only include the interaction site metrics calculated in the
+        infer_subc.quantification.interactions.create_interaction_sites() function, including which organelles are involved in each site
+        and if they are in higher order interaction sites; it will not list morphology metrics for each interaction site.
+    dist_final_combo : pd.DataFrame or None
+        XY and Z distribution metrics for each interaction site (if include_dist=True)
+    degree_img : np.ndarray or None
+        Degree of interactions image (if include_interaction_degrees=True)
+    degree_tab : pd.DataFrame or None
+        Degree of interactions table (if include_interaction_degrees=True)
+    """
+
+    # Validate inputs
+    if not list_obj_names:
+        raise ValueError("list_obj_names cannot be empty")
+    if len(list_obj_names) != len(list_obj_segs):
+        raise ValueError(f"Mismatch: {len(list_obj_names)} items in list_obj_names but {len(list_obj_segs)} items in list_obj_segs")
+    if list_intensity_img and len(list_obj_names) != len(list_intensity_img):
+        raise ValueError(f"Mismatch: {len(list_obj_names)} items in list_obj_names but {len(list_intensity_img)} items in list_intensity_img")
+    if list_region_names and list_region_segs and len(list_region_names) != len(list_region_segs):
+        raise ValueError(f"Mismatch: {len(list_region_names)} items in list_region_names but {len(list_region_segs)} items in list_region_segs")
+    
+    if isinstance(source_file_path, str): source_file_path = Path(source_file_path)
+    print(f"Quantifying organelle interactions from {source_file_path.name}")
+
+    # specify the mask image to use during quantification
+    if list_region_names is None or list_region_segs is None:
+        print("No regions provided. No mask will be applied before analysis.")
+        mask = None
+    elif mask_name is None or mask_name not in list_region_names:
+        if mask_name is not None:
+            raise ValueError(f"Mask '{mask_name}' not found. No mask will be applied before analysis.")
+        mask = None
+        mask_name = None
+    else:
+        mask = list_region_segs[list_region_names.index(mask_name)]
+
+    # list all possible interaction site types based on the org_file_names list specified above
+    possib_int_types = all_combos(list_obj_names, splitter)
+
+    # recreate raw_intensity image based on list intensity channels above to ensure proper order
+    if include_morpho:
+        intensity_img = np.stack(list_intensity_img)
+
+    # collect centering object image
+    if include_dist:
+        if dist_centering_obj == None:
+            print("No centering object provided. Using center of mask or entire image for distribution centering.")
+            centering_img = None
+        elif dist_centering_obj not in list_region_names:
+            raise ValueError(f"Centering object '{dist_centering_obj}' not found in region names: {list_region_names}")
+        else:
+            centering_img = list_region_segs[list_region_names.index(dist_centering_obj)]
+
+
+    # collect interaction metric tabs
+    morph_combo_tabs = []
+    dist_combo_tabs = []
+    XY_bins_imgs = []
+    XY_wedges_imgs = []
+    inter_sites = {}
+
+    # loop through interaction site types and create interaction sites, measure morphology and distributions
+    for overlap_ID in possib_int_types:
+        # list organelles included in this interaction site only
+        orgs_included = overlap_ID.split("X")
+
+        # create interaction site & metadata information
+        inter_obj, lower_ord_sites, inter_tab = create_interaction_sites(orgs_included,
+                                                                         list_obj_names,
+                                                                         list_obj_segs, 
+                                                                         name_splitter=splitter,
+                                                                         mask=mask,
+                                                                         mask_name=mask_name)
+        del lower_ord_sites
+        inter_sites[overlap_ID] = inter_obj
+
+        # measure interaction site morphology
+        if include_morpho:
+            morpho_metrics = get_morphology_metrics(segmentation_img=inter_obj, 
+                                                    seg_name=overlap_ID,
+                                                    intensity_img=intensity_img, 
+                                                    intensity_ch_names=list_obj_names,
+                                                    channel_axis=0,
+                                                    mask=mask,
+                                                    mask_name=mask_name,
+                                                    scale=scale)
+            morpho_metrics.rename(columns={'label':'ID'}, inplace=True)
+            inter_tab = pd.merge(inter_tab, morpho_metrics, how='right', on=['object', 'ID', 'mask_name'])
+            inter_tab['in_higher_order'] = inter_tab['in_higher_order'].astype(bool) # force to boolean type
+        
+        morph_combo_tabs.append(inter_tab)
+
+        # measure interaction site distibutions
+        #### TODO: UPDATE CODE ONCE RENE IS DONE ####
+        if include_dist:
+            XY_distribution, XY_bins, XY_wedges = get_XY_distribution(mask=mask,
+                                                                    centering_obj=centering_img,
+                                                                    obj=inter_obj,
+                                                                    obj_name=overlap_ID,
+                                                                    scale=scale,
+                                                                    num_bins=dist_num_bins,
+                                                                    center_on=dist_center_on,
+                                                                    keep_center_as_bin=dist_keep_center_as_bin,
+                                                                    zernike_degrees=dist_zernike_degrees)
+            # if XY_bins_imgs list is empty append, if not skip
+            if not XY_bins_imgs and not XY_wedges_imgs:
+                XY_bins_imgs.append(XY_bins)
+                XY_wedges_imgs.append(XY_wedges)
+
+            Z_distribution = get_Z_distribution(mask=mask, 
+                                                obj=inter_obj,
+                                                obj_name=overlap_ID,
+                                                center_obj=centering_img,
+                                                scale=scale)
+
+            interaction_dist_tab = pd.merge(XY_distribution, Z_distribution)
+            dist_combo_tabs.append(interaction_dist_tab)
+            
+    # merge the tables together
+    morph_final_combo = pd.concat(morph_combo_tabs)
+    morph_final_combo.insert(loc=0,column='image_name',value=source_file_path.stem)
+
+    if include_dist:
+        dist_final_combo = pd.concat(dist_combo_tabs)
+        dist_final_combo.insert(loc=0,column='image_name',value=source_file_path.stem)
+    else:
+        dist_final_combo = None
+
+    if include_interaction_degrees:
+        degree_img, degree_tab = create_interaction_degrees(org_name_list=list_obj_names,
+                                                            org_seg_list=list_obj_segs,
+                                                            mask=mask,
+                                                            mask_name=mask_name,
+                                                            scale=scale)
+
+        # add source image name to degree table
+        degree_tab.insert(loc=0,column='image_name',value=source_file_path.stem)
+    else:
+        degree_img = None
+        degree_tab = None
+        
+    return inter_sites, morph_final_combo, dist_final_combo, degree_img, degree_tab
+
+
+
+
+
+
+
+def perorg_interactions_cnt(interaction_morpho_df:pd.DataFrame, 
+                             org_list:List[str],
+                             splitter:str="X") -> pd.DataFrame:
+    """
+    Summarize interaction counts and volumes per organelle object from interaction morphology data.
+    
+    Transforms interaction site data (e.g., "mitoXER" with label "06_01") into per-organelle 
+    summaries showing how many times each organelle participates in different interaction types.
+    
+    Parameters
+    ----------
+    interaction_morpho_df : pd.DataFrame
+        The interactions morphology dataframe created by infer_subc.quantification.interactions.batch_process_interactions_quant() 
+        or infer_subc.quantification.interactions.get_interaction_metrics() functions.
+        The dataFrame must containing the following columns:
+        - dataset: experiment identifier
+        - image_name: cell/image identifier
+        - mask_name: mask identifier
+        - scale: image scale information
+        - object: interaction site name (e.g., "mitoXER", "mitoXlysoXgolgi")
+        - ID: interaction site ID
+        - label: underscore-separated organelle IDs (e.g., "06_01")
+        - volume: interaction site volume
+    org_list : List[str]
+        List of all organelle names included in the interactions analysis
+    splitter : str, default="X"
+        Character used to split interaction site names
+    
+    Returns
+    -------
+    pd.DataFrame
+        Per-organelle summary with columns:
+        - dataset, image_name, object, label
+        - num_interaction_types: the number of different interaction types per organelle objects
+        - {interaction_type}_count: number of sites of each interaction type (frequency of each interaction type) per organelle objects
+        - {interaction_type}_volume: total volume of each interaction type per organelle objects
+    """
+
+    # Select and copy data
+    meta_cols = ["dataset", "image_name", "mask_name", "scale", "object", "label"]
+    df = interaction_morpho_df[meta_cols + ["volume"]].copy()
+    
+    # # Split columns
+    df[['orgs', 'ids']] = df.apply(lambda row: pd.Series([row['object'].split(splitter), row['label'].split('_')]),axis=1)
+    
+    # Explode to create one row per organelle in each interaction
+    records = []
+    for _, row in df.iterrows():
+        for org, org_id in zip(row['orgs'], row['ids']):
+            records.append({'dataset': row['dataset'],
+                            'image_name': row['image_name'],
+                            'mask_name': row['mask_name'],
+                            'scale': row['scale'],
+                            'object': org,
+                            'label': int(org_id),
+                            'interaction_type': row['object'],
+                            'volume': row['volume']})
+
+    expanded = pd.DataFrame(records)
+
+    # Summarize interaction sites per organelle object
+    agg_dict = {'volume': ['count', 'sum']}
+    grouped = expanded.groupby(meta_cols + ['interaction_type']).agg(agg_dict)
+    
+    grouped.columns = ['count', 'volume']
+    grouped = grouped.reset_index()
+
+    # Add interaction degree
+    num_inter_types = grouped.groupby(meta_cols)['interaction_type'].nunique().reset_index(name='num_interaction_types')
+    
+    # Pivot to wide format
+    count_pivot = grouped.pivot_table(index=meta_cols, 
+                                      columns='interaction_type',
+                                      values='count',
+                                      fill_value=0).add_suffix('_count')
+    
+    volume_pivot = grouped.pivot_table(index=meta_cols,
+                                       columns='interaction_type',
+                                       values='volume',
+                                       fill_value=0).add_suffix('_volume')
+    
+    # Combine
+    result = pd.concat([count_pivot, volume_pivot], axis=1).reset_index()
+    combo = pd.merge(num_inter_types, result, on=meta_cols)
+    
+    # Ensure all interaction types present
+    all_possible = _all_combos(org_list, splitter=splitter)
+    for interaction_type in all_possible:
+        if f"{interaction_type}_count" not in combo.columns:
+            combo[f"{interaction_type}_count"] = 0
+        if f"{interaction_type}_volume" not in combo.columns:
+            combo[f"{interaction_type}_volume"] = 0
+    
+    combo['label'] = combo['label'].astype("Int64")
+
+    # fill NA with 0 and format to float values
+    num_cols = [col for col in list(combo.columns) if col not in set(meta_cols)]
+    combo[num_cols] = combo[num_cols].fillna(0).astype(float)
+    
+    return combo
+
+
+def batch_interactions_summary_stats(out_prefix: str,
+                                      csv_path_list: List[str],
+                                      out_path: str,
+                                      org_name_list: List[str],
+                                      splitter: str = "X"):
+    """" 
+    Batch process interaction quantification summary statistics from multiple datasets.
+
+    Parameters:
+    -----------
+    out_prefix: str
+        The prefix used to name the output file. An "_" will be included between this prefix and the file suffix.
+    csv_path_list: List[str],
+        A list of path strings where .csv files to analyze are located.
+    out_path: str,
+        A path string where the summary data file will be output to
+    org_name_list: List[str],
+        A list of organelle names used in the interaction quantification analysis.
+    splitter: str, default="X"
+        The character used to split interaction site names.
+    """
+    # for keeping track of dataset and file numbers
+    ds_count = 0
+    fl_count = 0
+
+    ###############################################################
+    # Read in the csv files and combine them into one of each type
+    ###############################################################
+    # create empty list to hold the morphology tables from different experiments
+    int_labs = []
+    int_morph = []
+    int_dist = []
+    int_degree = []
+
+    # loop through all of the locations listed above and find the _org_morph files; append them to the list above
+    for loc in csv_path_list:
+        # list all csv files in the location
+        files_store = sorted(loc.glob("*.csv"))
+
+        # find the unique datasets in this location based on the prefixes before "_interactions_"
+        prefixes = set(f.name.split("_interactions_")[0] for f in files_store)
+        print(f"Found the following datasets in {loc}:", prefixes)
+        for prefix in prefixes:
+            ds_count = ds_count + 1
+            files_subset = [f for f in files_store if f.name.startswith(prefix +"_interactions")]
+
+            # if both morphology and labels files are present, remove the labels file from the list to be processed
+            if any("_interactions_morphology_metrics.csv" in f.name for f in files_subset) and any("_interactions_labels.csv" in f.name for f in files_subset):
+                    files_subset = [f for f in files_subset if not "_interactions_labels.csv" in f.name]
+
+            for file in files_subset:
+                fl_count = fl_count + 1
+                stem = file.stem
+                
+                if "_interactions_labels" in stem:
+                    inter_labels = pd.read_csv(file)
+                    int_labs.append(inter_labels)
+                elif "_interactions_morphology_metrics" in stem:
+                    morph = pd.read_csv(file)
+                    int_morph.append(morph)
+                elif "_interactions_distribution_metrics" in stem:
+                    dist = pd.read_csv(file)
+                    int_dist.append(dist)
+                elif "_interactions_degree_metrics" in stem:
+                    degree = pd.read_csv(file)
+                    int_degree.append(degree)
+                else:
+                    print(f"File {stem} not recognized as interaction quantification data; skipping.")
+
+    print(f"Found {fl_count} files from {ds_count} dataset(s) across {len(csv_path_list)} location(s).")
+
+    # combine the org_morph lists found above into one combined table with all data
+    labs_df = pd.concat(int_labs, axis=0, join='outer') if int_labs else None
+    morph_df = pd.concat(int_morph, axis=0, join='outer') if int_morph else None
+    dist_df = pd.concat(int_dist, axis=0, join='outer') if int_dist else None
+    degree_df = pd.concat(int_degree, axis=0, join='outer') if int_degree else None
+
+    # list all possible interaction site combinations
+    all_pos = all_combos(org_name_list, splitter)
+
+    ################################################
+    # Summarize interactions count & morphology data
+    ################################################
+    if morph_df is not None:
+        ### calculate interaction count/volume & summarize per organelle object for all interaction sites
+        per_org_summary = perorg_interactions_cnt(interaction_morpho_df=morph_df, 
+                                                   org_list=org_name_list,
+                                                   splitter=splitter)
+
+        # summarization parameters
+        count_vol_group_by = ["dataset", "image_name", "mask_name", "scale", "object"]
+        count_vol_cols = [col for col in per_org_summary.columns if col.endswith(("_count", "_volume"))]
+        count_vol_ag_func_standard = {"num_interaction_types": ['mean', 'median', 'std']} | {col: ['sum', 'mean', 'median', 'std'] for col in count_vol_cols}
+
+        # summarize per organelle type per image
+        org_sum_tab = per_org_summary.groupby(count_vol_group_by).agg(count_vol_ag_func_standard)
+    
+        # Ensure all possible interactions are represented (if missing fill with NaN)
+        for ind in org_sum_tab.index.droplevel(4).unique().to_list():
+            for row in org_name_list:
+                if ind+(row,) not in org_sum_tab.index:
+                    org_sum_tab.loc[ind+(row,)] = np.nan
+        org_sum_tab.sort_index(inplace=True)
+
+        # export before unstacking
+        if (Path(out_path) / f"{out_prefix}_interaction_count_volume_summarystats.csv").exists():
+            raise FileExistsError(f"CAUTION: {out_prefix}_interaction_count_volume_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+        else:
+            org_sum_tab.to_csv(str(out_path) + f"/{out_prefix}_interaction_count_volume_summarystats.csv", mode='x')
+
+        # unstack and format interaction count/volume summary table
+        inter_count_vol_final = org_sum_tab.unstack(-1)
+        for col in inter_count_vol_final.columns:
+            if col[0].endswith(('_count', '_volume')):
+                if col[2] not in col[0]:
+                    inter_count_vol_final.drop(col,axis=1, inplace=True)
+
+        inter_count_vol_final.columns = ["_".join((col_name[1], col_name[0], "per", col_name[-1])) for col_name in inter_count_vol_final.columns.to_flat_index()]
+        inter_count_vol_final.columns = [col.replace('sum', 'total') for col in inter_count_vol_final.columns]
+        inter_count_vol_final.columns = [col.replace('per', 'in') if 'total' in col else col for col in inter_count_vol_final.columns]
+        inter_count_vol_final.fillna(0, inplace=True)
+        inter_count_vol_final.reset_index()
+
+
+        ### summarize interaction morphology per interaction site
+        # summarization paramters
+        morph_group_by = ["dataset", "image_name", "mask_name", "scale", "object"]
+        morph_cols = ["SA_to_volume_ratio", "equivalent_diameter", "extent", "euler_number", "solidity", "axis_major_length"] + list(morph_df.filter(regex=".*intensity.*").columns)
+        morph_ag_func_standard = ['mean', 'median', 'std']
+
+        # summarize counts of interaction sites per image
+        tab1 = morph_df[morph_group_by + ['ID']].groupby(morph_group_by).agg(['count'])
+        tab1.rename(columns={'ID': 'sites'}, inplace=True)
+        tab2 = morph_df.copy()[morph_df['in_higher_order'] == True][morph_group_by + ['ID']].groupby(morph_group_by).agg(['count'])
+        tab2.rename(columns={'ID': 'sites_in_higher_order'}, inplace=True)
+        tab3 = morph_df.copy()[morph_df['in_higher_order'] == False][morph_group_by + ['ID']].groupby(morph_group_by).agg(['count'])
+        tab3.rename(columns={'ID': 'sites_not_in_higher_order'}, inplace=True)
+        inter_sum_tab = pd.merge(tab1, tab2, 'outer', on=morph_group_by)
+        inter_sum_tab = pd.merge(inter_sum_tab, tab3, 'outer', on=morph_group_by)
+
+        # summarize all interaction sites
+        tab4 = morph_df[morph_group_by + ['volume', 'surface_area']].groupby(morph_group_by).agg(['sum'] + morph_ag_func_standard)
+        tab5 = morph_df[morph_group_by+morph_cols].groupby(morph_group_by).agg(morph_ag_func_standard)
+        inter_sum_tab = pd.merge(inter_sum_tab, tab4, 'outer', on=morph_group_by)
+        inter_sum_tab = pd.merge(inter_sum_tab, tab5, 'outer', on=morph_group_by)
+
+        # Get mask_name and corresponding volume column per group & calculate volume fraction
+        mask_names = morph_df.groupby(morph_group_by)['mask_name'].first()
+        mask_volume_data = morph_df.groupby(morph_group_by).first().apply(lambda row: row[f"{mask_names.loc[row.name]}_volume"], axis=1)
+        inter_sum_tab.insert(inter_sum_tab.columns.get_loc(('volume', 'sum')) + 1, ('volume', 'fraction'), inter_sum_tab[('volume', 'sum')]/mask_volume_data)
+
+        # Ensure all possible interactions are represented (if missing fill with NaN)
+        for ind in inter_sum_tab.index.droplevel(4).unique().to_list():
+            for row in all_pos:
+                if ind+(row,) not in inter_sum_tab.index:
+                    inter_sum_tab.loc[ind+(row,)] = np.nan
+
+        # fill NA with 0 for specific columns
+        fill_dict = {('sites', 'count'): 0, 
+                    ('sites_in_higher_order', 'count'): 0, 
+                    ('sites_not_in_higher_order', 'count'): 0,
+                    ('volume', 'sum'): 0,
+                    ('surface_area', 'sum'): 0,
+                    ('volume', 'fraction'): 0}
+        inter_sum_tab = inter_sum_tab.fillna(value=fill_dict)
+
+        # if (sites, count) is 1, set mean, median, and std to NaN
+        single_site_mask = inter_sum_tab[('sites', 'count')] == 1
+        for col in morph_cols+['volume', 'surface_area']:
+            inter_sum_tab.loc[single_site_mask, (col, 'std')] = np.nan
+
+        inter_sum_tab.sort_index(inplace=True)
+
+        # export before unstacking
+        if (Path(out_path) / f"{out_prefix}_interaction_morphology_summarystats.csv").exists():
+            raise FileExistsError(f"CAUTION: {out_prefix}_interaction_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+        else:
+            inter_sum_tab.to_csv(str(out_path) + f"/{out_prefix}_interaction_morphology_summarystats.csv", mode='x')
+
+        # unstack and format interaction morphology summary table   
+        inter_morph_final = inter_sum_tab.unstack(-1)
+        inter_morph_final.columns = ["_".join((col_name[1], col_name[-1], col_name[0])) for col_name in inter_morph_final.columns.to_flat_index()]
+        inter_morph_final.columns = [col.replace('sum', 'total') for col in inter_morph_final.columns]
+        inter_morph_final.columns = [col.replace(col, 'mask_volume') if 'mask' in col else col for col in inter_morph_final.columns]
+        inter_morph_final = inter_morph_final.loc[:, ~inter_morph_final.columns.duplicated()]
+        inter_morph_final.reset_index()
+
+        # combine count/volume and morphology summaries
+        final_combo_tab = pd.merge(inter_morph_final, inter_count_vol_final, on=["dataset", "image_name", "mask_name", "scale"]).reset_index()
+    else:
+        final_combo_tab = pd.DataFrame()
+
+    ###################################
+    # Summarize interaction labels data
+    ###################################
+    if labs_df is not None:
+        ### summarize interaction site counts
+        # define summarization paramters
+        labs_group_by = ["dataset", "image_name", "mask_name", "object"]
+
+        # summarize counts of interaction sites per image
+        labs_tab1 = labs_df[labs_group_by + ['ID']].groupby(labs_group_by).agg(['count'])
+        labs_tab1.rename(columns={'ID': 'sites'}, inplace=True)
+        labs_tab2 = labs_df.copy()[labs_df['in_higher_order'] == True][labs_group_by + ['ID']].groupby(labs_group_by).agg(['count'])
+        labs_tab2.rename(columns={'ID': 'sites_in_higher_order'}, inplace=True)
+        labs_tab3 = labs_df.copy()[labs_df['in_higher_order'] == False][labs_group_by + ['ID']].groupby(labs_group_by).agg(['count'])
+        labs_tab3.rename(columns={'ID': 'sites_not_in_higher_order'}, inplace=True)
+        labs_inter_sum_tab = pd.merge(labs_tab1, labs_tab2, 'outer', on=labs_group_by)
+        labs_inter_sum_tab = pd.merge(labs_inter_sum_tab, labs_tab3, 'outer', on=labs_group_by)
+
+        # Ensure all possible interactions (all_pos) are represented (if missing fill with NaN):
+        for ind in labs_inter_sum_tab.index.droplevel(3).unique().to_list():
+            for row in all_pos:
+                if ind+(row,) not in labs_inter_sum_tab.index:
+                    labs_inter_sum_tab.loc[ind+(row,)] = np.nan
+
+        # fill NA with 0 for specific columns
+        fill_dict = {('sites', 'count'): 0, 
+                    ('sites_in_higher_order', 'count'): 0, 
+                    ('sites_not_in_higher_order', 'count'): 0}
+        labs_inter_sum_tab = labs_inter_sum_tab.fillna(value=fill_dict)
+
+        labs_inter_sum_tab.sort_index(inplace=True)
+
+        # export before unstacking
+        if (Path(out_path) / f"{out_prefix}_interaction_labels_summarystats.csv").exists():
+            raise FileExistsError(f"CAUTION: {out_prefix}_interaction_labels_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+        else:
+            labs_inter_sum_tab.to_csv(str(out_path) + f"/{out_prefix}_interaction_labels_summarystats.csv", mode='x')
+
+        # unstack and format interaction labels summary table
+        inter_labels_final = labs_inter_sum_tab.unstack(-1)
+        inter_labels_final.columns = ["_".join((col_name[1], col_name[-1], col_name[0])) for col_name in inter_labels_final.columns.to_flat_index()]
+        inter_labels_final.reset_index()
+
+        # combine with previous summary table
+        final_combo_tab = pd.concat([final_combo_tab, inter_labels_final.reset_index()], axis=0)
+    else:
+        final_combo_tab = final_combo_tab                                                                            
+
+
+    #########################################
+    # Summarize interaction distribution data
+    ########################################
+    if dist_df is not None:
+        ### summarize interaction site distribution metrics
+        nuc_dist_df = dist_df[["dataset", "image_name", 'scale',
+                               "XY_bins", "XY_center_vox_cnt_perbin", "XY_mask_vox_cnt_perbin", "XY_center_cv_perbin",
+                               "XY_wedges", "XY_center_vox_cnt_perwedge", "XY_mask_vox_cnt_perwedge",
+                               "Z_slices", "Z_center_vox_cnt", "Z_mask_vox_cnt"]].drop_duplicates(subset=['dataset', 'image_name'])
+        nuc_dist_df.columns = nuc_dist_df.columns.str.replace('center', 'obj', regex=False)
+        nuc_dist_df.insert(loc=3,column='object',value='nuc')
+        nuc_dist_df.set_index(['dataset', 'image_name', 'scale', 'object'], inplace=True)
+
+
+        inter_dist_df = dist_df[list(nuc_dist_df.reset_index().columns)]
+        inter_dist_df.set_index(['dataset', 'image_name', 'scale', 'object'], inplace=True)
+
+        combo_dist_df = pd.concat([nuc_dist_df, inter_dist_df], axis=0)
+
+        hist_dfs = []
+        for ind in combo_dist_df.index:
+            selection = combo_dist_df.loc[[ind]].reset_index()
+            bins_df = pd.DataFrame()
+            wedges_df = pd.DataFrame()
+            Z_df = pd.DataFrame()
+            CV_df = pd.DataFrame()
+
+            bins_df[['bins', 'masks', 'obj']] = selection[['XY_bins', 'XY_mask_vox_cnt_perbin', 'XY_obj_vox_cnt_perbin']]
+            wedges_df[['bins', 'masks', 'obj']] = selection[['XY_wedges', 'XY_mask_vox_cnt_perwedge', 'XY_obj_vox_cnt_perwedge']]
+            Z_df[['bins', 'masks', 'obj']] = selection[['Z_slices', 'Z_mask_vox_cnt', 'Z_obj_vox_cnt']]
+            CV_df[['XY_obj_cv_perbin']] = selection[['XY_obj_cv_perbin']]
+
+            dfs = [selection[['dataset', 'image_name', 'scale', 'object']].reset_index()]
+            for df, prefix in zip([bins_df, wedges_df, Z_df, CV_df], ["XY_bins_", "XY_wedges_", "Z_slices_", "CV_perbin_"]):
+                if prefix != "CV_perbin_":
+                    single_df = pd.DataFrame(list(zip(df["bins"].values[0][1:-1].split(", "), 
+                                                    df["obj"].values[0][1:-1].split(", "), 
+                                                    df["masks"].values[0][1:-1].split(", "))), columns =['bins', 'obj', 'mask']).astype(int)
+                    
+                    if "Z_" in prefix:
+                        single_df =  single_df.drop(single_df[single_df['mask'] == 0].index)
+                        single_df['bins'] = (single_df["bins"]/max(single_df.bins)*9.99).apply(np.floor)+1
+                        single_df = single_df.groupby("bins").agg(['sum']).reset_index()
+                        single_df.columns = ['bins',"obj","mask"]
+                
+                    single_df['mask_fract'] = single_df['mask']/single_df['mask'].max()
+                    # single_df['obj_normed_tocell'] = (single_df["obj"]*single_df["mask_fract"]).fillna(0)
+                    single_df['obj_perc_per_bin'] = (single_df["obj"] / single_df["obj"].sum())*100
+                    single_df['obj_portion_normed_tobin'] = (single_df["obj_perc_per_bin"]/single_df["mask_fract"]).fillna(0)
+
+                    sumstats_df = pd.DataFrame()
+
+                    s = single_df['bins'].repeat(single_df['obj_portion_normed_tobin']*100)
+
+                    sumstats_df['hist_mean']=[s.mean()]
+                    sumstats_df['hist_median']=[s.median()]
+                    if single_df['obj_portion_normed_tobin'].sum() != 0: sumstats_df['hist_mode']=[s.mode().iloc[0]]
+                    else: sumstats_df['hist_mode']=['NaN']
+                    sumstats_df['hist_min']=[s.min()]
+                    sumstats_df['hist_max']=[s.max()]
+                    sumstats_df['hist_range']=[s.max() - s.min()]
+                    sumstats_df['hist_stdev']=[s.std()]
+                    sumstats_df['hist_skew']=[s.skew()]
+                    sumstats_df['hist_kurtosis']=[s.kurtosis()]
+                    sumstats_df['hist_var']=[s.var()]
+                    sumstats_df.columns = [prefix+col for col in sumstats_df.columns]
+                    sumstats_df.reset_index(drop=True, inplace=True)
+
+                    dfs.append(sumstats_df)
+                    
+                if prefix == 'CV_perbin_':
+                    CV_df = pd.DataFrame(list(zip(df["XY_obj_cv_perbin"].values[0][1:-1].split(", "))), columns =['CV']).astype(float)
+                    sumstats_CV_df = pd.DataFrame()
+                    sumstats_CV_df['XY_bin_CV_mean'] = CV_df.mean()
+                    sumstats_CV_df['XY_bin_CV_median'] = CV_df.median()
+                    sumstats_CV_df['XY_bin_CV_std'] = CV_df.std()
+                    sumstats_CV_df.reset_index(drop=True, inplace=True)
+                    sumstats_df = pd.concat([sumstats_df, sumstats_CV_df], axis=1)
+
+                    dfs.append(sumstats_df)
+                
+            combined_df = pd.concat(dfs,axis=1).drop(columns="index")
+            combined_df.set_index(['dataset', 'image_name', 'scale', 'object'], inplace=True)
+            hist_dfs.append(combined_df)
+
+        dist_summary = pd.concat(hist_dfs).sort_values(by=['dataset', 'image_name', 'scale', 'object'])
+
+        # Ensure all possible interactions (all_pos) are represented (if missing fill with NaN):
+        for ind in dist_summary.index.droplevel(3).unique().to_list():
+            for row in all_pos:
+                if ind+(row,) not in dist_summary.index:
+                    dist_summary.loc[ind+(row,)] = np.nan
+
+        dist_summary.reset_index(inplace=True)
+
+        # export before unstacking
+        if (Path(out_path) / f"{out_prefix}_interaction_distribution_summarystats.csv").exists():
+            raise FileExistsError(f"CAUTION: {out_prefix}_interaction_distribution_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+        else:
+            dist_summary.to_csv(str(out_path) + f"/{out_prefix}_interaction_distribution_summarystats.csv", mode='x')
+
+        # unstack and format interaction distribution summary table
+        dist_summary.insert(2, "mask_name", "cell") ## TODO: change after dist is updated to include mask_name
+        dist_final = dist_summary.set_index(['dataset', 'image_name', 'mask_name', 'scale', 'object']).unstack(-1)
+        dist_final.columns = ["_".join((col_name[1], col_name[0])) for col_name in dist_final.columns.to_flat_index()]
+        dist_final = dist_final.reset_index()
+
+        # combine with previous summary table
+        final_combo_tab = pd.merge(final_combo_tab, dist_final, on=["dataset", "image_name", "mask_name", "scale"], how="outer")
+    else:
+        final_combo_tab = final_combo_tab
+
+    ###################################
+    # Summarize interaction degree data
+    ###################################
+    if degree_df is not None:
+        # degree_df not exported before unstacking becuase it is already summarized per image originally
+
+        # unstack and format interaction degree summary table
+        inter_degree_final = degree_df.set_index(['dataset', 'image_name', 'mask_name', 'scale', 'object']).unstack(-1)
+        inter_degree_final.columns = ["_".join((col_name[1], col_name[0])) for col_name in inter_degree_final.columns.to_flat_index()]
+        inter_degree_final = inter_degree_final.reset_index()
+
+        # combine with previous summary table
+        final_combo_tab = pd.merge(final_combo_tab, inter_degree_final, on=["dataset", "image_name", "mask_name", "scale"], how="outer")
+    else:
+        final_combo_tab = final_combo_tab
+
+    ##########################
+    # Export combined results
+    ##########################
+    if (Path(out_path) / f"{out_prefix}_combined_summarystats.csv").exists():
+        raise FileExistsError(f"CAUTION: {out_prefix}_combined_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+    else:
+        final_combo_tab.to_csv(str(out_path) + f"/{out_prefix}_combined_summarystats.csv", mode='x')
+
+    print(f"Interactions summary is complete.")
+    return final_combo_tab
