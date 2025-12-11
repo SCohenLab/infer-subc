@@ -14,6 +14,9 @@ from infer_subc.quantification.stats import *
 from infer_subc.quantification.stats_helpers import *
 from infer_subc.organelles import * 
 from infer_subc.quantification.morphology import get_morphology_metrics
+from infer_subc.quantification.batch import load_existing_keys_csv, append_atomic_csv
+from infer_subc.core.file_io import export_inferred_organelle
+
 
 
 def make_dict(list_obj_names: list[str],
@@ -411,7 +414,7 @@ def get_interaction_metrics(source_file_path: str,
                              dist_num_bins: Union[int, None]=5,
                              dist_center_on: Union[bool, None]=False,
                              dist_keep_center_as_bin: Union[bool, None]=True,
-                             dist_zernike_degrees: Union[int, None]=9):
+                             dist_zernike_degrees: Union[int, None]=9) -> Union[dict, pd.DataFrame, pd.DataFrame, np.ndarray, pd.DataFrame]:
    
     """
     Quantify organelle interaction metrics including morphology, distribution, and degree of interactions for a image or region
@@ -448,10 +451,11 @@ def get_interaction_metrics(source_file_path: str,
         Character used to separate organelles within the interaction site names
         Ex) "mitoXlyso" for mito-lyso interactions
     scale : Union[tuple, None], default=None
-        Voxel dimensions (Z, Y, X); if not specified, an isotropic (1,1,1) scale will be used resulting in all output metrics in voxel 
-        units.
+        Name of the region to use as the mask for analysis; if not specified, the entire image will be quantified.
     include_morpho : bool, default=True
         Whether to compute morphology metrics for each interaction site.
+    channel_axis : int, default=0
+        The index of the channel dimension axis in the intensity image.
     include_interaction_degrees : bool, default=True
         Whether to compute interaction degree analysis for the entire image or mask region.
     include_dist : bool, default=True
@@ -517,7 +521,11 @@ def get_interaction_metrics(source_file_path: str,
 
     # recreate raw_intensity image based on list intensity channels above to ensure proper order
     if include_morpho:
-        intensity_img = np.stack(list_intensity_img)
+        if list_intensity_img is None:
+            intensity_img = None
+            print("No intensity images provided. Morphology metrics that require intensity images will not be calculated.")
+        else:
+            intensity_img = np.stack(list_intensity_img)
 
     # collect centering object image
     if include_dist:
@@ -621,7 +629,255 @@ def get_interaction_metrics(source_file_path: str,
 
 
 
+def batch_process_interactions_quant(dataset_name: str,
+                                      raw_path: Union[Path,str],
+                                      seg_path: Union[Path,str],
+                                      quant_path: Union[Path, str], 
+                                      raw_file_type: str,
+                                      channel_axis: int,
+                                      organelle_names: List[str],
+                                      organelle_channels: Union[List[int], None]=None,
+                                      region_names: Union[List[str], None]=None,
+                                      mask_name: Union[str, None]=None,
+                                      use_scale:bool=True,
+                                      seg_suffix:Union[str, None]=None,
+                                      int_splitter:str="X",
+                                      include_morpho:bool=True,
+                                      include_interaction_degrees:bool=True,
+                                      include_dist:bool=True, 
+                                      dist_centering_obj: Union[str, None]=None,
+                                      dist_num_bins: Union[int, None]=5,
+                                      dist_center_on: Union[bool, None]=False,
+                                      dist_keep_center_as_bin: Union[bool, None]=True,
+                                      dist_zernike_degrees: Union[int, None]=9,
+                                      export_inter_degree_imgs:bool=True,
+                                      export_interaction_sites:bool=True):
+    """
+    Batch process interaction quantification for a single dataset (e.g., images collected on the same data). 
+    Morphology, distribution, and degree of interaction metrics analysis are all optionally available. 
+    Interaction site segmentations and degree of interaction images can also be exported.
+    
+    Parameters:
+    -----------
+    dataset_name : str
+        A unique string identifier for the dataset being processed. It will be included as metadata in output tables and as 
+        part of the output files names. It will be used to identify if any data has already been collected for this dataset.
+    raw_path : Union[Path,str]
+        Path or str to the folder that contains the raw image files.
+    seg_path : Union[Path,str]
+        Path or str to the folder that contains the segmentation tiff files.
+    quant_path : Union[Path, str]
+        Path or str to the folder that the output datatables will be saved to.
+    raw_file_type : str
+        File type of the raw images (e.g., "czi", "tiff")
+    channel_axis : int
+        Axis corresponding to the channels in the image data
+    organelle_names : List[str]
+        List of organelle names to analyze. These names should match the suffix on the organelle segmentation files
+    organelle_channels : Union[List[int], None]
+        List of intensity channel indices in the raw files corresponding to each organelle included in organelle_names.
+        The order should match organelle_names. 
+        If no intensity analysis is to be included, specify None here.
+    region_names : Union[List[str], None]
+        List of region names to analyze. Usually ['cell', 'nuc'] for cell mask and nucleus.
+        If no regions are to be included, specify None here.
+    mask_name : Union[str, None]
+        Name of the mask to use for segmentation (if any). This name should be included in the regions_name variable.
+        If None, the entire image will be quantified.
+    use_scale : bool
+        Whether to apply scaling to the quantitative data; scaled data will be in real world units (e.g., microns) rather than pixels/voxels
+    seg_suffix : Union[str, None]
+        Any additional text that is included in the segmentation tiff files between the file stem and the segmentation suffix, not including the initial "-"
+    int_splitter: str
+        Character used to separate organelles within the interaction site names
+        Ex) "mitoXlyso" for mito-lyso interactions
+        include_morpho : bool, default=True
+        Whether to compute morphology metrics
+    include_morpho : bool, default=True
+        Whether to compute morphology metrics for each interaction site
+    include_interaction_degrees : bool, default=True
+        Whether to compute interaction degree analysis
+    include_dist : bool, default=True
+        Whether to compute distribution metrics
+    dist_centering_obj : str or None, default=None
+        Name of the region to use for centering distribution analysis
+        This region should be included in the list_region_names and list_region_segs variables
+        If not specified, the center of the mask, or entire image if no mask was specified, will be used as the centering object
+    dist_num_bins : int or None, default=5
+        Number of radial bins to create in the XY distribution analysis
+    dist_center_on : bool or None, default=True
+        Whether to start creation of the XY bins from the center of the centering object (True) or edge (False)
+    dist_keep_center_as_bin : bool or None
+        Whether to keep centering object as the first XY bin
+    dist_zernike_degrees : int or None, default=9
+        Zernike polynomial degree for shape analysis in the XY distribution analysis
+        If None and include_dist=True, no Zernike features will be calculated
+    export_inter_degree_imgs : bool
+        Whether to export interaction degree images
+    export_interaction_sites : bool
+        Whether to export interaction site images (including interaction site objects across the entire image; not masked)
 
+    Returns:
+    --------
+    None
+        Saves output files to the specified quantification path
+    """
+
+    batch_start = time.time()
+    count = 0
+
+    # format/make file paths
+    if isinstance(raw_path, str): raw_path = Path(raw_path)
+    if isinstance(seg_path, str): seg_path = Path(seg_path)
+    if isinstance(quant_path, str): quant_path = Path(quant_path)
+
+    if not Path.exists(quant_path):
+        Path.mkdir(quant_path)
+        print(f"making {quant_path}")
+
+
+    # check if any existing data is present in outfiles to skip already processed images
+    unique_keys = ['dataset', 'image_name']
+
+    if include_morpho:
+        morpho_tab_path = quant_path / f"{dataset_name}_interactions_morphology_metrics.csv"
+        existing_morpho_keys = load_existing_keys_csv(morpho_tab_path, unique_keys)
+    else:
+        morpho_tab_path = quant_path / f"{dataset_name}_interactions_labels.csv"
+        existing_morpho_keys = set()
+
+    if include_dist:
+        dist_tab_path = quant_path / f"{dataset_name}_interactions_distribution_metrics.csv"
+        existing_dist_keys = load_existing_keys_csv(dist_tab_path, unique_keys)
+    else:
+        existing_dist_keys = existing_morpho_keys
+
+    if include_interaction_degrees:
+        int_degree_tab_path = quant_path / f"{dataset_name}_interactions_degree_metrics.csv"
+        existing_int_degree_keys = load_existing_keys_csv(int_degree_tab_path, unique_keys)
+    else:
+        existing_int_degree_keys = existing_morpho_keys
+
+    if existing_morpho_keys == existing_dist_keys == existing_int_degree_keys:
+        existing_keys = existing_morpho_keys
+    else:
+        existing_keys = existing_morpho_keys.intersection(existing_dist_keys).intersection(existing_int_degree_keys)
+
+    int_degree_img_path = quant_path / "interaction_degree_images"
+    interaction_sites_path = quant_path / "interaction_site_segmentations"
+
+
+    # list of organelle segmentation and masks files to collect from each image
+    segs_to_collect = organelle_names + region_names if region_names is not None else organelle_names
+
+    # reading list of files from the raw path
+    img_file_list = list_image_files(raw_path, raw_file_type)
+    len_file_list = len(img_file_list)
+
+    # loop through list of cell analyzing each and appending the data to the empty list
+    for img_f in img_file_list:
+        img_start = time.time()
+        count = count+1
+        # skip files that have already been processed
+        if (dataset_name, img_f.stem) in existing_keys:
+            print(f"Skipping {img_f.name} as it is already listed in the output file(s).")
+            continue
+        # process analysis for this cells
+        else:
+            filez = find_segmentation_tiff_files(img_f, segs_to_collect, seg_path, seg_suffix)
+
+            # read in raw file and metadata
+            img_data, meta_dict = read_czi_image(filez["raw"])
+
+            # create intensities from raw file as list based on the channel order provided
+            if organelle_channels is None:
+                intensities = None
+                print("No intensity channel information provided.")
+            else:
+                if channel_axis != 0:
+                    img_data = np.moveaxis(img_data, channel_axis, 0)
+                intensities = [img_data[ch] for ch in organelle_channels]
+
+            # store organelle images as list
+            organelles = [read_tiff_image(filez[org]) for org in organelle_names]
+
+            # load regions as a list based on order in list
+            if region_names is None:
+                regions = None
+            else:
+                regions = [read_tiff_image(filez[r]) for r in region_names]
+
+            # define the scale
+            if use_scale is True:
+                scale_tup = meta_dict['scale']
+            else:
+                scale_tup = None
+
+            inter_dict, morph_tab, dist_tab, int_degree_img, int_degree_tab = get_interaction_metrics(source_file_path=img_f,
+                                                                                                    list_obj_names=organelle_names,
+                                                                                                    list_obj_segs=organelles,
+                                                                                                    list_intensity_img=intensities,
+                                                                                                    list_region_names=region_names,
+                                                                                                    list_region_segs=regions,
+                                                                                                    mask_name=mask_name,
+                                                                                                    splitter=int_splitter,
+                                                                                                    scale=scale_tup,
+                                                                                                    include_morpho=include_morpho,
+                                                                                                    include_interaction_degrees=include_interaction_degrees,
+                                                                                                    include_dist=include_dist, 
+                                                                                                    dist_centering_obj=dist_centering_obj,
+                                                                                                    dist_num_bins=dist_num_bins,
+                                                                                                    dist_center_on=dist_center_on,
+                                                                                                    dist_keep_center_as_bin=dist_keep_center_as_bin,
+                                                                                                    dist_zernike_degrees=dist_zernike_degrees)
+
+            # save the morphology table data per image directly to csv
+            morph_tab.insert(loc=0,column='dataset',value=dataset_name)
+            append_atomic_csv(morpho_tab_path, morph_tab)
+            del morph_tab  # free up memory
+
+            # save the interaction site images
+            if export_interaction_sites:
+                inter_site_cnt=0
+                for inter_name, inter_img in inter_dict.items():
+                    inter_site_cnt+=1
+                    if not (Path(interaction_sites_path)/f"{meta_dict['file_name'].stem}-{inter_name}.tiff").exists():
+                        export_inferred_organelle(inter_img, f"{inter_name}", meta_dict, interaction_sites_path)
+                    else:
+                        if inter_site_cnt<=1:
+                            warnings.warn(f"Some of the interaction site images already exist for {meta_dict['file_name'].stem} in {interaction_sites_path}. They will not be overwritten.", UserWarning)
+            del inter_dict  # free up memory
+           
+            # save the distribution table data per image directly to csv
+            if include_dist:
+                # TODO: remove .astype(str) once method distribution functions have been updated
+                dist_tab = dist_tab.astype(str)  # ensure all data is string to avoid dtype issues
+                dist_tab.insert(loc=0,column='dataset',value=dataset_name)
+                append_atomic_csv(dist_tab_path, dist_tab)
+            del dist_tab  # free up memory
+
+            # save the degree table data per image directly to csv
+            if include_interaction_degrees:
+                int_degree_tab.insert(loc=0,column='dataset',value=dataset_name)
+                append_atomic_csv(int_degree_tab_path, int_degree_tab)
+
+                # save the degree image
+                if export_inter_degree_imgs:
+                    if not (Path(int_degree_img_path)/f"{meta_dict['file_name'].stem}-interactions_degree.tiff").exists():
+                        export_inferred_organelle(int_degree_img, f"interactions_degree", meta_dict, int_degree_img_path)
+                    else:
+                        warnings.warn(f"The {meta_dict['file_name'].stem}-interactions_degree.tiff image already exists in {int_degree_img_path}. It will not be overwritten.")
+            del int_degree_tab  # free up memory
+            del int_degree_img  # free up memory
+            
+            end2 = time.time()
+            print(f"Completed quantification of {meta_dict['file_name']} in {(end2-img_start)/60} mins.")
+            print(f"{count}/{len_file_list} images have been processed.")
+            print(f"Time elapsed: {(end2-img_start)/60} mins")
+
+    batch_end = time.time()
+    print(f"Quantification for {count} files is COMPLETE! Files saved to '{quant_path}'.")
+    print(f"It took {(batch_end - batch_start)/60} minutes to quantify these files.")
 
 
 
@@ -711,7 +967,7 @@ def perorg_interactions_cnt(interaction_morpho_df:pd.DataFrame,
     combo = pd.merge(num_inter_types, result, on=meta_cols)
     
     # Ensure all interaction types present
-    all_possible = _all_combos(org_list, splitter=splitter)
+    all_possible = all_combos(org_list, splitter=splitter)
     for interaction_type in all_possible:
         if f"{interaction_type}_count" not in combo.columns:
             combo[f"{interaction_type}_count"] = 0
@@ -730,7 +986,7 @@ def perorg_interactions_cnt(interaction_morpho_df:pd.DataFrame,
 def batch_interactions_summary_stats(out_prefix: str,
                                       csv_path_list: List[str],
                                       out_path: str,
-                                      org_name_list: List[str],
+                                      organelle_names: List[str],
                                       splitter: str = "X"):
     """" 
     Batch process interaction quantification summary statistics from multiple datasets.
@@ -743,7 +999,7 @@ def batch_interactions_summary_stats(out_prefix: str,
         A list of path strings where .csv files to analyze are located.
     out_path: str,
         A path string where the summary data file will be output to
-    org_name_list: List[str],
+    organelle_names: List[str],
         A list of organelle names used in the interaction quantification analysis.
     splitter: str, default="X"
         The character used to split interaction site names.
@@ -805,7 +1061,7 @@ def batch_interactions_summary_stats(out_prefix: str,
     degree_df = pd.concat(int_degree, axis=0, join='outer') if int_degree else None
 
     # list all possible interaction site combinations
-    all_pos = all_combos(org_name_list, splitter)
+    all_pos = all_combos(organelle_names, splitter)
 
     ################################################
     # Summarize interactions count & morphology data
@@ -813,7 +1069,7 @@ def batch_interactions_summary_stats(out_prefix: str,
     if morph_df is not None:
         ### calculate interaction count/volume & summarize per organelle object for all interaction sites
         per_org_summary = perorg_interactions_cnt(interaction_morpho_df=morph_df, 
-                                                   org_list=org_name_list,
+                                                   org_list=organelle_names,
                                                    splitter=splitter)
 
         # summarization parameters
@@ -826,7 +1082,7 @@ def batch_interactions_summary_stats(out_prefix: str,
     
         # Ensure all possible interactions are represented (if missing fill with NaN)
         for ind in org_sum_tab.index.droplevel(4).unique().to_list():
-            for row in org_name_list:
+            for row in organelle_names:
                 if ind+(row,) not in org_sum_tab.index:
                     org_sum_tab.loc[ind+(row,)] = np.nan
         org_sum_tab.sort_index(inplace=True)
