@@ -1349,7 +1349,7 @@ def batch_interactions_summary_stats(out_prefix: str,
         # combine with previous summary table
         final_combo_tab = pd.merge(final_combo_tab, inter_degree_final, on=["dataset", "image_name", "mask_name", "scale"], how="outer")
     else:
-        final_combo_tab = final_combo_tab
+        pass
 
     ##########################
     # Export combined results
