@@ -147,7 +147,7 @@ def get_morphology_metrics(segmentation_img: np.ndarray,
 
     if intensity_img is not None:
         if channel_axis == len(scale):
-            intensity_img = intensity_img
+            pass
         else:
             intensity_img = np.moveaxis(intensity_img, channel_axis, -1)
 
