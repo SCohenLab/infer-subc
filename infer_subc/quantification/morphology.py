@@ -553,7 +553,7 @@ def batch_org_morph_summary_stats(csv_path_list: List[str],
         raise FileExistsError(f"CAUTION: {out_prefix}_per_org_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `quant_data_path` to continue without error.")
     else:
         org_summary.to_csv(str(out_path) + f"/{out_prefix}_per_org_morphology_summarystats.csv", mode='x')
-        print(f"Exported per-organelle morphology summary statistics (before unstacking) to {quant_data_path}/{out_prefix}_per_org_morphology_summarystats.csv")
+        print(f"Exported per-organelle morphology summary statistics (before unstacking) to {out_path}/{out_prefix}_per_org_morphology_summarystats.csv")
 
     org_morph_final = org_summary.unstack(-1)
     org_morph_final.columns = ["_".join((col_name[1], col_name[-1], col_name[0])) for col_name in org_morph_final.columns.to_flat_index()]
