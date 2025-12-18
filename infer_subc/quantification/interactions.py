@@ -529,7 +529,7 @@ def get_interaction_metrics(source_file_path: str,
 
     # collect centering object image
     if include_dist:
-        if dist_centering_obj == None:
+        if dist_centering_obj is None:
             print("No centering object provided. Using center of mask or entire image for distribution centering.")
             centering_img = None
         elif dist_centering_obj not in list_region_names:
