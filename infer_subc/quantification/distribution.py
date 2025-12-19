@@ -48,8 +48,9 @@ def get_normalized_distance_and_mask(labels: np.ndarray,
     Parameters:
     ----------
     labels:
-        2D (YX) np.ndarray - normally the result of a binary ZYX segmentation of the cell mask after a sum projection across the Z dimension
-        If no mask object is included, then the distance from the edge is disregarded
+        2D (YX) np.ndarray - normally the result of a binary ZYX segmentation of the cell mask after a sum projection across the Z dimension.
+        If labels does not contain a true mask/background (e.g., labels.min() != 0), the distance to the outer edge is not used to
+        define the normalized_distance values, although d_to_edge may still be computed (in particular when center_objects is None).
     center_object:
         2D (YX) np.ndarray - normally the result of a binary ZYX segmentation of the nucleus after a sum projection across the Z dimension.
         If no centering object is included, the center of the labels will be used.
@@ -91,9 +92,9 @@ def get_normalized_distance_and_mask(labels: np.ndarray,
         print('labels/mask input represents entire image')
         if center_objects is None:
             # pad the labels array by zeros so that the edge pixels is detected as boundary pixels
-            lpad = np.pad(labels, pad_width = 1)
+            padded_labels = np.pad(labels, pad_width = 1)
             # the cropped image is then set to d_to_edge (only used to find centermost point of image frame)
-            d_to_edge = centrosome.cpmorphology.distance_to_edge(lpad)[1:-1,1:-1]
+            d_to_edge = centrosome.cpmorphology.distance_to_edge(padded_labels)[1:-1,1:-1]
         else:
             d_to_edge = None
             
@@ -348,7 +349,7 @@ def get_concentric_distribution(
     Measurements
     ------------
     If scale is used, "vox_cnt" is replaced by "vol" and "n_pix_ is replaced by "area" in the titles below.
-    If no centering object is provided, the related measurments are omitted
+    If no centering object is provided, the related measurements are omitted
     If no mask object is provided, "mask" is replaced by "img" in the titles below
 
     object: the nickname of what is being measured (e.g., golgi, golgiXER, ER_img)
@@ -884,10 +885,52 @@ def get_zernike_metrics(
         mask_name: str,
         centering_proj: Union[np.ndarray, None], 
         obj_proj: np.ndarray,
-        object_name: str,
+        obj_name: str,
         zernike_degree: int = 9 ):
 
     """
+    Compute Zernike-based metrics for a projected mask and corresponding object projection.
+    This function computes Zernike polynomials over regions derived from the
+    ``mask_proj`` and then measures the Zernike magnitudes and phases for:
+    - the mask projection (``mask_proj``),
+    - the object projection (``obj_proj``),
+    - the centering projection (``centering_proj``), if provided.
+    The results are returned as a single-row :class:`pandas.DataFrame` that contains
+    the Zernike indices (``n`` and ``m``) together with the magnitude and phase
+    vectors for each input.
+    
+    Parameters
+    ----------
+    mask_proj : numpy.ndarray
+        a sum projection of the region you want to measure the distribution from where the "intensity" value of each pixel is equal 
+        to the number of z slices where the binary cell mask is True
+    mask_name : str
+        the name or nickname of your mask; this determines how the mask is referred to in the metrics tables
+    centering_proj : numpy.ndarray or None
+        Optional 2D array used for centering. If not ``None``, Zernike metrics
+        are also computed for this projection and added to the output.
+    obj_proj : numpy.ndarray
+        2D array representing the projection of the object of interest
+        for which Zernike metrics will be computed using the same Zernike basis.
+    obj_name : str
+        Name of the object or channel represented by ``obj_proj``; stored in the
+        ``"object"`` column of the output DataFrame.
+    zernike_degree : int, optional
+        Maximum degree of the Zernike polynomials. All Zernike indices up to
+        and including this degree (plus one in the underlying library call) are
+        used. Defaults to 9.
+    Returns
+    -------
+    pandas.DataFrame
+        A single-row DataFrame with Zernike information. Columns include:
+        - ``"object"``: the provided ``obj_name``.
+        - ``"zernike_n"`` and ``"zernike_m"``: lists of the Zernike index pairs.
+        - ``f"zernike_{mask_name}_mag"`` and ``f"zernike_{mask_name}_phs"``:
+          lists of magnitudes and phases computed from ``mask_proj``.
+        - ``"zernike_obj_mag"`` and ``"zernike_obj_phs"``: magnitudes and phases
+          for ``obj_proj``.
+        - ``"zernike_center_mag"`` and ``"zernike_center_phs"``: magnitudes and
+          phases for ``centering_proj``, if ``centering_proj`` is not ``None``.
     
     """
     
@@ -905,7 +948,7 @@ def get_zernike_metrics(
 
 
     # nm_labels = [f"{n}_{m}" for (n, m) in (zernike_indexes)
-    stats_tab = pd.DataFrame({'object':object_name,
+    stats_tab = pd.DataFrame({'object':obj_name,
                                 'zernike_n':[zernike_indexes[:,0].tolist()],
                                 'zernike_m':[zernike_indexes[:,1].tolist()],
                                 f'zernike_{mask_name}_mag':[z_m[0].tolist()],
@@ -1032,7 +1075,7 @@ def get_XY_distribution(
         zernike_metrics = get_zernike_metrics(mask_proj=mask_proj,
                                             mask_name = mask_name, 
                                             obj_proj=obj_proj,
-                                            object_name=obj_name, 
+                                            obj_name=obj_name, 
                                             centering_proj=center_proj, 
                                             zernike_degree=zernike_degrees)
         
