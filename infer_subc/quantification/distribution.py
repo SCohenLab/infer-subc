@@ -1,6 +1,9 @@
+import itertools
+from pathlib import Path
+import time
+
 import numpy as np
 import pandas as pd
-import itertools
 
 from skimage.measure import regionprops_table, regionprops, mesh_surface_area, marching_cubes, label
 
@@ -9,6 +12,9 @@ import centrosome.propagate
 import centrosome.zernike
 
 from infer_subc.core.img import apply_mask
+from infer_subc.utils.batch import list_image_files, find_segmentation_tiff_files
+from infer_subc.core.file_io import read_czi_image, read_tiff_image
+from infer_subc.quantification.batch import append_atomic_csv, load_existing_keys_csv
 from typing import Tuple, Any, Union, List
 
 # from scipy.ndimage import maximum_position, center_of_mass
@@ -1872,3 +1878,458 @@ def get_Z_distribution(
 #     # stats_tab = pd.DataFrame(statistics,columns=col_names)
 #     stats_tab = pd.DataFrame(stats_dict)  
 #     return stats_tab, bin_indexes
+
+# quantify the distribution of one or more organelles from one cell
+# USED #
+def get_distribution_metrics(source_file_path: str,
+                        list_obj_names: List[str],
+                        list_obj_segs: List[np.ndarray],
+                        list_region_names: Union[List[str], None]=None,
+                        list_region_segs: Union[List[np.ndarray], None]=None,
+                        mask_name: Union[str, None]=None,
+                        scale: Union[tuple,None] = None,
+                        centering_obj: Union[str, None]=None,
+                        num_bins: Union[int, None]=5,
+                        center_on: Union[bool, None]=False,
+                        keep_center_as_bin: Union[bool, None]=True,
+                        zernike_degrees: Union[int, None]=9) -> pd.DataFrame:
+    """
+    Measure the spatial distribution of multiple organelles from a single cell in respect to the center
+
+    Parameters:
+    ----------
+    source_file: str
+        Path to the source image file. This will be used as part of the metadata information in the output table. 
+    list_obj_names: List[str]
+        List of organelle names. These names should match the suffix on the segmentation image files.
+    list_obj_segs: List[np.ndarray]
+        List of 3D organelle segmentation arrays matching the order included in list_obj_names.
+    list_region_names: Union[List[str], None]
+        List of segmented region/mask names. These names should match the suffix on the segmentation image files.
+        This should include:
+            - a mask segmentation, such as the cell mask, for masking during distribution analysis; else, the entire image will be 
+            quantified. Only one object per mask image will be analyzed. If there are more than one included, they will be combined 
+            prior to analysis and the entire region will be quantified. If no mask is provided, the entire image will be quantified.
+            - a centering object, such as the nucleus; else the center of the mask region will be used as the XY distribution centering 
+            point.
+    list_region_segs: Union[List[np.ndarray], None]
+        List of 3D region segmentation arrays matching the order specified in list_region_names. Specify None if no regions are provided.
+    mask_name: Union[str, None]
+        Name of the region to use as the mask for analysis; if not specified, the entire image will be quantified.
+    scale: Union[tuple,None] = None
+        a tuple that contains the real world dimensions for each dimension in the image (Z, Y, X)
+    centering_obj : Union[str, None], default=None
+        Name of the region to use for centering during distribution analysis.
+        This region should be included in the list_region_names and list_region_segs variables.
+        If not specified, the center of the mask, or entire image if no mask was specified, will be used as the centering object.
+    num_bins : Union[int, None], default=5
+        Number of radial bins to create in the XY distribution analysis.
+    center_on : Union[bool, None], default=True
+        Whether to start creation of the XY bins from the center (True) or the edge (False) of the centering object.
+    keep_center_as_bin : Union[bool, None], default=True
+        Whether to keep the centering object as the first XY bin. 
+    zernike_degrees : Union[int, None], default=9
+        Zernike polynomial degree for circular shape/pattern analysis in the XY distribution analysis.
+        If None and include_dist=True, no Zernike features will be calculated.
+
+    Returns
+    -------
+    final_dist_tab : pd.DataFrame
+        Dataframe for XY and Z distribution metrics for organelle in one image
+
+    """
+    # Validate inputs
+    if not list_obj_names:
+        raise ValueError("list_obj_names cannot be empty")
+    if len(list_obj_names) != len(list_obj_segs):
+        raise ValueError(f"Mismatch: {len(list_obj_names)} items in list_obj_names but {len(list_obj_segs)} items in list_obj_segs")
+    if list_region_names and list_region_segs and len(list_region_names) != len(list_region_segs):
+        raise ValueError(f"Mismatch: {len(list_region_names)} items in list_region_names but {len(list_region_segs)} items in list_region_segs")
+    
+    if isinstance(source_file_path, str): source_file_path = Path(source_file_path)
+    print(f"Quantifying organelle interactions from {source_file_path.name}")
+
+    # specify the mask image to use during quantification based on the mask_name provided
+    if list_region_names is None or list_region_segs is None:
+        print("No regions provided. No mask or centering object will be applied before analysis.")
+        mask = None
+        centering_obj = None
+    elif mask_name is None or mask_name not in list_region_names:
+        if mask_name is not None:
+            raise ValueError(f"Mask '{mask_name}' not found. No mask will be applied before analysis.")
+        mask = None
+        mask_name = None
+    else:
+        mask = list_region_segs[list_region_names.index(mask_name)]
+
+    # specify the centering image to use during quantification based on the centering object name provided
+    if centering_obj == None:
+        print("No centering object provided. Using center of mask or entire image for distribution centering.")
+        centering_img = None
+    elif centering_obj not in list_region_names:
+        raise ValueError(f"Centering object '{centering_obj}' not found in region names: {list_region_names}")
+    else:
+        centering_img = list_region_segs[list_region_names.index(centering_obj)]
+    
+    # empty list to collect the distribution data for each organelle
+    dist_tabs = []
+    XY_bins_imgs = []
+    XY_wedges_imgs = []
+
+    # loop through the list of organelles and run the get_XY_distribution and get_Z_distribution function
+    for j, target in enumerate(list_obj_names):    
+        # select segmentation and if ER, ensure it is only one object
+        if target == 'ER':
+            org_obj = (list_obj_segs[j] > 0).astype(np.uint16)
+        else:
+            org_obj = list_obj_segs[j]
+
+        # run get_XY_distribution function to output a table of distribution measurements in respect to a specified object in the XY
+        XY_distribution, XY_bins, XY_wedges = get_XY_distribution(mask=mask,
+                                                                    mask_name = mask_name,
+                                                                    centering_obj=centering_img,
+                                                                    obj=org_obj,
+                                                                    obj_name=target,
+                                                                    scale=scale,
+                                                                    num_bins=num_bins,
+                                                                    center_on=center_on,
+                                                                    keep_center_as_bin=keep_center_as_bin,
+                                                                    zernike_degrees=zernike_degrees # set to None if you wish to skip quantification of zernike features
+                                                                    )
+        
+        # if XY_bins_imgs list is empty append, if not skip
+        if not XY_bins_imgs and not XY_wedges_imgs:
+            XY_bins_imgs.append(XY_bins)
+            XY_wedges_imgs.append(XY_wedges)
+            
+        # run get_Z_distribution function to output a table of distribution measurements in respect to a specified object in the Z
+        Z_distribution = get_Z_distribution(mask=mask,
+                                                mask_name = mask_name, 
+                                                obj=org_obj,
+                                                obj_name=target,
+                                                center_obj=centering_img,
+                                                scale=scale)
+
+        # add table to list above
+        dist_tab = pd.merge(XY_distribution, Z_distribution)
+        dist_tabs.append(dist_tab)
+
+    # combine the lists for each organelle into one table
+    final_dist_tab = pd.concat(dist_tabs, ignore_index=True)
+
+    # add a new column to list the name of the image these data are derived from 
+    final_dist_tab.insert(loc=0,column='image_name',value=source_file_path.stem)
+
+    return final_dist_tab
+
+# batch process distribution quantification for multiple cells from a single experiment
+def batch_process_distribution_quant(dataset_name: str,
+                             raw_path: Union[Path,str], 
+                             seg_path: Union[Path,str],
+                             quant_path: Union[Path, str], 
+                             raw_file_type: str,
+                             organelle_names: List[str],
+                             region_names: Union[List[str], None]=None,
+                             mask_name: Union[str, None]=None,
+                             use_scale:bool=True,
+                             seg_suffix:Union[str, None]=None,
+                             centering_obj: Union[str, None]=None,
+                             num_bins: Union[int, None]=5,
+                             center_on: Union[bool, None]=False,
+                             keep_center_as_bin: Union[bool, None]=True,
+                             zernike_degrees: Union[int, None]=9):
+    """  
+    batch process distribution quantification; this function is currently optimized to process images from one file folder per image type (e.g., raw, segmentation)
+    the output csv files are saved to the indicated quant_path folder
+
+    Parameters:
+    ----------
+    dataset_name : str
+        A unique string identifier for the dataset being processed. It will be included as metadata in output tables and as 
+        part of the output files names. It will be used to identify if any data has already been collected for this dataset.
+    raw_path: Union[Path,str]
+        Path or str to the folder that contains the raw image files
+    seg_path: Union[Path,str]
+        Path or str to the folder that contains the segmentation tiff files
+    quant_path: Union[Path, str]
+        Path or str to the folder that the output datatables will be saved to
+    raw_file_type: str
+        File type of the raw images (e.g., "czi", "tiff")
+    organelle_names: List[str]
+        List of organelle names to analyze. These names should match the suffix on the organelle segmentation files
+    region_names: Union[List[str], None]=None
+        List of region names to analyze. Usually ['cell', 'nuc'] for cell mask and nucleus.
+        If no regions are to be included, specify None here.
+    mask_name: Union[str, None]=None
+        Name of the region to use for segmentation (if any). This name should be included in the regions_name variable.
+        If None, the entire image will be quantified.
+    use_scale: bool=True
+        Whether to apply scaling to the quantitative data; scaled data will be in real world units (e.g., microns) rather than pixels/voxels
+    seg_suffix:Union[str, None]=None
+        Any additional text that is included in the segmentation tiff files between the file stem and the segmentation suffix, not including the initial "-"
+    
+    Returns:
+    --------
+    None
+        Saves output files to the specified quantification path
+    """
+
+    start = time.time()
+    count = 0
+
+    # create path objects if inputs are strings
+    if isinstance(raw_path, str): raw_path = Path(raw_path)
+    if isinstance(seg_path, str): seg_path = Path(seg_path)
+    if isinstance(quant_path, str): quant_path = Path(quant_path)
+    
+    # create directory is it doesn't exist
+    if not Path.exists(quant_path):
+        Path.mkdir(quant_path)
+        print(f"Output file path not found. Making {quant_path}.")
+    
+    # specify the columns that will be checked per table
+    unique_keys = ['dataset', 'image_name']
+
+    # check if any existing data is present in outfiles
+    dist_path = quant_path / f"{dataset_name}_distribution_metrics.csv"
+    existing_dist_keys = load_existing_keys_csv(dist_path, unique_keys)
+
+    # list of organelle segmentation and masks files to collect from each image
+    segs_to_collect = organelle_names + region_names if region_names is not None else organelle_names
+
+    # reading list of files from the raw path
+    img_file_list = list_image_files(raw_path, raw_file_type)
+    len_file_list = len(img_file_list)
+
+    # loop through list of images and quantify distribution metrics if data for that image do not already exist;
+    for img_f in img_file_list:
+        img_start = time.time()
+        count = count + 1
+        # skip files that have already been processed
+        if (dataset_name, img_f.stem) in existing_dist_keys:
+            print(f"Skipping {img_f.name} as it is already listed in the output file(s).")
+            continue
+
+        # process analysis for this cells
+        else:
+            filez = find_segmentation_tiff_files(img_f, segs_to_collect, seg_path, seg_suffix)
+
+            # read in raw file and metadata
+            _img_data, meta_dict = read_czi_image(filez["raw"])
+
+            # store organelle images as list
+            organelles = [read_tiff_image(filez[org]) for org in organelle_names]
+
+            # load regions as a list based on order in list (should match order in "masks" file)
+            regions = [read_tiff_image(filez[r]) for r in region_names] 
+
+            # define the scale
+            if use_scale is True:
+                scale_tup = meta_dict['scale']
+            else:
+                scale_tup = None
+
+            dist_tab = get_distribution_metrics(source_file_path=img_f,
+                                            list_obj_names=organelle_names,
+                                            list_obj_segs=organelles, 
+                                            list_region_names=region_names,
+                                            list_region_segs=regions, 
+                                            mask_name=mask_name,
+                                            scale=scale_tup,
+                                            centering_obj=centering_obj,
+                                            num_bins=num_bins,
+                                            center_on=center_on,
+                                            keep_center_as_bin=keep_center_as_bin,
+                                            zernike_degrees=zernike_degrees)
+            
+            dist_tab = dist_tab.astype(str)  # ensure all data is string to avoid dtype issues
+
+            # save the distribution (or labels only) table data per image directly to csv
+            dist_tab.insert(loc=0,column='dataset',value=dataset_name)
+            append_atomic_csv(dist_path, dist_tab)
+            del dist_tab  # free up memory
+
+            end2 = time.time()
+            print(f"Completed distribution quantification of {meta_dict['file_name']} in {(end2-img_start)/60} mins.")
+            print(f"{count}/{len_file_list} images have been processed.")
+            print(f"Time elapsed: {(end2-img_start)/60} mins")
+
+    end = time.time()
+    print(f"Distribution quantification for {count} files is COMPLETE! Files saved to '{quant_path}'.")
+    print(f"It took {(end - start)/60} minutes to quantify these files.")
+
+# summarize distribution values per organelle per cell across one or more experiments
+def batch_distribution_summary_stats(out_prefix: str,
+                                      csv_path_list: List[str],
+                                      out_path: str,
+                                      mask_name: str = "mask"):
+    """" 
+    Batch process interaction quantification summary statistics from multiple datasets.
+
+    Parameters:
+    -----------
+    out_prefix: str
+        The prefix used to name the output file. An "_" will be included between this prefix and the file suffix.
+    csv_path_list: List[str],
+        A list of path strings where .csv files to analyze are located.
+    out_path: str,
+        A path string where the summary data file will be output to
+    splitter: str, default="X"
+        The character used to split interaction site names.
+    mask_name: str = "mask"
+        Named of the region to used as the mask for analysis accross all datasets
+    """
+
+    # for keeping track of dataset and file numbers
+    ds_count = 0
+    fl_count = 0
+
+    ###################
+    # Read in the csv files and combine them into one
+    ###################
+    # create empty list to hold the distribution tables from different experiments
+    dist_tabs = []
+
+    # loop through all of the locations listed above and find the _distribution files; append them to the list above
+    for loc in csv_path_list:
+
+        # list all csv files in the location
+        files_store = sorted(loc.glob("*.csv"))
+
+        # find the unique datasets in this location based on the prefixes before "_distribution_metrics"
+        prefixes = set(f.name.split("_distribution_metrics")[0] for f in files_store if "_distribution_metrics" in f.name)
+        print(f"Found the following datasets in {loc}:", prefixes)
+        for prefix in prefixes:
+            ds_count += 1
+            # select only the files from this dataset
+            files_subset = [f for f in files_store if f.name.startswith(prefix +"_distribution_metrics")]
+            for file in files_subset:
+                fl_count += 1
+                stem = file.stem
+                if "_dist" in stem:
+                    test_dist = pd.read_csv(file, index_col=0)
+                    dist_tabs.append(test_dist)
+
+    # combine the dist lists found above into one table
+    dist_df = pd.concat(dist_tabs,axis=0, join='outer').reset_index()
+
+    print(f"Found {fl_count} files from {ds_count} dataset(s) across {len(csv_path_list)} location(s).")
+
+    # extract centering object metrics
+    nuc_dist_df = dist_df[["dataset", "image_name", 'scale',
+                        "XY_bins", "XY_center_vox_cnt_perbin", f"XY_{mask_name}_vox_cnt_perbin", "XY_center_cv_perbin",
+                        "XY_wedges", "XY_center_vox_cnt_perwedge", f"XY_{mask_name}_vox_cnt_perwedge",
+                        "Z_slices", "Z_center_vox_cnt", f"Z_{mask_name}_vox_cnt"]].drop_duplicates(subset=['dataset', 'image_name'])
+    nuc_dist_df.columns = nuc_dist_df.columns.str.replace('center', 'obj', regex=False)
+    nuc_dist_df.insert(loc=3,column='object',value='nuc')
+    nuc_dist_df.set_index(['dataset', 'image_name', 'scale', 'object'], inplace=True)
+
+    # select relevant columns from dist dataset
+    dist_df2 = dist_df[list(nuc_dist_df.reset_index().columns)]
+    dist_df2.set_index(['dataset', 'image_name', 'scale', 'object'], inplace=True)
+
+    # combine
+    combo_dist_df = pd.concat([nuc_dist_df, dist_df2], axis=0)
+
+    # loop through each row of data and calculate histogram statistics
+    hist_dfs = []
+    for ind in combo_dist_df.index:
+        selection = combo_dist_df.loc[[ind]].reset_index()
+        bins_df = pd.DataFrame()
+        wedges_df = pd.DataFrame()
+        Z_df = pd.DataFrame()
+        CV_df = pd.DataFrame()
+
+        # select relevant columns into different groups
+        try:
+            bins_df[['bins', 'masks', 'obj']] = selection[['XY_bins', f'XY_{mask_name}_vox_cnt_perbin', 'XY_obj_vox_cnt_perbin']]
+            wedges_df[['bins', 'masks', 'obj']] = selection[['XY_wedges', f'XY_{mask_name}_vox_cnt_perwedge', 'XY_obj_vox_cnt_perwedge']]
+            Z_df[['bins', 'masks', 'obj']] = selection[['Z_slices', f'Z_{mask_name}_vox_cnt', 'Z_obj_vox_cnt']]
+        except:
+            bins_df[['bins', 'masks', 'obj']] = selection[['XY_bins', f'XY_{mask_name}_vox_cnt_perbin', 'XY_obj_vox_cnt_perbin']]
+            wedges_df[['bins', 'masks', 'obj']] = selection[['XY_wedges', f'XY_{mask_name}_vox_cnt_perwedge', 'XY_obj_vox_cnt_perwedge']]
+            Z_df[['bins', 'masks', 'obj']] = selection[['Z_slices', f'Z_{mask_name}_vox_cnt', 'Z_obj_vox_cnt']]
+        CV_df[['XY_obj_cv_perbin']] = selection[['XY_obj_cv_perbin']]
+
+        dfs = [selection[['dataset', 'image_name', 'scale', 'object']].reset_index()]
+
+        # for each group of data, calculate histogram statistics
+        for df, prefix in zip([bins_df, wedges_df, Z_df, CV_df], ["XY_bins_", "XY_wedges_", "Z_slices_", "CV_perbin_"]):
+            if prefix != "CV_perbin_":
+                single_df = pd.DataFrame(list(zip(df["bins"].values[0][1:-1].split(", "), 
+                                                df["obj"].values[0][1:-1].split(", "), 
+                                                df["masks"].values[0][1:-1].split(", "))), columns =['bins', 'obj', 'mask']).astype(int)
+                
+                if "Z_" in prefix:
+                    single_df =  single_df.drop(single_df[single_df['mask'] == 0].index)
+                    single_df['bins'] = (single_df["bins"]/max(single_df.bins)*9.99).apply(np.floor)+1
+                    single_df = single_df.groupby("bins").agg(['sum']).reset_index()
+                    single_df.columns = ['bins',"obj","mask"]
+            
+                single_df['mask_fract'] = single_df['mask']/single_df['mask'].max()
+                # single_df['obj_normed_tocell'] = (single_df["obj"]*single_df["mask_fract"]).fillna(0)
+                single_df['obj_perc_per_bin'] = (single_df["obj"] / single_df["obj"].sum())*100
+                single_df['obj_portion_normed_tobin'] = (single_df["obj_perc_per_bin"]/single_df["mask_fract"]).fillna(0)
+
+                sumstats_df = pd.DataFrame()
+
+                s = single_df['bins'].repeat(single_df['obj_portion_normed_tobin']*100)
+
+                sumstats_df['hist_mean']=[s.mean()]
+                sumstats_df['hist_median']=[s.median()]
+                if single_df['obj_portion_normed_tobin'].sum() != 0: sumstats_df['hist_mode']=[s.mode().iloc[0]]
+                else: sumstats_df['hist_mode']=['NaN']
+                sumstats_df['hist_min']=[s.min()]
+                sumstats_df['hist_max']=[s.max()]
+                sumstats_df['hist_range']=[s.max() - s.min()]
+                sumstats_df['hist_stdev']=[s.std()]
+                sumstats_df['hist_skew']=[s.skew()]
+                sumstats_df['hist_kurtosis']=[s.kurtosis()]
+                sumstats_df['hist_var']=[s.var()]
+                sumstats_df.columns = [prefix+col for col in sumstats_df.columns]
+                sumstats_df.reset_index(drop=True, inplace=True)
+
+                dfs.append(sumstats_df)
+                
+            if prefix == 'CV_perbin_':
+                CV_df = pd.DataFrame(list(zip(df["XY_obj_cv_perbin"].values[0][1:-1].split(", "))), columns =['CV']).astype(float)
+                sumstats_CV_df = pd.DataFrame()
+                sumstats_CV_df['XY_bin_CV_mean'] = CV_df.mean()
+                sumstats_CV_df['XY_bin_CV_median'] = CV_df.median()
+                sumstats_CV_df['XY_bin_CV_std'] = CV_df.std()
+                sumstats_CV_df.reset_index(drop=True, inplace=True)
+                sumstats_df = pd.concat([sumstats_df, sumstats_CV_df], axis=1)
+
+                dfs.append(sumstats_df)
+        
+        # combine dataframes per group together
+        combined_df = pd.concat(dfs,axis=1).drop(columns="index")
+        combined_df.set_index(['dataset', 'image_name', 'scale', 'object'], inplace=True)
+        hist_dfs.append(combined_df)
+
+    # combine data from each row of data in the original table together
+    dist_summary = pd.concat(hist_dfs).sort_values(by=['dataset', 'image_name', 'scale', 'object'])
+    dist_summary.reset_index(inplace=True)
+
+    # export before unstacking
+    if (Path(out_path) / f"{out_prefix}_per_org_distribution_summarystats.csv").exists():
+        raise FileExistsError(f"CAUTION: {out_prefix}_per_org_distribution_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+    else:
+        dist_summary.to_csv(str(out_path) + f"/{out_prefix}_per_org_distribution_summarystats.csv")
+    
+    # unstack and format interaction distribution summary table
+    dist_summary.insert(2, "mask_name", mask_name) ## TODO: change after dist is updated to include mask_name
+    dist_final = dist_summary.set_index(['dataset', 'image_name', 'mask_name', 'scale', 'object']).unstack(-1)
+    dist_final.columns = ["_".join((col_name[1], col_name[0])) for col_name in dist_final.columns.to_flat_index()]
+    dist_final = dist_final.reset_index()
+
+    ###################
+    # export summary sheets
+    ###################
+    if (Path(out_path) / f"{out_prefix}_distribution_summarystats.csv").exists():
+        raise FileExistsError(f"CAUTION: {out_prefix}_distribution_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+    else:
+        dist_final.to_csv(str(out_path) + f"/{out_prefix}_distribution_summarystats.csv", mode='x')
+        print(f"Exported distribution summary statistics (after unstacking) to {out_path}/{out_prefix}_distribution_summarystats.csv")
+    print(f"Organelle distribution summary is complete.")
+    return dist_final
