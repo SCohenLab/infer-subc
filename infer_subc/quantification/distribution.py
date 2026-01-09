@@ -2069,6 +2069,19 @@ def batch_process_distribution_quant(dataset_name: str,
         Whether to apply scaling to the quantitative data; scaled data will be in real world units (e.g., microns) rather than pixels/voxels
     seg_suffix:Union[str, None]=None
         Any additional text that is included in the segmentation tiff files between the file stem and the segmentation suffix, not including the initial "-"
+    centering_obj : str or None, default=None
+        Name of the region to use for centering distribution analysis
+        This region should be included in the list_region_names and list_region_segs variables
+        If not specified, the center of the mask, or entire image if no mask was specified, will be used as the centering object
+    num_bins : int or None, default=5
+        Number of radial bins to create in the XY distribution analysis
+    center_on : bool or None, default=True
+        Whether to start creation of the XY bins from the center of the centering object (True) or edge (False)
+    keep_center_as_bin : bool or None
+        Whether to keep centering object as the first XY bin
+    zernike_degrees : int or None, default=9
+        Zernike polynomial degree for shape analysis in the XY distribution analysis
+        If None and include_dist=True, no Zernike features will be calculated
     
     Returns:
     --------
@@ -2084,7 +2097,7 @@ def batch_process_distribution_quant(dataset_name: str,
     if isinstance(seg_path, str): seg_path = Path(seg_path)
     if isinstance(quant_path, str): quant_path = Path(quant_path)
     
-    # create directory is it doesn't exist
+    # create directory if it doesn't exist
     if not Path.exists(quant_path):
         Path.mkdir(quant_path)
         print(f"Output file path not found. Making {quant_path}.")
@@ -2123,7 +2136,7 @@ def batch_process_distribution_quant(dataset_name: str,
             organelles = [read_tiff_image(filez[org]) for org in organelle_names]
 
             # load regions as a list based on order in list (should match order in "masks" file)
-            regions = [read_tiff_image(filez[r]) for r in region_names] 
+            regions = [read_tiff_image(filez[r]) for r in region_names] if region_names is not None else None
 
             # define the scale
             if use_scale is True:
@@ -2165,7 +2178,7 @@ def batch_distribution_summary_stats(out_prefix: str,
                                       csv_path_list: List[str],
                                       out_path: str,
                                       mask_name: str = "whole_image"):
-    """" 
+    """ 
     Batch process interaction quantification summary statistics from multiple datasets.
 
     Parameters:
@@ -2176,10 +2189,8 @@ def batch_distribution_summary_stats(out_prefix: str,
         A list of path strings where .csv files to analyze are located.
     out_path: str,
         A path string where the summary data file will be output to
-    splitter: str, default="X"
-        The character used to split interaction site names.
     mask_name: str = "whole_image"
-        Named of the region to used as the mask for analysis accross all datasets
+        Name of the region to use as the mask for analysis across all datasets
     """
 
     # for keeping track of dataset and file numbers
