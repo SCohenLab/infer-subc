@@ -61,9 +61,9 @@ def get_regions_morphology(source_file_path: str,
         raise ValueError("You must provide both list_region_names and list_region_segs arguments.")
     if len(list_region_names) != len(list_region_segs):
         raise ValueError("The length of list_region_names must match the length of list_region_segs.")
-    if list_intensity_img is None or list_channel_names is None:
-        raise ValueError("You must provide both list_intensity_img and list_channel_names arguments.")
-    if len(list_intensity_img) != len(list_channel_names):
+    if list_intensity_img is not None and list_channel_names is None:
+        raise ValueError("You must provide both list_intensity_img and list_channel_names arguments to quantify intensity metrics.")
+    if list_intensity_img is not None and list_channel_names is not None and len(list_intensity_img) != len(list_channel_names):
         raise ValueError("The length of list_intensity_img must match the length of list_channel_names.")
 
     if isinstance(source_file_path, str): source_file_path = Path(source_file_path)
@@ -103,8 +103,6 @@ def get_regions_morphology(source_file_path: str,
         if len(unique_objs) > 1:
             warnings.warn(f"More than one object found in region segmentation '{list_region_names[j]}'. Combining all objects into a single object for analysis.")
             region_seg = (region_seg > 0).astype(int)
-        else:
-            region_seg = region_seg
 
         # run get_morphology_metrics function to output a table of measurements
         region_metrics = get_morphology_metrics(segmentation_img=region_seg, 
