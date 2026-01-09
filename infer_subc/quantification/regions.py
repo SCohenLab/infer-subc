@@ -71,16 +71,16 @@ def get_regions_morphology(source_file_path: str,
 
 
     # specify the mask image to use during quantification
-    if list_region_names is None or list_region_segs is None:
-        print("No regions provided. No mask will be applied before analysis.")
+    if mask_name is None:
         mask = None
-    elif mask_name is None or mask_name not in list_region_names:
-        if mask_name is not None:
-            raise ValueError(f"Mask '{mask_name}' not found. No mask will be applied before analysis.")
+        print("No mask name provided. No mask will be applied before analysis.")
+    elif mask_name not in list_region_names:
+        print(f"Mask '{mask_name}' not found in `list_region_names`:{list_region_names}. No mask will be applied before analysis.")
         mask = None
         mask_name = None
     else:
         mask = list_region_segs[list_region_names.index(mask_name)]
+        print(f"Using '{mask_name}' as the mask for analysis.")
 
     # merge intensity images to create a single np.ndarray
     if list_intensity_img is None:
@@ -102,7 +102,7 @@ def get_regions_morphology(source_file_path: str,
         unique_objs = unique_objs[unique_objs != 0]  # exclude background
         if len(unique_objs) > 1:
             warnings.warn(f"More than one object found in region segmentation '{list_region_names[j]}'. Combining all objects into a single object for analysis.")
-            region_seg = (region_seg > 1).astype(int)
+            region_seg = (region_seg > 0).astype(int)
         else:
             region_seg = region_seg
 
