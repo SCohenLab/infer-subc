@@ -2216,20 +2216,25 @@ def batch_distribution_summary_stats(out_prefix: str,
     print(f"Found {fl_count} files from {ds_count} dataset(s) across {len(csv_path_list)} location(s).")
 
     # extract centering object metrics
-    nuc_dist_df = dist_df[["dataset", "image_name", 'scale',
-                        "XY_bins", "XY_center_vox_cnt_perbin", f"XY_{mask_name}_vox_cnt_perbin", "XY_center_cv_perbin",
-                        "XY_wedges", "XY_center_vox_cnt_perwedge", f"XY_{mask_name}_vox_cnt_perwedge",
-                        "Z_slices", "Z_center_vox_cnt", f"Z_{mask_name}_vox_cnt"]].drop_duplicates(subset=['dataset', 'image_name'])
-    nuc_dist_df.columns = nuc_dist_df.columns.str.replace('center', 'obj', regex=False)
-    nuc_dist_df.insert(loc=3,column='object',value='nuc')
-    nuc_dist_df.set_index(['dataset', 'image_name', 'scale', 'object'], inplace=True)
+    # extract centering object metrics
+    if 'XY_center_vox_cnt_perbin' in list(dist_df.columns): # if there is a centering object
+        nuc_dist_df = dist_df[["dataset", "image_name", 'scale',
+                            "XY_bins", "XY_center_vox_cnt_perbin", f"XY_{mask_name}_vox_cnt_perbin", "XY_center_cv_perbin",
+                            "XY_wedges", "XY_center_vox_cnt_perwedge", f"XY_{mask_name}_vox_cnt_perwedge",
+                            "Z_slices", "Z_center_vox_cnt", f"Z_{mask_name}_vox_cnt"]].drop_duplicates(subset=['dataset', 'image_name'])
+        nuc_dist_df.columns = nuc_dist_df.columns.str.replace('center', 'obj', regex=False)
+        nuc_dist_df.insert(loc=3,column='object',value='nuc')
+        nuc_dist_df.set_index(['dataset', 'image_name', 'scale', 'object'], inplace=True)
 
-    # select relevant columns from dist dataset
-    dist_df2 = dist_df[list(nuc_dist_df.reset_index().columns)]
-    dist_df2.set_index(['dataset', 'image_name', 'scale', 'object'], inplace=True)
+        # select relevant columns from dist dataset
+        dist_df2 = dist_df[list(nuc_dist_df.reset_index().columns)]
+        dist_df2.set_index(['dataset', 'image_name', 'scale', 'object'], inplace=True)
 
-    # combine
-    combo_dist_df = pd.concat([nuc_dist_df, dist_df2], axis=0)
+        # combine
+        combo_dist_df = pd.concat([nuc_dist_df, dist_df2], axis=0)
+    else: # if there is not a centering object
+        dist_df.set_index(['dataset', 'image_name', 'scale', 'object'], inplace=True)
+        combo_dist_df = dist_df
 
     # loop through each row of data and calculate histogram statistics
     hist_dfs = []
@@ -2241,14 +2246,9 @@ def batch_distribution_summary_stats(out_prefix: str,
         CV_df = pd.DataFrame()
 
         # select relevant columns into different groups
-        try:
-            bins_df[['bins', 'masks', 'obj']] = selection[['XY_bins', f'XY_{mask_name}_vox_cnt_perbin', 'XY_obj_vox_cnt_perbin']]
-            wedges_df[['bins', 'masks', 'obj']] = selection[['XY_wedges', f'XY_{mask_name}_vox_cnt_perwedge', 'XY_obj_vox_cnt_perwedge']]
-            Z_df[['bins', 'masks', 'obj']] = selection[['Z_slices', f'Z_{mask_name}_vox_cnt', 'Z_obj_vox_cnt']]
-        except:
-            bins_df[['bins', 'masks', 'obj']] = selection[['XY_bins', f'XY_{mask_name}_vox_cnt_perbin', 'XY_obj_vox_cnt_perbin']]
-            wedges_df[['bins', 'masks', 'obj']] = selection[['XY_wedges', f'XY_{mask_name}_vox_cnt_perwedge', 'XY_obj_vox_cnt_perwedge']]
-            Z_df[['bins', 'masks', 'obj']] = selection[['Z_slices', f'Z_{mask_name}_vox_cnt', 'Z_obj_vox_cnt']]
+        bins_df[['bins', 'masks', 'obj']] = selection[['XY_bins', f'XY_{mask_name}_vox_cnt_perbin', 'XY_obj_vox_cnt_perbin']]
+        wedges_df[['bins', 'masks', 'obj']] = selection[['XY_wedges', f'XY_{mask_name}_vox_cnt_perwedge', 'XY_obj_vox_cnt_perwedge']]
+        Z_df[['bins', 'masks', 'obj']] = selection[['Z_slices', f'Z_{mask_name}_vox_cnt', 'Z_obj_vox_cnt']]
         CV_df[['XY_obj_cv_perbin']] = selection[['XY_obj_cv_perbin']]
 
         dfs = [selection[['dataset', 'image_name', 'scale', 'object']].reset_index()]
