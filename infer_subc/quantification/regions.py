@@ -187,7 +187,7 @@ def batch_process_regions_morph(dataset_name: str,
     if isinstance(seg_path, str): seg_path = Path(seg_path)
     if isinstance(quant_path, str): quant_path = Path(quant_path)
     
-    # create directory is it doesn't exist
+    # create directory if it doesn't exist
     if not Path.exists(quant_path):
         Path.mkdir(quant_path)
         print(f"Output file path not found. Making {quant_path}.")
