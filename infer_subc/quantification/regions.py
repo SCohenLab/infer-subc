@@ -23,37 +23,42 @@ def get_regions_morphology(source_file_path: str,
     Measure morphology metrics of masks/regions included in the large infer-subc pipeline (e.g. cell, nucleus, etc.).
 
     Parameters
-    ------------
-    source_file: str
-        Path to the source image file. This will be used as part of the metadata information in the output table. 
-        The input images are not derived from this path, but rather are provided directly as arrays in the list_obj_segs and 
-        list_intensity_img variables below.
-    list_region_names: Union[List[str], None]
+    ----------
+    source_file_path : str
+        Path to the source image file. This will be used as part of the metadata information in the output table.
+        The input images are not derived from this path, but rather are provided directly as arrays in the
+        ``list_region_segs`` and ``list_intensity_img`` variables below.
+    list_region_names : Union[List[str], None]
         List of segmented region/mask names. These names should match the suffix on the segmentation image files.
         This should include:
-            - a mask segmentation, such as the cell mask, for masking during all interactions analysis; else, the entire image will be 
-            quantified. Only one objects per mask image will be analyzed. If there are more than one included, they will be combined 
-            prior to analysis and the entire region will be quantified. If no mask is provided, the entire image will be quantified.
-            - a centering object, such as the nucleus, for distribution analysis; else the center of the mask region will be used as 
-            the XY distribution centering point if distribution analysis is included.
-    list_region_segs: Union[List[np.ndarray], None]
-        List of 3D region segmentation arrays matching the order specified in list_region_names. Specify None if no regions are provided.
-    list_intensity_img: Union[List[np.ndarray], None]
+            - a mask segmentation, such as the cell mask, for masking during all interactions analysis; else, the entire
+              image will be quantified. Only one object per mask image will be analyzed. If there is more than one
+              object included, they will be combined prior to analysis and the entire region will be quantified. If no
+              mask is provided, the entire image will be quantified.
+            - a centering object, such as the nucleus, for distribution analysis; else the center of the mask region
+              will be used as the XY distribution centering point if distribution analysis is included.
+    list_region_segs : Union[List[np.ndarray], None]
+        List of 3D region segmentation arrays matching the order specified in ``list_region_names``. Specify ``None``
+        if no regions are provided.
+    list_intensity_img : Union[List[np.ndarray], None]
         List of 3D intensity channels from the raw image. Any number of channels can be included.
         These names will be used to rename the intensity measurement columns in the output table.
-        If no intensity analysis is to be included, specify None here.
-    list_channel_names: Union[List[str], None]
-        List of names for each intensity channel provided in list_intensity_img. The order should match the order of the channels in list_intensity_img.
-    mask_name: Union[str, None]
+        If no intensity analysis is to be included, specify ``None`` here.
+    list_channel_names : Union[List[str], None]
+        List of names for each intensity channel provided in ``list_intensity_img``. The order should match the order
+        of the channels in ``list_intensity_img``.
+    mask_name : Union[str, None]
         Name of the region to use as the mask for analysis; if not specified, the entire image will be quantified.
-        The mask_name should match one of the names provided in list_region_names. This object will be used to mask
-        all other objects before quantitative analysis is performed. It will also be included as one of the analyzed objects.
-    scale: Union[tuple,None] = None
-        a tuple that contains the real world dimensions for each dimension in the image (Z, Y, X)
-            
+        The ``mask_name`` should match one of the names provided in ``list_region_names``. This object will be used to
+        mask all other objects before quantitative analysis is performed. It will also be included as one of the
+        analyzed objects.
+    scale : Union[tuple, None], optional
+        A tuple that contains the real world dimensions for each dimension in the image (Z, Y, X).
+
     Returns
-    -------------
-    pandas dataframe of containing regionprops measurements (columns) for each object in the segmentation image (rows) and the regionprops object
+    -------
+    pandas.DataFrame
+        DataFrame containing regionprops measurements (columns) for each object in the segmentation image (rows).
 
     """
     # Validate inputs
