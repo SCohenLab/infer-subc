@@ -220,7 +220,7 @@ def batch_process_regions_morph(dataset_name: str,
             # read in raw file and metadata
             img_data, meta_dict = read_czi_image(filez["raw"])
 
-            # create intensities from raw file as list baseed on channel_name list
+            # create intensities from raw file as list based on channel_name list
             if channel_names is None:
                 intensities = None
                 print("No intensity channel information provided.")
