@@ -1962,6 +1962,8 @@ def get_distribution_metrics(source_file_path: str,
     else:
         mask = list_region_segs[list_region_names.index(mask_name)]
 
+    mask_name = "whole_image" if mask_name is None else mask_name
+
     # specify the centering image to use during quantification based on the centering object name provided
     if centering_obj == None:
         print("No centering object provided. Using center of mask or entire image for distribution centering.")
@@ -2162,7 +2164,7 @@ def batch_process_distribution_quant(dataset_name: str,
 def batch_distribution_summary_stats(out_prefix: str,
                                       csv_path_list: List[str],
                                       out_path: str,
-                                      mask_name: str = "mask"):
+                                      mask_name: str = "whole_image"):
     """" 
     Batch process interaction quantification summary statistics from multiple datasets.
 
@@ -2176,7 +2178,7 @@ def batch_distribution_summary_stats(out_prefix: str,
         A path string where the summary data file will be output to
     splitter: str, default="X"
         The character used to split interaction site names.
-    mask_name: str = "mask"
+    mask_name: str = "whole_image"
         Named of the region to used as the mask for analysis accross all datasets
     """
 
@@ -2215,7 +2217,9 @@ def batch_distribution_summary_stats(out_prefix: str,
 
     print(f"Found {fl_count} files from {ds_count} dataset(s) across {len(csv_path_list)} location(s).")
 
-    # extract centering object metrics
+    # mask name checker
+    mask_name = "whole_image" if mask_name is None else mask_name
+    
     # extract centering object metrics
     if 'XY_center_vox_cnt_perbin' in list(dist_df.columns): # if there is a centering object
         nuc_dist_df = dist_df[["dataset", "image_name", 'scale',
