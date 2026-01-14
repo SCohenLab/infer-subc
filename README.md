@@ -158,26 +158,28 @@ After segmenting all the cells in your dataset, we recommend you quality check y
 
 > ### Segmentation output formatting: 
 > 
-> Segmentation outputs from the Napari plugin during batch processing or the notebooks will be saved as ".tiff" files. All organelle segmentations will include a single channel. The "masks" (e.g., cell, cytoplasm, nucleus) file from the Napari plugin will stacked into a multichannel image. It must be separated into “cell” and “nuc” files for quantification (see above).
+> Segmentation outputs from the Napari plugin or notebook during batch processing will be saved as ".tiff" files. All organelle segmentations will include a single channel. The "masks" (e.g., cell, nucleus) and "soma_neurites" files will be stacked into a multichannel image. They ***must*** be separated into “cell” and “nuc” (or "soma" and "neurites") files before quantification (see the Quality Check section above).
 
 ## 🧮📐 Organelle Quantification 
 
-After all of the organelles of interest are segmented, single or multi-organelle analysis can be carried out using Jupyter Notebook-based pipeline(s). Each of the following analysis types is modular and can be used in combination or separately.
+After all of the organelles of interest are segmented, single or multi-organelle analysis can be carried out using Jupyter Notebook-based pipeline(s). There are two main analysis approaches you can utilize:
 
-**Combined “Organelle Signature Analysis” pipeline:** 
-- [Full Quantification Pipeline](./notebooks\part_2_quantification\full_quantification_pipeline.ipynb):  This notebook carries out quantification of the `morphology`, `interactions`, and `distribution` of two or more organelles within a specified region (e.g., the cell). This pipeline incorporates batch quantification for all files from a single experiment (contained in one folder) and then summarizes the quantification outputs across multiple experimental replicates. 
-
-**Individual analysis pipelines:**
+**1. Individual analysis pipelines:**
 
 The following notebooks primarily act as a step-by-step guide to understanding each measurement type. However, they can also be used to quantify features of single organelles or pairs of organelles (interactions) from individual cells.  
-- [Organelle morphology](./notebooks\part_2_quantification\1.1_organelle_morphology.ipynb)
-- [Pairwise organelle interactions](./notebooks\part_2_quantification\1.2_organelle_interactions.ipynb)
-- [Subcellular distribution](./notebooks\part_2_quantification\1.3_distribution_measurements.ipynb)
-- [Cell/nucleus morphology](./notebooks\part_2_quantification\1.4_cell_region_morphology.ipynb)
-- COMBINED ANAYSIS ONLY: [batch processing](./notebooks\part_2_quantification\1.5_combined_and_batch_processing.ipynb)
-- COMBINED ANAYSIS ONLY: [per-cell summary](./notebooks\part_2_quantification\1.6_summary_stats.ipynb)
+- [Organelle morphology](./notebooks/part_2_quantification/2.1_organelle_morphology.ipynb)
+- [Organelle interactions](./notebooks/part_2_quantification/2.2_organelle_interactions.ipynb)
+- [Subcellular distribution](./notebooks/part_2_quantification/2.3_organelle_distribution.ipynb)
+- [Regions morphology](./notebooks/part_2_quantification/2.4_cell_region_morphology.ipynb)
 
-🚧 *Future implementations of these notebooks will include batch processing capabilities (e.g., multiple cells, multiple organelles) for each quantification type separately.*
+**2. Combined “Organelle Signature Analysis” pipeline:** 
+- [Full Quantification Pipeline](./notebooks/part_2_quantification/organelle_signature_analysis.ipynb):  This notebook combines the modular analyses into a single pipeline that quantifies the `morphology`, `interactions`, and `distribution` of two or more organelles within a specified region (e.g., the cell) or the whole image. This pipeline batch processes quantification for all files from a single experiment (contained in one folder) and then summarizes the quantification outputs across multiple experimental replicates. 
+
+### <ins>Quantification via Jupyter Notebooks:</ins>
+1. Download the setup notebook (2.0) and the quantification notebook(s) (2.1-2.4 or organelle_signature_analysis) you wish to use for your quantitative analysis. All quantification notebook can be found in this repository under `notebooks`>[`part_2_quantification`](./notebooks/part_2_quantification/).
+2. Work through notebook [2.0_quantification_setup](./notebooks/part_2_quantification/2.0_quantification_setup.ipynb) to ensure your data are compatible with the current infer-subc file readering and information extraction approaches. If you utilized the segmentation workflows available in Part 1 of `infer-subc`, your setup should be straightfoward. However, any necessary updates needed for your images can be tested and implemented here. The steps presented in this notebook will be used to open raw and segmentation files in all other part 2 notebooks.
+3. Use notebooks 2.1 through 2.4 or the organelle_signature_analysis notebook to quantify data from each experimental replicate, then summarize the data per region or image across multiple replicates. *See the file organization in the Part 1 section above for reference on how files should be organized.*
+
 
 # Additional Information
 ## Built With
