@@ -1,10 +1,13 @@
 import os
 import tempfile
 from pandas import read_csv, concat
+from pathlib import Path
+
 
 
 # define function to append data to csv after each image is processed
 def append_atomic_csv(csv_path, df):
+    if isinstance(csv_path, str): csv_path = Path(csv_path)
     if df.empty:
         return
     if not os.path.exists(csv_path):

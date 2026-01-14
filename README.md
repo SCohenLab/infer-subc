@@ -1,5 +1,8 @@
-README
+
 # infer-subc
+
+![GitHub License](https://img.shields.io/github/license/SCohenLab/infer-subc)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/infer-subc?color=purple)
 ### A Python-based image analysis tool to segment and quantify the morphology, interactions, and distribution of organelles.
 
 <img src="infer_subc\assets\README.png" width="800">
@@ -27,8 +30,7 @@ We recommend installing and using these packages in a Python environment (e.g., 
 Cloning `infer-subc` is necessary if you are going to do any of the following:
 
 - Run segmentation or quantification using the provided `sample data`
-- Run many or all segmentation workflows using Jupyter Notebooks instead of the `Napari plugin`
-- If you want to dive into the underlying code
+- If you want to modify the underlying code for specific use cases
 
 To clone this repository, navigate to the location on your computer via command line where you want the clone of repository to be downloaded. Then:
 
@@ -53,20 +55,61 @@ The starting point for the `infer-subc` analysis pipeline is to perform instance
 > - `Lipid droplets`
 > - `Cell`
 > - `Nucleus`
+> - `Soma`/`Neurites`
 >
->  *Outside segmentation methods can also be used to incorporate additional organelles.*
+>  *Outside segmentation methods can also be used to incorporate additional organelles or subcellular regions.*
 
 We recommend our `infer-subc` implementation for Napari called [`organelle-segmenter-plugin`](https://github.com/ndcn/organelle-segmenter-plugin) for image segmentation. This allows users to test segmentation settings for each organelle systematically, then batch process the segmentation of all organelles of interest across multiple cells using predetermined settings. Alternatively, the included set of Jupyter Notebooks can be used to work through the segmentation process step by step using functions included in the `infer-subc` package. 
 
-If desired, alternative segmentation methods (e.g., CellProfiler, Imaris, ImageJ, etc.) can be used as the input for `Part 2 – Organelle Quantification` below.
+If desired, alternative segmentation approaches (e.g., CellProfiler, Imaris, ImageJ, etc.) can be used to generate inputs for `Part 2 – Organelle Quantification` below.
 
-> ### Input image formatting:
+> ### <ins>Input image format</ins>:
 >
 > We have tested the following file formats as input in both the Napari plugin and the Jupyter notebooks:
 > 
 > - Single or multi-channel ".tiff"/".tif" or ".czi" files
-> - <mark>2D (single Z-plane)</mark> or 3D (Z-stack) images
-> - Dimension order: CZYX
+> - 3D (Z-stack) images
+> - Ideal dimension order: CZYX
+>
+> ### <ins>Required file structure</ins>:
+> To ensure proper quantification in Part 2 - Organelle Quantification, the following file structure should be following:
+> 1. Data for each experimental replicate should be saved in a separate folder.
+> 2. All segmentation data for a biological replicate should be saved in one folder. This folder would ideal be within the same parent folder as the raw data it was derived from. *We also **highly recomment** saving the workflow settings (or batch_process_segmentation Jupyter notebook) within this folder to ensure the segmentation methods are easily identifiable in the future.*
+> 3. A separate folder should be included for quantification outputs. The quantification and summary statistics can be within the same folder. This folder would ideal be within the same parent folder as the raw data and segmentation files it was derived from. *We also **highly recomment** saving the quantification notebooks used to generate the quantitative data within this folder to ensure the segmentation methods are easily identifiable in the future.*
+> 
+> **An example file structure:**
+> - 📂 experiment_1
+>     - 📂 raw_data
+>         - 📜 date_condition1_cell1.czi
+>         - 📜 date_condition2_cell1.czi
+>         - 📜 ...
+>     - 📂 segmentation_data
+>         - 📜 date_condition1_cell1-cell.tif
+>         - 📜 date_condition1_cell1-nuc.tiff
+>         - 📜 date_condition1_cell1-lyso.tiff
+>         - 📜 date_condition1_cell1-mito.tiff
+>         - 📜 date_condition1_cell1-golgi.tif
+>         - 📜 date_condition1_cell1-perox.tiff
+>         - 📜 date_condition1_cell1-ER.tiff
+>         - 📜 date_condition1_cell1-LD.tiff
+>         - 📜 date_condition2_cell1-cell.tiff
+>         - 📜 date_condition2_cell1-nuc.tiff
+>         - 📜 date_condition2_cell1-lyso.tiff
+>         - 📜 date_condition2_cell1-mito.tiff
+>         - 📜 date_condition2_cell1-golgi.tiff
+>         - 📜 date_condition2_cell1-perox.tiff
+>         - 📜 date_condition2_cell1-ER.tiff
+>         - 📜 date_condition2_cell1-LD.tiff
+>         - 📓 batch_process_segmentations.ipynb
+>         - 📜 ...
+>     - 📂 quantification_output
+>         - 📜 datasetname-organelle_morphology_metrics.csv
+>         - 📜 datasetname-per_org_morphology_summarystats.csv
+>         - 📓 2.1_organelle_morphology.ipynb
+> - 📂 experiment_2
+>     - 📂 raw_data
+>     - 📂 segmentation_data
+>     - 📂 quantification_output
 
 ### <ins>Segmentation Option A:</ins> [Napari Plugin](https://github.com/ndcn/organelle-segmenter-plugin) 🔌
 
@@ -76,8 +119,8 @@ The `organelle-segmenter-plugin` package is required for this method (see setup 
 2. Start the plugin by navigating to `Plugin` > `Infer sub-Cellular Object Npe2 plugin` > `Workflow editor`. The plugin settings will appear as a new right-side panel.
 3. In the Workflow editor, select the image you uploaded from the dropdown list. 
 4. Select the workflow corresponding to your first desired organelle or the masks.
-5. Adjust the parameters for each step. Use the output of each step to adjust the settings before continuing to the next step. After proceeding to a subsequent step, you cannot return to a previous step. If you need to return to a previous step, you must restart the workflow by pressing `Close Workflow` at the bottom of the panel and begin again. Your settings will not be saved; follow the next step or note down your preferred settings before closing the workflow.
-6. Save the workflow settings that are compatible with your image by using the `Save Workflow` option at the bottom of the panel. *IMPORTANT: the file name should end with the same name as the workflow you are working on.*
+5. Adjust the parameters for each step, one at a time. You can adjust the settings within a single step as many times as you would like; each time a step is run, a new output layer appears. After proceeding to a subsequent step, you cannot return to a previous step. If you need to return to a previous step, you must restart the workflow by pressing `Close Workflow` at the bottom of the panel and begin again. Your settings will not be saved automatically; follow the next step or note down your preferred settings before closing the workflow.
+6. Once you are satisified with the workflow settings you've selected (*tip: we recommend typing them one a variety of images/experimental conditions to assess robustness and refine settings as needed*), save the workflow settings that are compatible with your image by using the `Save Workflow` option at the bottom of the panel. *IMPORTANT: the file name should end with the same name as the workflow you are working on.*
     > 
     > <ins>**Naming Examples**</ins>: 
     >
@@ -91,68 +134,52 @@ The `organelle-segmenter-plugin` package is required for this method (see setup 
     > - "lysosomes.json" 
     > - "LS.json"
 7. Close the workflow and repeat the steps above for any additional organelles and/or the masks. Save each of the workflow setting files together in the same folder.
-8. Once all the settings are saved, open the batch processor by going to `Plugins` > `Infer sub-Cellular Object Npe2 plugin` > `Batch processing`. A new right-side panel will appear.
-9. Load the saved workflow settings and specify the input (confocal microscopy images) and output (desired location for segmentation files to be saved) folders.
+8. Once all the settings are saved, open the batch processor plugin in Napari by going to `Plugins` > `Infer sub-Cellular Object Npe2 plugin` > `Batch processing`. A new right-side panel will appear.
+9. Load the saved workflow settings (all of them can be processed at the same time) and specify the input (confocal microscopy images) and output (desired location for segmentation files to be saved) folders.
 10. Click `Run`. A progress bar will allow you to track your processing.
 
-Continue to the Quality Check section explained below BEFORE moving on to Part 2 – Organelle Quantification. 
+Continue to the Quality Check section explained below **BEFORE** moving on to Part 2 – Organelle Quantification.
 
 ### <ins>Segmentation Option B:</ins> [Jupyter Notebooks](/docs/nbs/overview.md) 📚
-The primary purpose of the Jupyter notebooks is to walk step-by-step through each of the segmentation workflows. We hope these notebooks provide a more easily accessible resource for those who are new to Python image analysis or a more flexible platform for customization.
+We have supplied the same analysis methods available in the Napari plugin in Jupyter Notebook format. The primary purpose of the Jupyter notebooks is to walk step-by-step through each of the segmentation workflows, linking the underlying code to each step in the segmentation workflows. We hope these notebooks provide a more easily accessible resource for those who are new to Python image analysis or a more flexible platform for customization.
 
-*The notebooks below include steps to segment a single image. A batch-processing workflow has not yet been created.*
+*The Jupyter Notebooks can be used in a similar fashion as the Napari plugin: 1) optimize segementation settings for each workflow; 2) batch process multiple segmentation workflows simultaneously on a set of images.*
 
-**Step 1️⃣: Identify a single cell of interest**
+1. Download the setup notebook (1.0) and the segmentation workflow notebooks (1.1-1.8) needed for your analysis. All segmentation workflow notebook can be found in this repository under `notebooks`>[`part_1_segmentation_workflows`](/infer-subc/notebooks/part_1_segmentation_workflows/).
+2. Work through notebook [1.0_image_setup](/infer-subc/notebooks/part_1_segmentation_workflows/1.0_image_setup.ipynb) to ensure your images are compatible with the current infer-subc file readering and information extraction approaches. Any necessary updates needed for your images can be tested and implemented here. The steps presented in this notebook will be used to open raw files and read metadata in all other part 1 notebooks.
+3. Use notebooks 1.1 through 1.8 to determine the appropriate segmentation settings for your images (*tip: we recommend typing segmentation settings one a variety of images/experimental conditions to assess robustness and refine settings as needed*). The settings implemented in these notebooks will be used as a reference when setting up batch processing in the next step.
+4. After you have determined the optimal segmentation settings for each desired workflow, work through the [batch_process_segmentation](/infer-subc/notebooks/part_1_segmentation_workflows/batch_process_segmentations.ipynb) notebook to batch process a series of images (all from the same folder). 
 
-Use one of the following notebooks to segment (or infer) the `cellmask` and `nuclei` from your image. Each workflow differs based on the type of fluorescent labels used and the number of cells per field of view (FOV):
-
-- Fluorescently labeled nuclei (no cell or plasma membrane marker)
-    - [one or more cells per FOV](/notebooks/part_1_segmentation_workflows/1.1_infer_masks_from-composite_with_nuc.ipynb)
-- No cell, plasma membrane, or nuclei labels with
-    - [one cell per field of view FOV](/notebooks/part_1_segmentation_workflows/1.1a_infer_masks_from-composite_single_cell.ipynb)
-    - [one or more cells per FOV](/notebooks/part_1_segmentation_workflows/1.1b_infer_masks_from-composite_multiple-cells.ipynb)
-
-**Step 2️⃣: Segment organelles and regions**
-
-Each of the organelles you wish to include in your analysis should be segmented from a single fluorescently labeled structure. Use the following notebooks to segment each organelle from a single intensity channel in the input image.
-
-2. Infer [`lysosomes`](/notebooks/part_1_segmentation_workflows/1.2_infer_lysosome.ipynb)
-3. Infer [`mitochondria`](/notebooks/part_1_segmentation_workflows/1.3_infer_mitochondria.ipynb)
-4. Infer [`golgi`](/notebooks/part_1_segmentation_workflows/1.4_infer_golgi.ipynb)
-5. Infer [`peroxisomes`](/notebooks/part_1_segmentation_workflows/1.5_infer_peroxisome.ipynb)
-6. Infer [`endoplasmic reticulum (ER)`](/notebooks/part_1_segmentation_workflows/1.6_infer_ER.ipynb)
-7. Infer [`lipid droplets`](/notebooks/part_1_segmentation_workflows/1.7_infer_lipid_droplet.ipynb)
-8. Infer [`soma and neurites`](/notebooks/part_1_segmentation_workflows/1.8_infer_soma_neurites.ipynb)
+Continue to the Quality Check section explained below **BEFORE** moving on to Part 2 – Organelle Quantification.
 
 ### <ins>Quality Check and Mask Separation:</ins> [Validate segmentation results]()🔎
-After segmenting all the cells in your dataset, we recommend you quality check your segmentation results by visually inspecting the images. The Segmentation Validation pipeline is included in the [Full Quantification Pipeline Notebook](/notebooks/part_2_quantification/full_quantification_pipeline.ipynb) to streamline the validation process.
+After segmenting all the cells in your dataset, we recommend you quality check your segmentation results by visually inspecting the images. The [quality_check_segmentation](/infer-subc/notebooks/part_1_segmentation_workflows/quality_check_segmentations.ipynb) notebook walks you through the quality checking process we recommend. This notebook also separates the `masks` segmentation output into separate `cell` and `nuc` (i.e., nucleus) segmentation files as well as the optional `soma_neurite` segmentation output into separate `soma` and `neurite` segmentation files, if you are include them in your analysis. This is ***`REQUIRED`*** for Part 2 – Organelle Quantification. The notebook also ensures your data meet several assumptions necessary for quantification.
 
-**REQUIRED:** This notebook will also separate the `masks` segmentation output into separate `cell` and `nuc` (i.e., nucleus) segmentation files as well as the optional `soma_neurite` segmentation output into separate `soma` and `neurite` segmentation files. This is ***required*** for Part 2 – Organelle Quantification.
-
-🚧 *In a future version, this notebook will also include quality checks for assumptions made during quantification (i.e., only one nucleus and ER per cell, etc.).*
 
 > ### Segmentation output formatting: 
 > 
-> Segmentation outputs from the Napari plugin during batch processing or the notebooks will be saved as ".tiff" files. All organelle segmentations will include a single channel. The "masks" (e.g., cell, cytoplasm, nucleus) file from the Napari plugin will stacked into a multichannel image. It must be separated into “cell” and “nuc” files for quantification (see above).
+> Segmentation outputs from the Napari plugin or notebook during batch processing will be saved as ".tiff" files. All organelle segmentations will include a single channel. The "masks" (e.g., cell, nucleus) and "soma_neurites" files will be stacked into a multichannel image. They ***must*** be separated into “cell” and “nuc” (or "soma" and "neurites") files before quantification (see the Quality Check section above).
 
 ## 🧮📐 Organelle Quantification 
 
-After all of the organelles of interest are segmented, single or multi-organelle analysis can be carried out using Jupyter Notebook-based pipeline(s). Each of the following analysis types is modular and can be used in combination or separately.
+After all of the organelles of interest are segmented, single or multi-organelle analysis can be carried out using Jupyter Notebook-based pipeline(s). There are two main analysis approaches you can utilize:
 
-**Combined “Organelle Signature Analysis” pipeline:** 
-- [Full Quantification Pipeline](./notebooks\part_2_quantification\full_quantification_pipeline.ipynb):  This notebook carries out quantification of the `morphology`, `interactions`, and `distribution` of two or more organelles within a specified region (e.g., the cell). This pipeline incorporates batch quantification for all files from a single experiment (contained in one folder) and then summarizes the quantification outputs across multiple experimental replicates. 
-
-**Individual analysis pipelines:**
+**1. Individual analysis pipelines:**
 
 The following notebooks primarily act as a step-by-step guide to understanding each measurement type. However, they can also be used to quantify features of single organelles or pairs of organelles (interactions) from individual cells.  
-- [Organelle morphology](./notebooks\part_2_quantification\1.1_organelle_morphology.ipynb)
-- [Pairwise organelle interactions](./notebooks\part_2_quantification\1.2_organelle_interactions.ipynb)
-- [Subcellular distribution](./notebooks\part_2_quantification\1.3_distribution_measurements.ipynb)
-- [Cell/nucleus morphology](./notebooks\part_2_quantification\1.4_cell_region_morphology.ipynb)
-- COMBINED ANAYSIS ONLY: [batch processing](./notebooks\part_2_quantification\1.5_combined_and_batch_processing.ipynb)
-- COMBINED ANAYSIS ONLY: [per-cell summary](./notebooks\part_2_quantification\1.6_summary_stats.ipynb)
+- [Organelle morphology](./notebooks/part_2_quantification/2.1_organelle_morphology.ipynb)
+- [Organelle interactions](./notebooks/part_2_quantification/2.2_organelle_interactions.ipynb)
+- [Subcellular distribution](./notebooks/part_2_quantification/2.3_organelle_distribution.ipynb)
+- [Regions morphology](./notebooks/part_2_quantification/2.4_cell_region_morphology.ipynb)
 
-🚧 *Future implementations of these notebooks will include batch processing capabilities (e.g., multiple cells, multiple organelles) for each quantification type separately.*
+**2. Combined “Organelle Signature Analysis” pipeline:** 
+- [Full Quantification Pipeline](./notebooks/part_2_quantification/organelle_signature_analysis.ipynb):  This notebook combines the modular analyses into a single pipeline that quantifies the `morphology`, `interactions`, and `distribution` of two or more organelles within a specified region (e.g., the cell) or the whole image. This pipeline batch processes quantification for all files from a single experiment (contained in one folder) and then summarizes the quantification outputs across multiple experimental replicates. 
+
+### <ins>Quantification via Jupyter Notebooks:</ins>
+1. Download the setup notebook (2.0) and the quantification notebook(s) (2.1-2.4 or organelle_signature_analysis) you wish to use for your quantitative analysis. All quantification notebook can be found in this repository under `notebooks`>[`part_2_quantification`](./notebooks/part_2_quantification/).
+2. Work through notebook [2.0_quantification_setup](./notebooks/part_2_quantification/2.0_quantification_setup.ipynb) to ensure your data are compatible with the current infer-subc file readering and information extraction approaches. If you utilized the segmentation workflows available in Part 1 of `infer-subc`, your setup should be straightfoward. However, any necessary updates needed for your images can be tested and implemented here. The steps presented in this notebook will be used to open raw and segmentation files in all other part 2 notebooks.
+3. Use notebooks 2.1 through 2.4 or the organelle_signature_analysis notebook to quantify data from each experimental replicate, then summarize the data per region or image across multiple replicates. *See the file organization in the Part 1 section above for reference on how files should be organized.*
+
 
 # Additional Information
 ## Built With
