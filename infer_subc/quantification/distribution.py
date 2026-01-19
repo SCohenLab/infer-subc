@@ -2110,7 +2110,7 @@ def batch_process_distribution_quant(dataset_name: str,
     unique_keys = ['dataset', 'image_name']
 
     # check if any existing data is present in outfiles
-    dist_path = quant_path / f"{dataset_name}_distribution_metrics.csv"
+    dist_path = quant_path / f"{dataset_name}_organelle_distribution_metrics.csv"
     existing_dist_keys = load_existing_keys_csv(dist_path, unique_keys)
 
     # list of organelle segmentation and masks files to collect from each image
@@ -2214,13 +2214,13 @@ def batch_distribution_summary_stats(out_prefix: str,
         # list all csv files in the location
         files_store = sorted(loc.glob("*.csv"))
 
-        # find the unique datasets in this location based on the prefixes before "_distribution_metrics"
-        prefixes = set(f.name.split("_distribution_metrics")[0] for f in files_store if "_distribution_metrics" in f.name)
+        # find the unique datasets in this location based on the prefixes before "_organelle_distribution_metrics"
+        prefixes = set(f.name.split("_organelle_distribution_metrics")[0] for f in files_store if "_organelle_distribution_metrics" in f.name)
         print(f"Found the following datasets in {loc}:", prefixes)
         for prefix in prefixes:
             ds_count += 1
             # select only the files from this dataset
-            files_subset = [f for f in files_store if f.name.startswith(prefix +"_distribution_metrics")]
+            files_subset = [f for f in files_store if f.name.startswith(prefix +"_organelle_distribution_metrics")]
             for file in files_subset:
                 fl_count += 1
                 stem = file.stem
