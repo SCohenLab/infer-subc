@@ -267,7 +267,7 @@ def create_interaction_sites(interaction_orgs: List[str],
             input_labels = label(apply_mask(overlap_img, mask)).astype(int)
 
         # use regionprops table to list interaction sites by unique index and extract slice for each object
-        inter_tab = find_inter_labels(input_labels, interaction_name, org_dict, mask_name, mask)
+        inter_tab = find_inter_labels(input_labels, interaction_name, org_dict)
         inter_tab.insert(0, 'mask_name', mask_name, True)
 
         # determine if each site is also involved in a higher order interaction (there are more than the specified organelles involved)
