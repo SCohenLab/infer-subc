@@ -38,7 +38,10 @@ def make_dict(list_obj_names: list[str],
     
     organelle_segs = {}
     for idx, name in enumerate(list_obj_names):
-        organelle_segs[name]=list_obj_segs[idx]
+        if name == "ER":
+            organelle_segs[name]=(list_obj_segs[idx]>0).astype(np.uint8) #if ER, make binary mask (combine all ER objects into one with ID #1)
+        else:
+            organelle_segs[name]=list_obj_segs[idx]
             
     return organelle_segs
 
@@ -77,9 +80,7 @@ def create_overlap(inter_name:str,
 
 def find_inter_labels(overlap_img: np.ndarray,
                        interaction_name: str,
-                       org_dict: dict[str, np.ndarray],
-                       mask_name: Union[str, None]=None,
-                       mask: Union[np.ndarray, None]=None) -> pd.DataFrame:
+                       org_dict: dict[str, np.ndarray]) -> pd.DataFrame:
     '''
     Identify which organelle IDs are involved in each unique interaction site; 
     the organelle ID numbers are joined by underscores and returned in a table of 
@@ -94,10 +95,6 @@ def find_inter_labels(overlap_img: np.ndarray,
         A string of organelle names separated by the specified splitter.
     org_dict : dict[str:np.ndarray]
         A dictionary of organelle segmentations with organelle names as keys and segmentation image arrays as values.
-    mask_name : Union[str, None]
-        The name of the mask region being analyzed. If None, the whole image is analyzed.
-    mask : Union[np.ndarray, None]
-        The mask image array being analyzed. If None, the whole image is analyzed.
         
     Returns
     -------
@@ -107,17 +104,9 @@ def find_inter_labels(overlap_img: np.ndarray,
         `object`: the name of the interaction sites being examined, created by joining the organelle names with the specified splitter.
         `label`: a string of organelle ID numbers involved in each interaction site, joined by underscores.
     '''
-    # apply mask to overlap image if provided
-    if mask_name is None and mask is not None:
-        raise ValueError("The mask_name parameter must be provided if mask is not None")
-    elif mask is None and mask_name is None:
-        input_labels = overlap_img
-        mask_name = "whole_image"
-    else:
-        input_labels = apply_mask(overlap_img, mask)
 
     # use regionprops table to list interaction sites by unique index and extract slice for each object
-    props = regionprops_table(input_labels, properties=['label', 'slice'])
+    props = regionprops_table(overlap_img, properties=['label', 'slice'])
 
     # create a list of the organelle ID numbers involved in each interaction site
     involved = interaction_name.split("X")
@@ -126,7 +115,7 @@ def find_inter_labels(overlap_img: np.ndarray,
     for index, l in enumerate(props["label"]):
         over_inv = []
         for org in involved:
-            volume = overlap_img[props["slice"][index]]
+            volume = overlap_img[props["slice"][index]] 
             lorg = org_dict[org][props["slice"][index]]
             volume = volume==l
             lorg = lorg[volume]                                 
@@ -139,7 +128,6 @@ def find_inter_labels(overlap_img: np.ndarray,
 
     inter_tab = pd.DataFrame(indexes)
     inter_tab.insert(0, 'object', interaction_name, True)
-    inter_tab.insert(0, 'mask_name', mask_name, True)
     
     return inter_tab
 
@@ -269,13 +257,23 @@ def create_interaction_sites(interaction_orgs: List[str],
         # create the overlap image
         overlap_img = create_overlap(interaction_name, org_dict)
 
+        # apply mask to overlap image if provided
+        if mask_name is None and mask is not None:
+            raise ValueError("The mask_name parameter must be provided if mask is not None")
+        elif mask is None and mask_name is None:
+            input_labels = overlap_img
+            mask_name = "whole_image"
+        else:
+            input_labels = label(apply_mask(overlap_img, mask)).astype(int)
+
         # use regionprops table to list interaction sites by unique index and extract slice for each object
-        inter_tab = find_inter_labels(overlap_img, interaction_name, org_dict, mask_name, mask)
+        inter_tab = find_inter_labels(input_labels, interaction_name, org_dict, mask_name, mask)
+        inter_tab.insert(0, 'mask_name', mask_name, True)
 
         # determine if each site is also involved in a higher order interaction (there are more than the specified organelles involved)
-        lower_order_sites, inter_tab = assess_if_higher_order_int(overlap_img, interaction_name, inter_tab, org_dict)
+        lower_order_sites, inter_tab = assess_if_higher_order_int(input_labels, interaction_name, inter_tab, org_dict)
 
-        return overlap_img, lower_order_sites, inter_tab
+        return input_labels, lower_order_sites, inter_tab
     
 
 def create_interaction_degrees(org_name_list:List[str],
@@ -630,7 +628,7 @@ def get_interaction_metrics(source_file_path: str,
 
 
 
-def _batch_process_interactions_quant(dataset_name: str,
+def batch_process_interactions_quant(dataset_name: str,
                                       raw_path: Union[Path,str],
                                       seg_path: Union[Path,str],
                                       quant_path: Union[Path, str], 
