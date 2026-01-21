@@ -95,7 +95,6 @@ def get_normalized_distance_and_mask(labels: np.ndarray,
     # Secondary case, no "true" mask object
     else:
         true_mask = False 
-        print('labels/mask input represents entire image')
         if center_objects is None:
             # pad the labels array by zeros so that the edge pixels is detected as boundary pixels
             padded_labels = np.pad(labels, pad_width = 1)
@@ -1006,31 +1005,30 @@ def get_zernike_metrics(
 
 
 ### USED ###
-def get_XY_distribution(        
-        mask: Union[np.ndarray,None],
-        mask_name: str,
-        centering_obj: Union[np.ndarray,None],
-        obj:np.ndarray,
-        obj_name: str,
-        scale: Union[tuple, None]=None,
-        num_bins: Union[int, None] = 5,
-        center_on: bool = False,
-        keep_center_as_bin: bool = True,
-        zernike_degrees: Union[int, None] = None):
+def get_XY_distribution(obj:np.ndarray,
+                         obj_name: str,
+                         centering_obj: Union[np.ndarray,None]=None,
+                         mask: Union[np.ndarray,None]=None,
+                         mask_name: Union[str,None]=None,
+                         scale: Union[tuple, None]=None,
+                         num_bins: Union[int, None] = 5,
+                         center_on: bool = False,
+                         keep_center_as_bin: bool = True,
+                         zernike_degrees: Union[int, None] = 9) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]  :
 
     """
     Params
     ----------
-    mask: np.ndarray,
-        a binary 3D (ZYX) np.ndarray of the area that will be measured from
-    mask_name: str
-        the name or nickname for the mask object; this name will appear in the metrics output
-    centering_obj: np.ndarray
-        a binary 3D (ZYX) np.ndarray of the object that will be used as the center of the concentric rins ("bins")
     obj: np.ndarray
         a 3D (ZYX) np.ndarray image of what will be measured within the masked area
     obj_name: str
         the name or nickname for the obj being measured; this will appear as a column in the output datasheet
+    centering_obj: np.ndarray
+        a binary 3D (ZYX) np.ndarray of the object that will be used as the center of the concentric rings ("bins")
+    mask: np.ndarray,
+        a binary 3D (ZYX) np.ndarray of the area that will be measured from
+    mask_name: str
+        the name or nickname for the mask object; this name will appear in the metrics output
     scale: Union[tuple, None]=None
         a tuple that contains the real world dimensions for each dimension in the image (Z, Y, X)
     num_bins: Union[int,None] = None
@@ -1058,7 +1056,14 @@ def get_XY_distribution(
     """
     # create sum Z projections
     # the mask that will be applied to the centering and organelle object
-    m = mask.astype(bool) if mask is not None else None
+    # redefine mask_name if None
+    if mask_name is None and mask is not None:
+        raise ValueError("The mask_name parameter must be provided if mask is not None")
+    elif (mask is None and mask_name is not None) or (mask is None and mask_name is None):
+        mask_name = "whole_image"
+        m = None
+    else:
+        m = mask.astype(bool)
 
     center_proj = create_masked_sum_projection(centering_obj,m) if centering_obj is not None else None
     obj_proj = create_masked_sum_projection(obj,m)
@@ -1178,29 +1183,27 @@ def create_masked_depth_projection(img_in:np.ndarray, mask:Union[np.ndarray, Non
     return img_out.sum(axis=(1,2))
 
 ### USED ###
-def get_Z_distribution(        
-        mask: Union[np.ndarray,None],
-        mask_name: str,
-        obj:np.ndarray,
-        obj_name: str,
-        center_obj: Union[np.ndarray, None],
-        scale: Union[tuple, None] = None
-        ):
+def get_Z_distribution(obj:np.ndarray,
+                        obj_name: str,
+                        center_obj: Union[np.ndarray, None]=None,
+                        mask: Union[np.ndarray,None]=None,
+                        mask_name: Union[str, None]=None,
+                        scale: Union[tuple, None] = None) -> pd.DataFrame:
     """
     quantification of distribution along the Z axis; all XY pixels are summed together per Z slice and then quantified
 
     Parameters
     ------------
-    mask_obj: np.ndarray,
-        a binary 3D (ZYX) np.ndarray of the area that will be measured from
-    mask_name: str
-        the name or nickname for the mask object; this name will appear in the metrics output
     obj: np.ndarray
         a 3D (ZYX) np.ndarray image of what will be measured within the masked area
     obj_name: str
         the name or nickname for the obj being measured; this will appear as a column in the output datasheet
     centering_obj: np.ndarray
         optional - a binary 3D (ZYX) np.ndarray utilized as the center/reference point of the area; for cells, this is usually the nucleus
+    mask_obj: np.ndarray,
+        a binary 3D (ZYX) np.ndarray of the area that will be measured from
+    mask_name: str
+        the name or nickname for the mask object; this name will appear in the metrics output
     scale: Union[tuple, None]=None
         a tuple that contains the real world dimensions for each dimension in the image (Z, Y, X)
 
@@ -1211,7 +1214,14 @@ def get_Z_distribution(
 
     """
     # the mask that will be applied to the centering and organelle object
-    m = mask.astype(bool) if mask is not None else None
+    # redefine mask_name if None
+    if mask_name is None and mask is not None:
+        raise ValueError("The mask_name parameter must be provided if mask is not None")
+    elif (mask is None and mask_name is None) or (mask is None and mask_name is not None):
+        mask_name = "whole_image"
+        m = None
+    else:
+        m = mask.astype(bool)
 
     # flattened
     obj_proj = create_masked_depth_projection(obj, m)
@@ -1962,8 +1972,6 @@ def get_distribution_metrics(source_file_path: str,
     else:
         mask = list_region_segs[list_region_names.index(mask_name)]
 
-    mask_name = "whole_image" if mask_name is None else mask_name
-
     # specify the centering image to use during quantification based on the centering object name provided
     if centering_obj == None:
         print("No centering object provided. Using center of mask or entire image for distribution centering.")
@@ -1980,11 +1988,7 @@ def get_distribution_metrics(source_file_path: str,
 
     # loop through the list of organelles and run the get_XY_distribution and get_Z_distribution function
     for j, target in enumerate(list_obj_names):    
-        # select segmentation and if ER, ensure it is only one object
-        if target == 'ER':
-            org_obj = (list_obj_segs[j] > 0).astype(np.uint16)
-        else:
-            org_obj = list_obj_segs[j]
+        org_obj = list_obj_segs[j]
 
         # run get_XY_distribution function to output a table of distribution measurements in respect to a specified object in the XY
         XY_distribution, XY_bins, XY_wedges = get_XY_distribution(mask=mask,
@@ -2106,7 +2110,7 @@ def batch_process_distribution_quant(dataset_name: str,
     unique_keys = ['dataset', 'image_name']
 
     # check if any existing data is present in outfiles
-    dist_path = quant_path / f"{dataset_name}_distribution_metrics.csv"
+    dist_path = quant_path / f"{dataset_name}_organelle_distribution_metrics.csv"
     existing_dist_keys = load_existing_keys_csv(dist_path, unique_keys)
 
     # list of organelle segmentation and masks files to collect from each image
@@ -2177,7 +2181,8 @@ def batch_process_distribution_quant(dataset_name: str,
 def batch_distribution_summary_stats(out_prefix: str,
                                       csv_path_list: List[str],
                                       out_path: str,
-                                      mask_name: str = "whole_image"):
+                                      organelle_names: List[str],
+                                      mask_name: Union[str, None]=None):
     """ 
     Batch process interaction quantification summary statistics from multiple datasets.
 
@@ -2189,7 +2194,7 @@ def batch_distribution_summary_stats(out_prefix: str,
         A list of path strings where .csv files to analyze are located.
     out_path: str,
         A path string where the summary data file will be output to
-    mask_name: str = "whole_image"
+    mask_name: str = "mask"
         Name of the region to use as the mask for analysis across all datasets
     """
 
@@ -2209,19 +2214,21 @@ def batch_distribution_summary_stats(out_prefix: str,
         # list all csv files in the location
         files_store = sorted(loc.glob("*.csv"))
 
-        # find the unique datasets in this location based on the prefixes before "_distribution_metrics"
-        prefixes = set(f.name.split("_distribution_metrics")[0] for f in files_store if "_distribution_metrics" in f.name)
+        # find the unique datasets in this location based on the prefixes before "_organelle_distribution_metrics"
+        prefixes = set(f.name.split("_organelle_distribution_metrics")[0] for f in files_store if "_organelle_distribution_metrics" in f.name)
         print(f"Found the following datasets in {loc}:", prefixes)
         for prefix in prefixes:
             ds_count += 1
             # select only the files from this dataset
-            files_subset = [f for f in files_store if f.name.startswith(prefix +"_distribution_metrics")]
+            files_subset = [f for f in files_store if f.name.startswith(prefix +"_organelle_distribution_metrics")]
             for file in files_subset:
                 fl_count += 1
                 stem = file.stem
                 if "_dist" in stem:
                     test_dist = pd.read_csv(file, index_col=0)
                     dist_tabs.append(test_dist)
+                else:
+                    print(f"File {stem} not recognized as interaction quantification data; skipping.")
 
     # combine the dist lists found above into one table
     dist_df = pd.concat(dist_tabs,axis=0, join='outer').reset_index()
@@ -2233,22 +2240,21 @@ def batch_distribution_summary_stats(out_prefix: str,
     
     # extract centering object metrics
     if 'XY_center_vox_cnt_perbin' in list(dist_df.columns): # if there is a centering object
-        nuc_dist_df = dist_df[["dataset", "image_name", 'scale',
+        nuc_dist_df = dist_df[["dataset", "image_name", "mask_name", 'scale',
                             "XY_bins", "XY_center_vox_cnt_perbin", f"XY_{mask_name}_vox_cnt_perbin", "XY_center_cv_perbin",
                             "XY_wedges", "XY_center_vox_cnt_perwedge", f"XY_{mask_name}_vox_cnt_perwedge",
                             "Z_slices", "Z_center_vox_cnt", f"Z_{mask_name}_vox_cnt"]].drop_duplicates(subset=['dataset', 'image_name'])
         nuc_dist_df.columns = nuc_dist_df.columns.str.replace('center', 'obj', regex=False)
         nuc_dist_df.insert(loc=3,column='object',value='nuc')
-        nuc_dist_df.set_index(['dataset', 'image_name', 'scale', 'object'], inplace=True)
+        nuc_dist_df.set_index(['dataset', 'image_name', "mask_name", 'scale', 'object'], inplace=True)
 
         # select relevant columns from dist dataset
         dist_df2 = dist_df[list(nuc_dist_df.reset_index().columns)]
-        dist_df2.set_index(['dataset', 'image_name', 'scale', 'object'], inplace=True)
-
+        dist_df2.set_index(['dataset', 'image_name', "mask_name", 'scale', 'object'], inplace=True)
         # combine
         combo_dist_df = pd.concat([nuc_dist_df, dist_df2], axis=0)
     else: # if there is not a centering object
-        dist_df.set_index(['dataset', 'image_name', 'scale', 'object'], inplace=True)
+        dist_df.set_index(['dataset', 'image_name', "mask_name", 'scale', 'object'], inplace=True)
         combo_dist_df = dist_df
 
     # loop through each row of data and calculate histogram statistics
@@ -2266,7 +2272,7 @@ def batch_distribution_summary_stats(out_prefix: str,
         Z_df[['bins', 'masks', 'obj']] = selection[['Z_slices', f'Z_{mask_name}_vox_cnt', 'Z_obj_vox_cnt']]
         CV_df[['XY_obj_cv_perbin']] = selection[['XY_obj_cv_perbin']]
 
-        dfs = [selection[['dataset', 'image_name', 'scale', 'object']].reset_index()]
+        dfs = [selection[['dataset', 'image_name', "mask_name", 'scale', 'object']].reset_index()]
 
         # for each group of data, calculate histogram statistics
         for df, prefix in zip([bins_df, wedges_df, Z_df, CV_df], ["XY_bins_", "XY_wedges_", "Z_slices_", "CV_perbin_"]):
@@ -2319,11 +2325,18 @@ def batch_distribution_summary_stats(out_prefix: str,
         
         # combine dataframes per group together
         combined_df = pd.concat(dfs,axis=1).drop(columns="index")
-        combined_df.set_index(['dataset', 'image_name', 'scale', 'object'], inplace=True)
+        combined_df.set_index(['dataset', 'image_name', "mask_name", 'scale', 'object'], inplace=True)
         hist_dfs.append(combined_df)
 
     # combine data from each row of data in the original table together
-    dist_summary = pd.concat(hist_dfs).sort_values(by=['dataset', 'image_name', 'scale', 'object'])
+    dist_summary = pd.concat(hist_dfs).sort_values(by=['dataset', 'image_name', "mask_name", 'scale', 'object'])
+    
+    # Ensure all possible organelles (organelle_names) are represented (if missing fill with NaN):
+    for ind in dist_summary.index.droplevel(4).unique().to_list():
+        for row in organelle_names:
+            if ind+(row,) not in dist_summary.index:
+                dist_summary.loc[ind+(row,)] = np.nan
+    
     dist_summary.reset_index(inplace=True)
 
     # export before unstacking
@@ -2333,7 +2346,6 @@ def batch_distribution_summary_stats(out_prefix: str,
         dist_summary.to_csv(str(out_path) + f"/{out_prefix}_per_org_distribution_summarystats.csv")
     
     # unstack and format interaction distribution summary table
-    dist_summary.insert(2, "mask_name", mask_name) ## TODO: change after dist is updated to include mask_name
     dist_final = dist_summary.set_index(['dataset', 'image_name', 'mask_name', 'scale', 'object']).unstack(-1)
     dist_final.columns = ["_".join((col_name[1], col_name[0])) for col_name in dist_final.columns.to_flat_index()]
     dist_final = dist_final.reset_index()
