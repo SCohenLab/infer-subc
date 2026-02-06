@@ -186,7 +186,8 @@ The following notebooks primarily act as a step-by-step guide to understanding e
 A quick note on the tools and resources used...
 
 - [`napari-allencell-segmenter`](https://github.com/AllenCell/napari-allencell-segmenter) -- We are leveraging the framework of the `napari-allencell-segmenter` plugin, which enables powerful 3D image segmentation while taking advantage of the `napari` graphical user interface. 
-- [`aicssegmentation`](https://github.com/AllenCell/aics-segmentation) -- We call the `aicssegmentation` package directly to access their advanced segmentation functions.
+- [`aicssegmentation`](https://github.com/AllenCell/aics-segmentation) -- We utilize functions from the `aicssegmentation` package to implement variations of their advanced segmentation functions.
+- [`skan`](https://github.com/jni/skan) -- We utilize components and computational approaches included here
 - [`napari`](https://napari.org/stable/) -- Used as the visualization framework, a fast, interactive, multi-domensional image viewer for Python.
 - [`scipy`](https://scipy.org/install/) -- Image analysis
 - [`scikit-image`](https://scikit-image.org/) -- Image analysis
