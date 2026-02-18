@@ -11,7 +11,7 @@
 # 📒 About this project
 
 ### `infer-subc` 
-- aims to create a <ins>simple</ins> and <ins>reproducible</ins> pipeline to segment (or "infer") and quantify the size, shape, interaction, and subcellular distribution of multiple intracellular organelles from confocal microscopy 🔬 images. 
+- aims to create a <ins>reproducible</ins> pipeline to segment (or "infer") and quantify the size, shape, interaction, and subcellular distribution of multiple intracellular organelles from confocal microscopy 🔬 images. 
 - is <ins>modular</ins> 🔢 to support a variety of organelle-focused research questions. 
 - can be <ins>applied broadly</ins> to many types of *in vitro* 🧫 and *in vivo* models 🐁🧬 to better understand the spatial coordination and interactome of organelles during key biological processes or disease. 
 
@@ -24,7 +24,7 @@ pip install infer-subc-main
 pip install infer-subc-plugin
 ```
 
-We recommend installing and using these packages in a Python environment (e.g., conda). A full list of dependencies and recommended setup steps are included in [env_create.sh](./env_create.sh).
+We recommend installing and using these packages in a Python environment (e.g., conda). A list of setup steps are included in [env_create.sh](./env_create.sh).
 
 ### Cloning `infer-subc`:
 Cloning `infer-subc` is necessary if you are going to do any of the following:
@@ -32,50 +32,58 @@ Cloning `infer-subc` is necessary if you are going to do any of the following:
 - Run segmentation or quantification using the provided `sample data`
 - If you want to modify the underlying code for specific use cases
 
-To clone this repository, navigate to the location on your computer via command line where you want the clone of repository to be downloaded. Then:
+To clone this repository, use your terminal navigate to the location on your computer where you want the clone of repository to be downloaded. Then run:
 
 ```
 git clone https://github.com/SCohenLab/infer-subc.git
 ```
-
-
-## 🖍️ Part 1 - Segmentation Workflows 
-
-> ***NOTE**: Proceed to the Organelle Quantification section below if you have already created instance segmentations using a separate method.*
-
-The starting point for the `infer-subc` analysis pipeline is to perform instance segmentation on single or multichannel confocal microscopy images, where each channel labels a different intracellular organelle (or structure). In the infer-subc segmentation workflows, each organelle will be segmented from a single intensity channel from the microscopy image. To carry out single-cell analysis in Part 2 – Organelle Quantification, the cell mask and nucleus (together "masks") should be segmented as well.
-
-> ### Compatible Organelles and Subcellular Regions 🔓🗝️
-> 
-> - `Lysosomes`
-> - `Mitochondria`
-> - `Golgi`
-> - `Peroxisomes`
-> - `Endoplasmic reticulum` 
-> - `Lipid droplets`
-> - `Cell`
-> - `Nucleus`
-> - `Soma`/`Neurites`
->
->  *Outside segmentation methods can also be used to incorporate additional organelles or subcellular regions.*
-
-We recommend our `infer-subc` implementation for Napari called [`organelle-segmenter-plugin`](https://github.com/ndcn/organelle-segmenter-plugin) for image segmentation. This allows users to test segmentation settings for each organelle systematically, then batch process the segmentation of all organelles of interest across multiple cells using predetermined settings. Alternatively, the included set of Jupyter Notebooks can be used to work through the segmentation process step by step using functions included in the `infer-subc` package. 
-
-If desired, alternative segmentation approaches (e.g., CellProfiler, Imaris, ImageJ, etc.) can be used to generate inputs for `Part 2 – Organelle Quantification` below.
-
+## 📂 File format
 > ### <ins>Input image format</ins>:
 >
-> We have tested the following file formats as input in both the Napari plugin and the Jupyter notebooks:
+> We have used the following file formats as input in both the Napari plugin and the Jupyter notebooks during development and testing of `infer-subc`:
 > 
 > - Single or multi-channel ".tiff"/".tif" or ".czi" files
 > - 3D (Z-stack) images
 > - Ideal dimension order: CZYX
+
+> ### <ins>Segmentation output format</ins>:
 >
+> `infer-subc` Part 1 - Segmentation Workflows will output segmentation files as follows:
+> - Single channel ".tiff" files 
+>   - Subcellular regions will initially be exported from batch processing as multi-channel files
+>   - See the [`quality_check_segmentations`](/notebooks/part_1_segmentation_workflows/quality_check_segmentations.ipynb) for information on how to separate these into single channels
+> - The original file name will be included as the stem of the file name and a unique suffix will be appended to the end of each segmentation to signify the organelle or subcellular structure that was segmented
+> - Organelle segmentation (except the ER which is *always* considered one object) will contain instance segmentations where each identified object if given a unique ID number
+> - Subcellular regions ('cell', 'nucleus', 'soma', 'neurites') and the ER will only include a single labeled object per output image. In the case of the ER or neurites, where there can commonly be several disconnected component, each identified component is given the same ID number and quantified as a single object.
+>
+> These segmentations will act the part of the input for quantification in `infer-subc` Part 2 - Organelle Quantification. If using an alternative segmentation approach, the above listed format should be followed.
+
+> ### <ins>Quantification input format</ins>:
+>
+> `infer-subc` Part 2 - Organelle Quantification will use the following files as part of the input:
+> - Multi-channel intensity images from which the segmentations were derived
+> - Single-channel ".tiff" organelle and subcellular region (if applicable) segmentation files
+>
+> Additional information related to the desired quantification methods is also required. See the [Part 2 notebooks](/notebooks/part_2_quantification/) for more information on specifics.
+
+> ### <ins>Quantification output format</ins>:
+>
+> `infer-subc` Part 2 - Organelle Quantification includes two rounds of quantitafication:
+> 1. Quatitative feature extraction - intensity and segmentation images are used as the input and numerical data is output. This should be run *per experimental replicate*
+> 2. Per subcellular region or image summarization - quantitative data is input and summarized per subregion (if a mask if used). Multiple experimental replicates of data can be combined in this step to summarize all data that will be statistically compared.
+>
+> The output files in both cases have the following format:
+> - One ".csv" file per quantification method (e.g., morphology, distribution, etc.)
+> - Each file will begin with the "dataset name", a unique identifier for each experimental replicate 
+
 > ### <ins>Required file structure</ins>:
-> To ensure proper quantification in Part 2 - Organelle Quantification, the following file structure should be following:
+> We recommend use of the following file structure:
 > 1. Data for each experimental replicate should be saved in a separate folder.
-> 2. All segmentation data for a biological replicate should be saved in one folder. This folder would ideal be within the same parent folder as the raw data it was derived from. *We also **highly recomment** saving the workflow settings (or batch_process_segmentation Jupyter notebook) within this folder to ensure the segmentation methods are easily identifiable in the future.*
-> 3. A separate folder should be included for quantification outputs. The quantification and summary statistics can be within the same folder. This folder would ideal be within the same parent folder as the raw data and segmentation files it was derived from. *We also **highly recomment** saving the quantification notebooks used to generate the quantitative data within this folder to ensure the segmentation methods are easily identifiable in the future.*
+> 2. All segmentation data for a biological replicate should be saved in one folder. This folder would ideal be within the same parent folder as the raw data it was derived from. *We also **highly recomment** saving the workflow settings (or batch_process_segmentation Jupyter notebook) within this folder to ensure the segmentation methods are easily identifiable in the future.* 
+>    - If modifications are necessary that result in additional versions of the segmentation outputs, include the updated segmentation in a separate folder (more details on this are included in the [`quality_check_segmentations`](/notebooks/part_1_segmentation_workflows/quality_check_segmentations.ipynb) notebook).
+> 3. A separate folder should be included for quantification outputs. The quantification and summary statistics can be within the same folder, if desired. This folder would ideal be within the same parent folder as the raw data and segmentation files it was derived from. *We also **highly recommend** saving the quantification notebooks used to generate the quantitative data within this folder to ensure the segmentation methods are easily identifiable in the future.* 
+>    - If edits were made to segmentations or the quantification settings that result in new quantitative output, include the new analysis as a separate folder.
+>
 > 
 > **An example file structure:**
 > - 📂 experiment_1
@@ -110,6 +118,31 @@ If desired, alternative segmentation approaches (e.g., CellProfiler, Imaris, Ima
 >     - 📂 raw_data
 >     - 📂 segmentation_data
 >     - 📂 quantification_output
+
+> ### <ins>Output format</ins>:
+> 
+
+## 🖍️ Part 1 - Segmentation Workflows 
+
+> ***NOTE**: Proceed to the Organelle Quantification section below if you have already created instance segmentations of organelles and/or subcellular regions you plan to include in quantification.*
+
+The starting point for the `infer-subc` analysis pipeline is to perform instance segmentation on single or multichannel confocal microscopy images, where each channel labels a different intracellular organelle (or structure). In the infer-subc segmentation workflows included in Part 1, each organelle will be segmented from a *single* intensity channel from the input microscopy image. Subcellular regions of interest, including the cell mask, nucleus, soma, and neurites, can be segemented to include region-specific quantitative analysis in Part 2 (see more below).
+
+> ### Compatible Organelles and Subcellular Regions 🔓🗝️
+> 
+> - `Lysosomes`
+> - `Mitochondria`
+> - `Golgi`
+> - `Peroxisomes`
+> - `Endoplasmic reticulum` 
+> - `Lipid droplets`
+> - `Cell`/`Nucleus`
+> - `Soma`/`Neurites`
+>
+>  *Outside segmentation methods can also be used to incorporate additional organelles or subcellular regions, if desired.*
+
+We recommend our `infer-subc` implementation for Napari called [`organelle-segmenter-plugin`](https://github.com/SCohenLab/organelle-segmenter-plugin) for image segmentation. This allows users to optimize segmentation settings for each organelle systematically, then batch process the segmentation of all organelles of interest across multiple cells using the optimized settings. We have included a set of [Jupyter Notebooks](/notebooks/part_1_segmentation_workflows/) that include the same segmentation workflows. These notebooks are a great source of information on each workflow step, and they can act as a starting point for those who wish to modify workflow to better suite their images. 
+
 
 ### <ins>Segmentation Option A:</ins> [Napari Plugin](https://github.com/ndcn/organelle-segmenter-plugin) 🔌
 
