@@ -1,26 +1,19 @@
 # **Sample Data Folder** 📂
 
-We've included four sample images to use as input for **`infer-subc`**. The first two (neuron_1 and astrocyte) images and outputs are from experiments featured in this preprint [Neurons and astrocytes have distinct organelle signatures and responses to stress](https://www.biorxiv.org/content/10.1101/2024.10.30.621066v1). In this paper infer-subc was used to analyze differences between neurons and astrocytes at baseline and in response to stress.
+We've included four sample images to use as input for **`infer-subc`**. The first two (neuron_1 and astrocyte) images and outputs are from experiments featured in this preprint [Neurons and astrocytes have distinct organelle signatures and responses to stress](https://www.biorxiv.org/content/10.1101/2024.10.30.621066v1). In this paper, infer-subc v1.0.0 was used to analyze differences between neurons and astrocytes at baseline and in response to stress.
 
-To access and use the sample data in the notebooks or Napari,
-follow the instructions below:
-
-**1.** Clone the **infer-subc** repository
-
-**2.** Follow the steps in [notebook 1.0_image_setup](/notebooks/part_1_segmentation_workflows/1.0_image_setup.ipynb) to download and correctly store the raw images in the [**sample_data**](../sample_data/) folder.
-
-**3.** Use workflow 1.1 to segment the masks for each example image. This can be done in the notebooks or Napari.
-
-- For the example **neuron (1)** use workflow [1.1a](/notebooks/part_1_segmentation_workflows/1.1a_infer_masks_from-composite_single_cell.ipynb)
-- For the example **astrocyte** use workflow [1.1b](/notebooks/part_1_segmentation_workflows/1.1b_infer_masks_from-composite_multiple-cells.ipynb)
-- For the example **neuron (2)** use workflow [1.1c](/notebooks/part_1_segmentation_workflows/1.1c_infer_masks_from-composite_neuron_with_pm.ipynb)
-- For the example **iPSC** use workflow [1.1d](/notebooks/part_1_segmentation_workflows/1.1d_infer_masks_from-composite_iPSC.ipynb)
-
-**4.** Then run workflows 1.2-1.7 twice (once per cell type).
-
-- In the notebooks, you can switch between cell types by setting the `sample_data_type` variable equal to **"neuron_1"**, **"astrocyte"**, **"neuron_2"** or **"iPSC"**.
-
-**5.** Carry out quantification of the sample neuron and astrocyte in part 2 using the notebooks.
+> **Accessing sample data:**
+>
+> 1. Clone the **infer-subc** repository onto your local computer.
+> 2. <mark> Follow the steps in [notebook 1.0_image_setup](/notebooks/part_1_segmentation_workflows/1.0_image_setup.ipynb) to download and correctly store the raw images in the [**sample_data**](../sample_data/) folder. <mark>
+> 3. Use workflow 1.1 to segment the masks for each example image. This can be done in the notebooks or Napari.
+>
+>       - For the example **neuron (1)** use workflow [1.1a](/notebooks/part_1_segmentation_workflows/1.1a_infer_masks_from-composite_single_cell.ipynb)
+>       - For the example **astrocyte** use workflow [1.1b](/notebooks/part_1_segmentation_workflows/1.1b_infer_masks_from-composite_multiple-cells.ipynb)
+>       - For the example **neuron (2)** use workflow [1.1c](/notebooks/part_1_segmentation_workflows/1.1c_infer_masks_from-composite_neuron_with_pm.ipynb)
+>       - For the example **iPSC** use workflow [1.1d](/notebooks/part_1_segmentation_workflows/1.1d_infer_masks_from-composite_iPSC.ipynb)
+> 4. Then run workflows 1.2-1.7 twice (once per cell type you are interested in). You can switch between cell types by setting the `sample_data_type` variable equal to **"neuron_1"**, **"astrocyte"**, **"neuron_2"**, or **"iPSC"**.
+> 5. Carry out quantification of the sample neuron and astrocyte in part 2 using the notebooks.
 
 ##### You may also use the sample data via the [organelle-segmenter-plugin](https://github.com/ndcn/organelle-segmenter-plugin) in Napari. The raw images and workflow settings are all present within the contents of the sample data folder. For instructions on how to use the organelle-segmenter-plugin, look under the Option A section in the **[ReadMe](/README.md)**.
 
