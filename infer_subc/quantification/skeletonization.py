@@ -1,4 +1,4 @@
-from typing import List
+from typing import Union, Tuple, List
 
 from skan import csr
 from skan.csr import (skeleton_to_csgraph,
@@ -7,10 +7,95 @@ from skan.csr import (skeleton_to_csgraph,
                         sparse,
                         _compute_distances)
 
+from skimage.morphology import skeletonize
+from skimage.measure import label
+from scipy.sparse import csgraph
+from scipy.spatial import cKDTree
+from scipy import ndimage
+from collections import defaultdict
+
 import numpy as np
 import numpy.typing as npt
+import pandas as pd
 
+from infer_subc.core.img import apply_mask
 
+def create_skel(segmentation: np.ndarray) -> np.ndarray:
+    ''' A function that generates punctate objects for the round organelle objects that lack a skeleton.
+        This function is based off of skimage's skeletonize function. More information about said function
+        can be found here https://scikit-image.org/docs/0.25.x/api/skimage.morphology.html#skimage.morphology.skeletonize
+
+   Parameters
+    ------------
+    segmentation:
+        the segmentated organelle image as a numpy array. It is assumed that the segmentation has already
+          been masked and only contains the organelle of interest.
+
+    Returns
+    -------------
+    A properly skeletonized np.ndarray with float labels due to skan requirements. Labels correspond to the original
+    infer-subc segmentation labels.
+    '''
+
+    # where the organelles exist
+    omask = segmentation > 0
+
+    # This is the raw organelle skeleton, some fixing and relabeling has to be done before we can use the skeleton for computation
+    skeleton = skeletonize(omask).astype(bool)
+
+    # relabel segmentation (makes sure that all disconnected components have a skeleton, even in the case of the ER)
+    comp_seg = label(np.copy(segmentation))
+
+    # calculate the shift needed to label via orginal infer-subc labeling
+    max_val = np.max(segmentation)
+    # in the case where there is more than one orgnalle object
+    if max_val > 1:
+        digits = np.floor(np.log10(max_val)) + 1
+        shift = 10**digits
+
+    new_seg = np.zeros_like(segmentation, dtype=np.uint64)
+
+    # combine component label and infer_subc label
+    if max_val > 1:
+        new_seg[omask] = (comp_seg[omask] * shift) + segmentation[omask]
+    else:
+        new_seg[omask] = comp_seg[omask]
+
+    # All of disconnected object labels
+    all_lab = set(pd.unique(new_seg.ravel()))
+
+    # Applying the segmentation labels to the skeleton
+    lab_skel = skeleton * new_seg
+
+    # Labels present in the skeleton
+    skel_lab = set(pd.unique(lab_skel.ravel()))
+
+    # Checker to see if there are any objects without a skeleton
+    if all_lab == skel_lab:
+
+        # reapply original labels
+        return ((lab_skel > 0) * segmentation).astype(float)
+    else:
+        # gets a list of the missing labels
+        mis_lab = all_lab - skel_lab
+
+        for lab in mis_lab:
+            # list of coordinates of the object's voxels
+            coord_list = np.nonzero(new_seg == lab)
+
+            # The coordinate closest to the middle of the object (due to rounding)
+            av_coord = np.round(np.mean(coord_list,axis = 1)).astype(int)
+
+            #checker and result
+            if new_seg[tuple(av_coord)] == lab:
+                lab_skel[tuple(av_coord)] = lab
+            # if av coord is outside the label pick the coordinate listed in the middle
+            else:
+                lab_skel[tuple(np.array(coord_list)[:,len(coord_list)//2])] = lab
+        
+        return ((lab_skel > 0) * segmentation).astype(float)
+    
+    
 def _walk_path_lab(
         jgraph, node, neighbor, visited, degrees, indices, path_data, startj
         ):
@@ -216,12 +301,12 @@ class Skeleton:
     paths : scipy.sparse.csr_matrix, shape (P, N + 1)
         A csr_matrix where element [i, j] is on if node j is in path i. This
         includes path endpoints. The number of nonzero elements is N - J + Sd.
-    n_paths : int
-        The number of paths, P. This is redundant information given `n_paths`,
+    n_branches : int
+        The number of paths (branches in infer-subc), P. This is redundant information given `n_branches`,
         but it is used often enough that it is worth keeping around.
     distances : array of float, shape (P,)
-        The distance of each path. Note: not initialized until `path_lengths()`
-        is called on the skeleton; use path_lengths() instead
+        The distance of each path. Note: not initialized until `branch_lengths()`
+        is called on the skeleton; use branch_lengths() instead
     skeleton_image : array or None
         The input skeleton image. Only present if `keep_images` is True. Set to
         False to preserve memory.
@@ -253,8 +338,8 @@ class Skeleton:
         self.nbgraph = csr_to_nbgraph(graph, self.pixel_values)
         self.coordinates = np.transpose(coords)
         self.paths = _build_skeleton_path_graph_lab(self.nbgraph)
-        self.n_paths = self.paths.shape[0]
-        self.distances = np.empty(self.n_paths, dtype=float)
+        self.n_branches = self.paths.shape[0]
+        self.distances = np.empty(self.n_branches, dtype=float)
         self._distances_initialized = False
         self.skeleton_image = None
         self.skeleton_shape = skeleton_image.shape
@@ -273,6 +358,7 @@ class Skeleton:
                 np.asarray(spacing) if not np.isscalar(spacing) else
                 np.full(skeleton_image.ndim, spacing)
                 )
+        
         if keep_images:
             self.keep_images = keep_images
             self.skeleton_image = skeleton_image
@@ -338,7 +424,7 @@ class Skeleton:
         start, stop = self.paths.indptr[index:index + 2]
         return self.paths.indices[start:stop], self.paths.data[start:stop]
 
-    def path_lengths(self):
+    def branch_lengths(self):
         """Return the length of each path on the skeleton.
 
         Returns
@@ -362,7 +448,7 @@ class Skeleton:
         paths : list of array of int
             The list containing all the paths in the skeleton.
         """
-        return [list(self.path(i)) for i in range(self.n_paths)]
+        return [list(self.path(i)) for i in range(self.n_branches)]
 
     def path_label_image(self):
         """Image like self.skeleton_image with path_ids as values.
@@ -374,7 +460,7 @@ class Skeleton:
             has the value of its branch id + 1.
         """
         image_out = np.zeros(self.skeleton_shape, dtype=int)
-        for i in range(self.n_paths):
+        for i in range(self.n_branches):
             coords_to_wipe = self.path_coordinates(i)
             coords_idxs = tuple(np.round(coords_to_wipe).astype(int).T)
             image_out[coords_idxs] = i + 1
@@ -406,7 +492,7 @@ class Skeleton:
         means = self.path_means()
         return np.sqrt(np.clip(sumsq/lengths - means*means, 0, None))
 
-    def prune_paths(self, indices: npt.ArrayLike) -> 'eSkeleton':
+    def prune_paths(self, indices: npt.ArrayLike) -> 'Skeleton':
         """Prune nodes from the skeleton.
 
         Parameters
@@ -421,10 +507,10 @@ class Skeleton:
         """
         # warning: slow
         image_cp = np.copy(self.skeleton_image)
-        if not np.all(np.array(indices) < self.n_paths):
+        if not np.all(np.array(indices) < self.n_branches):
             raise ValueError(
                     f'The path index {np.max(indices)} does not exist in this '
-                    f'skeleton. (The highest path index is {self.n_paths}.)\n'
+                    f'skeleton. (The highest path index is {self.n_branches}.)\n'
                     'If you obtained the index from a summary table, you '
                     'probably need to resummarize the skeleton.'
                     )
@@ -437,7 +523,7 @@ class Skeleton:
             image_cp[coords_idxs] = 0
         # optional cleanup:
         new_skeleton = morphology.skeletonize(image_cp.astype(bool)) * image_cp
-        return eSkeleton(
+        return Skeleton(
                 new_skeleton,
                 spacing=self.spacing,
                 source_image=self.source_image,
@@ -448,10 +534,175 @@ class Skeleton:
         """Array representation of the skeleton path labels."""
         return self.path_label_image()
 
+def get_branch_ids(skel: Skeleton) -> np.ndarray:
+    """
+    A function that returns a np.ndarray (int) of branch IDs for each branch in the skeleton object.
+
+    Parameters
+    ------------
+    skel:
+        the Skeleton() graph that contains all information about the skeleton
+
+    Returns
+    -------------
+    Array of branch IDs
+    """
+    # checker to see if all path points and nodes come from the same object (per branch)
+    if not np.any(skel.path_stdev()):
+        return skel.path_means().astype(int)
+    else:
+        raise ValueError("at least one branch spans across multiple different organelle objects")
+
+def get_skel_branch(skel: Skeleton) -> pd.DataFrame:
+    """
+    A function that produces branch level quantification for Skeleton() graph objects in table format. 
+    This code is based off of skan's csr.summarize() function which can be found here https://skeleton-analysis.org/stable/_modules/skan/csr.html#summarize
+
+    Parameters
+    ------------
+    skel:
+        the Skeleton() graph from which quantification will be based on
+
+
+    Branch table measurements:
+    ------------------------
+    'skel-obj-id',
+    'point-id-src',
+    'point-id-dst',
+    'deg_src',
+    'deg_dst',
+    'branch-length',
+    'branch-type',
+    'image-coord-src-0',
+    'image-coord-src-1',
+    'image-coord-src-2',
+    'image-coord-dst-0',
+    'image-coord-dst-1',
+    'image-coord-dst-2',
+    'coord-src-0',
+    'coord-src-1',
+    'coord-src-2',
+    'coord-dst-0',
+    'coord-dst-1',
+    'coord-dst-2',
+    'euclidean-distance',
+    'str-prop'
+
+    Returns
+    -------------
+    pandas dataframe of containing measurements (columns) for each branch (rows) in the skeleton 
+    """
+    summary = {}
+    summary['skel-obj-id'] = get_branch_ids(skel)
+    ndim = skel.coordinates.shape[1]
+    
+    endpoints_src = skel.paths.indices[skel.paths.indptr[:-1]]
+    endpoints_dst = skel.paths.indices[skel.paths.indptr[1:] - 1]
+
+    summary['point-id-src'] = endpoints_src
+    summary['point-id-dst'] = endpoints_dst
+    deg_src = skel.correct_degrees[endpoints_src]
+    deg_dst = skel.correct_degrees[endpoints_dst]
+    summary['deg_src'] = deg_src
+    summary['deg_dst'] = deg_dst
+    
+    kind = np.full(deg_src.shape, 2)  # default: junction-to-junction
+    kind[(deg_src == 1) | (deg_dst == 1)] = 1  # tip-junction
+    kind[(deg_src == 1) & (deg_dst == 1)] = 0  # tip-tip
+    kind[endpoints_src == endpoints_dst] = 3  # cycle
+    summary['branch-type'] = kind
+    for i in range(ndim):  # keep loops separate for best insertion order
+        summary[f'image-coord-src-{i}'] = skel.coordinates[endpoints_src, i]
+    for i in range(ndim):
+        summary[f'image-coord-dst-{i}'] = skel.coordinates[endpoints_dst, i]
+    coords_real_src = skel.coordinates[endpoints_src] * skel.spacing
+    for i in range(ndim):
+        summary[f'coord-src-{i}'] = coords_real_src[:, i]
+    coords_real_dst = skel.coordinates[endpoints_dst] * skel.spacing
+    for i in range(ndim):
+        summary[f'coord-dst-{i}'] = coords_real_dst[:, i]
+        
+    summary['branch-length'] = skel.branch_lengths()
+    summary['euclidean-distance'] = (
+            np.sqrt((coords_real_dst - coords_real_src)**2
+                    @ np.ones(ndim))
+            )
+
+    summary['str-prop'] = summary['euclidean-distance'] / summary['branch-length']
+    return pd.DataFrame(summary).rename_axis('branch_id')
+
+def get_skel_node(skel: Skeleton) -> pd.DataFrame:
+    """
+    A function that produces node level quantification for Skeleton() graph objects in table format. 
+
+    Parameters
+    ------------
+    skel:
+        the Skeleton() graph from which quantification will be based on
+
+
+    Branch table measurements:
+    ------------------------
+    'point-id',
+    'node-type',
+    'connectivity',
+    'image-coord-0',
+    'image-coord-1',
+    'image-coord-2',
+    'coord-0',
+    'coord-1',
+    'coord-2',
+    'branch-ids',
+    'obj-id'
+
+    Returns
+    -------------
+    pandas dataframe of containing measurements (columns) for each node (rows) in the skeleton 
+    """
+    # gets a list of all non path points (nodes)
+    node_list = np.nonzero(skel.correct_degrees != 2)[0]
+
+    # A dictionary that reveals the branches a node is referenced in
+    node2branches = dict((point_id,[]) for point_id in node_list)
+
+    # identify the branches each node is involved in
+    for branch in range(skel.n_branches):
+        for point in skel.path(branch):
+            if skel.correct_degrees[point] != 2:
+                node2branches[point] += [branch]
+
+    node_lab = []
+    # in the case of the ER absolute punctates are not their own skeleton object
+    base_n = ["Abs Punctate",
+            "Endpoint",
+            "Path Point"]
+
+    node_lab = base_n
+    if np.max(skel.correct_degrees) > 2:
+        for i in np.arange(3, np.max(skel.correct_degrees) + 1):
+            node_lab += [f"{i}-way"]
+        
+    node_table_data = {
+        "point-id": node_list,
+        "node-type": np.array(node_lab)[skel.correct_degrees[node_list]],
+        "connectivity": skel.correct_degrees[node_list],
+        "image-coord-0": skel.coordinates[node_list,0],
+        "image-coord-1": skel.coordinates[node_list,1],
+        "image-coord-2": skel.coordinates[node_list,2],
+        "coord-0": skel.coordinates[node_list,0] * skel.spacing[0],
+        "coord-1": skel.coordinates[node_list,1] * skel.spacing[1],
+        "coord-2": skel.coordinates[node_list,2] * skel.spacing[2],
+        "branch-ids": [node2branches[point] for point in node_list],
+        'obj-id': [int(skel.pixel_values[point]) for point in node_list]
+    }
+
+    return pd.DataFrame(node_table_data)
+
 def skel_euclid_dist(skel: Skeleton) -> np.ndarray:
     """
     A function that returns the euclidean distances for each branch in the skeleton object
     This code is borrowed from skan's csr.summarize() function which can be found here https://skeleton-analysis.org/stable/_modules/skan/csr.html#summarize
+    This is used in the get_skel_obj function.
 
     Parameters
     ------------
@@ -477,7 +728,8 @@ def branch_type(skel: Skeleton, branch_list: List):
     """
     A function that returns the branch type given a list of branch ids
     This code is borrowed from skan's csr.summarize() function which can be found here https://skeleton-analysis.org/stable/_modules/skan/csr.html#summarize
-
+    This is used in the get_skel_obj function.
+    
     Parameters
     ------------
     skel:
@@ -499,3 +751,348 @@ def branch_type(skel: Skeleton, branch_list: List):
     kind[(deg_src == 1) & (deg_dst == 1)] = 0  # tip-tip
     kind[endpoints_src == endpoints_dst] = 3  # cycle
     return kind[branch_list]
+
+def skel_width(skel: Skeleton, segmentation: np.ndarray, obj_list: np.ndarray) -> list:
+    """
+    A function that takes in a list of skeleton object ids and calculates the width of each skeleton object.
+    The width is calculated by finding the distance of the nearest boundary point (for each point in the skeleton object)
+    and taking the average of those distances (multiplied by 2 to get the full width). This function uses similar logic to 
+    the mitograph method for calculating width, which can be found here https://github.com/vianamp/MitoGraph/blob/master/MitoGraph.cxx#L1154
+
+    Parameters
+    ----------
+    skel: Skeleton
+        the Skeleton() graph from which quantification will be based on
+    segmentation: np.ndarray
+        the binary segmentation image
+    obj_list: np.ndarray
+        a list of object ids for which to calculate skeleton widths
+        Ideally this list should be ordered in the same fashion as the rows in the skeleton object table
+
+    Returns
+    -------
+    skel_width
+        a dictionary mapping each object id to its calculated skeleton width
+    """
+    ##############################################
+    # CREATE HOLLOWED OUT (SURFACE) SEGMENTATION
+    ##############################################
+
+    # erode the organelle segmentation
+    eroded = ndimage.binary_erosion(segmentation)
+    # perform logical xor to get the hollowed out (surface) organelle segmentation and store in eroded to save memory
+    np.logical_xor(segmentation, eroded, out=eroded)
+    # apply original labels to the hollowed out segmentation
+    hollow_labels = (eroded * segmentation)
+    # scale the skeleton coordinates
+    coords_scaled = skel.coordinates * skel.spacing
+    
+    ##########################################################
+    # COLLECT INDICES AND LABELS OF HOLLOWED OUT SEGMENTATION
+    ##########################################################
+    
+    # collect the coordinates of the hollowed out segmentation points
+    hp_indices = np.argwhere(hollow_labels > 0)
+    # collect the labels of the hollowed out segmentation points (.T transposes the array in correct formatting for indexing)
+    hp_labels = hollow_labels[tuple((hp_indices).T)]
+
+    # dictionary that contains the coordinates of the hollowed out segmentation points for each label (object)
+    hp_by_label = defaultdict(list)
+    for idx, label in zip(hp_indices, hp_labels):
+        hp_by_label[label].append(idx)
+
+    # dictionary that contains the coordinates of the skeleton points for each label (object)
+    sp_by_label = defaultdict(list)
+    for idx, label in enumerate(skel
+    .pixel_values):
+        sp_by_label[label].append(coords_scaled[idx])
+
+    ##########################################################
+    # CALCULATE SKELETAL WIDTHS FOR EACH SKELETON OBJECT
+    ##########################################################
+
+    # intialize skeletal width list (will be ordered in the same fashion as the obj_list)
+    skel_width = []
+
+    for obj in obj_list:
+        # collect the coordinates of the hollowed out (surface)segmentation points that belong to the object (scaled)
+        hp = np.array(hp_by_label.get(obj, [])) * skel.spacing
+        # collect the coordinates of the skeleton points that belong to the object (scaled)
+        sp = np.array(sp_by_label.get(obj, []))
+        
+        if hp.size > 0 and sp.size > 0:
+            # create a KD-tree from the hollowed out segmentation points (KD-tree is a data structure that allows for rapid nearest neighbor searches)
+            tree = cKDTree(hp)
+            # calculate the distances from each skeleton point (this functions allows all of the skeleton points to be queried at once)
+            distances, _ = tree.query(sp, k=1, p=2)
+            # average the distances and multiply by 2 to get the average width of the skeleton
+            skel_width.append(2 * np.mean(distances))
+        else:
+            skel_width.append(0)
+    
+    return skel_width
+
+
+def get_skel_obj(skel: Skeleton, segmentation: np.ndarray) -> pd.DataFrame:
+    """
+    A function that produces skeleton object level quantification for Skeleton() graph objects in table format. 
+
+    Parameters
+    ------------
+    skel:
+        the Skeleton() graph from which quantification will be based on
+    segmentation:
+        the original segmentation image with int labels that correspond to the skeleton object labels
+
+
+    Branch table measurements:
+    ------------------------
+    'obj-id',
+    'skel-type',
+    'skel-type-num',
+    'brh-count',
+    'branch-ids',
+    'min-brh-length',
+    'max-brh-length',
+    'ave-brh-length',
+    'sd-brh-length',
+    'med-brh-length',
+    'total-length',
+    'brh-type-0-tot',
+    'brh-type-0-id',
+    'brh-type-1-tot',
+    'brh-type-1-ids',
+    'brh-type-2-tot',
+    'brh-type-2-ids',
+    'brh-type-3-tot',
+    'brh-type-3-ids',
+    'comp-count',
+    'node-count',
+    'ep-count',
+    'jn-count',
+    'ave-jn-deg',
+    'max-deg',
+    'point-ids',
+    'mean-brh-str'
+    'med-brh-str'
+    'sd-brh-str'
+    'width'
+
+
+    Returns
+    -------------
+    pandas dataframe of containing measurements (columns) for each skeleton object (rows) in the skeleton 
+    """
+
+    #### DICTIONARIES AND ARRAYS ####
+    
+    # ordered list of all skeleton object ids (including punctates)
+    # numpy sorts the unique values automatically
+    obj_list = np.unique(skel.pixel_values).astype(int)
+
+    brh_tlist = dict()
+    for i in range(4):
+        brh_tlist[i] = dict((obj,[]) for obj in obj_list)
+
+    # lengths of the branches in the skeleton object
+    obj_bl = dict((obj,[]) for obj in obj_list)
+
+    # branch ids for the branches within a skeleton object
+    obj2branch = dict((obj,[]) for obj in obj_list)
+
+    # straightness ratios between distance and branch length for each branch in the skeleton object
+    obj_str = dict((obj,[]) for obj in obj_list)
+
+    # returns array of euclidean distances
+    euclid_dist_arr = skel_euclid_dist(skel)
+
+    # returns array of branch types
+    brh_type = branch_type(skel, range(skel.n_branches))
+
+    #### BRANCH MEASUREMENTS ####
+
+    for br in range(skel.n_branches):
+        obj = skel.path_with_data(br)[1][0].astype(int)
+
+        #### OBJECT BRANCHES ####
+        obj2branch[obj] += [br]
+        
+        #### BRANCH TYPE LIST ####
+        brh_tlist[brh_type[br]][obj] += [br]
+
+        #### BRANCH LENGTH CALCULATIONS ####
+        obj_bl[obj] += [skel.branch_lengths()[br]]
+        obj_str[obj] += [euclid_dist_arr[br] / skel.branch_lengths()[br]]
+    
+    #### SKELETON TYPE ####
+
+    # all referenced dictionaries are in the same order as the obj_list
+
+    # creating a sum branch length array to avoid recalling the dictionary over and over
+    sum_bl = [np.sum(bl) for bl in obj_bl.values()]
+
+    # creating a branch count for the same reason
+    count_b = [len(bl) for bl in obj_bl.values()]
+
+    # creating a cycle count for the same reason
+    count_cyc = [len(ids) for ids in brh_tlist[3].values()]
+
+    # the highest value of length where a type 0 branch will still be considered punctate
+    scale = skel.spacing
+    p_threshold = min(scale) * 2
+
+    obj_type_n = np.full(obj_list.shape, 1) # Rod as default
+    obj_type_n[np.array(sum_bl) <= p_threshold] = 0 # If total length below punctate threshold, then punctate
+    obj_type_n[np.array(count_cyc) == 1] = 2 # If object has one cycle, then isolated cycle
+    obj_type_n[np.array(count_b) > 1] = 3 # If object has multiple branches, then network
+
+    ### this line is not needed as none of the other conditions would be met in the case of an absolute punctate
+    # obj_class_n[np.array(count_b) < 1] = 0 # If object has no branches, then punctate (absolute punctates)
+
+    obj_type = np.array(('Punctate','Rod','Isolated Cycle','Network'))[obj_type_n]
+            
+    #### CONNECTED COMPONENTS ####
+    # using connected component id, ordered by obj_list
+
+    comp_arr = []
+    for obj in obj_list:
+        comp_ids = csgraph.connected_components(skel.graph, directed=False)[1][skel.pixel_values == obj]
+        comp_arr += [len(pd.unique(comp_ids))]
+
+    #### SKELETAL WIDTHS ####
+    widths = skel_width(skel, segmentation, obj_list)
+    
+    #### GENERATE SKELETON OBJECT TABLE ####
+
+    skel_table_data = {
+            "obj-id": obj_list,
+            "skel-type": obj_type,
+            "skel-type-num": obj_type_n,
+            "brh-count": count_b,
+            "branch-ids": [obj2branch[obj] for obj in obj_list],
+            "min-brh-length": [np.min(obj_bl[obj]) if len(obj_bl[obj]) != 0 else np.nan for obj in obj_list],
+            "max-brh-length": [np.max(obj_bl[obj]) if len(obj_bl[obj]) != 0 else np.nan for obj in obj_list],
+            "ave-brh-length": [np.mean(obj_bl[obj])for obj in obj_list],
+            "sd-brh-length": [np.std(obj_bl[obj]) for obj in obj_list],
+            "med-brh-length": [np.median(obj_bl[obj])for obj in obj_list],
+            "total-length": sum_bl,
+            "brh-type-0-tot": [len(brh_tlist[0][obj]) for obj in obj_list],
+            "brh-type-0-id": [brh_tlist[0][obj] for obj in obj_list],
+            "brh-type-1-tot": [len(brh_tlist[1][obj]) for obj in obj_list],
+            "brh-type-1-ids": [brh_tlist[1][obj] for obj in obj_list],
+            "brh-type-2-tot": [len(brh_tlist[2][obj]) for obj in obj_list],
+            "brh-type-2-ids": [brh_tlist[2][obj] for obj in obj_list],
+            "brh-type-3-tot": count_cyc,
+            "brh-type-3-ids": [brh_tlist[3][obj] for obj in obj_list],
+            "comp-count": comp_arr,
+            "node-count": [np.count_nonzero((skel.correct_degrees[skel.pixel_values == i]) != 2) for i in obj_list],
+            'ep-count': [np.count_nonzero((skel.correct_degrees[skel.pixel_values == i]) == 1) for i in obj_list],
+            'jn-count' : [np.count_nonzero((skel.correct_degrees[skel.pixel_values == i]) > 2) for i in obj_list],
+            'ave-jn-deg' : [np.mean(skel.correct_degrees[(skel.pixel_values == i) & (skel.correct_degrees > 2)]) for i in obj_list],
+            'max-deg' : [np.max(skel.correct_degrees[skel.pixel_values == i]) for i in obj_list],
+            "point-ids": [np.arange(skel.graph.shape[0])[skel.pixel_values == i] for i in obj_list],
+            "mean-brh-str": [np.mean(obj_str[obj]) for obj in obj_list],
+            "med-brh-str": [np.median(obj_str[obj]) for obj in obj_list],
+            "sd-brh-str": [np.std(obj_str[obj]) for obj in obj_list],
+            "width": widths}
+    
+    return pd.DataFrame(skel_table_data)
+
+def get_skeleton_metrics(org_skel_arr: np.ndarray,
+                          seg_name: str,
+                          segmentation: np.ndarray,
+                          mask_name: str,
+                          mask: np.ndarray,
+                     scale: Union[Tuple, None] = None,
+                     output_all_tables: bool = False):
+    
+    '''
+    A wrapper function that returns quantification describing the skeletonized np.ndarray segmentation.
+    The default output is one pandas table where each row corresponds to one organelle object (skeleton object table).
+    The branch and node table can also be generated as optional output
+
+    Parameters
+    ------------
+    org_skel_arr:
+        the labeled organelle skeleton np.ndarray (output of create_skel function)
+    seg_name:
+        the name of the organelle segmentation (string)
+    segmentation:
+        the original segmentation image with int labels that correspond to the skeleton object labels
+    mask_name : str, optional
+        The name of the cell mask, by default "cell".
+        If None, "whole_image" will be used.
+    mask : np.ndarray
+        A binary image array representing the cell (or other) mask. 
+        If None is provided, a whole image mask will be used.
+    scale:
+        the real world dimensions of the image (Tuple, ndarray or list of 3 floats)
+    output_all_tables:
+        False - return skeleton object table
+        True - return branch, node and skeleton object table
+
+    Returns
+    -------------
+
+    if output_all_table == True:
+        pandas dataframe of containing measurements (columns) for each skeleton object (rows) in the skeleton
+    if output_all_table == False:
+        3 pandas dataframes of containing measurements for each branch, node and skeleton object respectively
+
+    '''
+
+    ##############################################################################
+    # GENERATE SKELETON GRAPH
+    ##############################################################################
+    
+    # mask skeleton
+    if mask_name is None and mask is not None:
+        raise ValueError("The mask_name parameter must be provided if mask is not None")
+    elif mask is None and mask_name is None:
+        mask_name = "whole_image"
+    else:
+        org_skel_arr = apply_mask(org_skel_arr, mask)
+
+    # create skeleton
+    org_skel = Skeleton(
+        skeleton_image = org_skel_arr,
+        spacing = scale,
+        value_is_height = False)
+
+
+    ##############################################################################
+    # GENERATE AND RETURN TABLES
+    ##############################################################################
+    
+    skel_table = get_skel_obj(org_skel, segmentation)
+    skel_table.insert(0, "object", seg_name)
+    skel_table.insert(0, "scale", str(scale))
+    skel_table.insert(0, column="mask_name", value=mask_name)
+
+    if output_all_tables:
+        branch_table = get_skel_branch(org_skel)
+        node_table = get_skel_node(org_skel)
+        return branch_table, node_table, skel_table
+    else:
+        return skel_table
+    
+def fission_score(skel: Skeleton) -> float:
+
+    """
+    This measurement is derived from Spurlock, Xie, Song, Ricketts et al. paper "Mitochondrial fusion and cristae 
+    reorganization facilitate acquisition of cardiomyocyte identity during reprogramming of murine fibroblasts"
+    This paper can be found here https://pmc.ncbi.nlm.nih.gov/articles/PMC11973714/
+
+    Parameters
+    ------------
+    skel:
+        the Skeleton() graph containing all information about the skeleton
+
+    Returns
+    -------------
+    fission score for the skeleton
+    """
+
+    fis_score = (skel.n_objects + skel.n_nodes + skel.n_branches)/(skel.total_length) if skel.total_length > 0 else 0
+    return fis_score
+
