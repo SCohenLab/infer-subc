@@ -19,6 +19,7 @@ import numpy.typing as npt
 import pandas as pd
 
 from infer_subc.core.img import apply_mask
+from infer_subc.quantification.stats import *
 
 def create_skel(segmentation: np.ndarray) -> np.ndarray:
     ''' A function that generates punctate objects for the round organelle objects that lack a skeleton.
@@ -44,58 +45,57 @@ def create_skel(segmentation: np.ndarray) -> np.ndarray:
     skeleton = skeletonize(omask).astype(bool)
 
     # relabel segmentation (makes sure that all disconnected components have a skeleton, even in the case of the ER)
-    comp_seg = label(np.copy(segmentation))
+    comp_seg = label(segmentation)
+
+    # get maximum value in component segmentation labels
+    max_val = np.max(segmentation)
 
     # calculate the shift needed to label via orginal infer-subc labeling
-    max_val = np.max(segmentation)
-    # in the case where there is more than one orgnalle object
     if max_val > 1:
-        digits = np.floor(np.log10(max_val)) + 1
-        shift = 10**digits
-
-    new_seg = np.zeros_like(segmentation, dtype=np.uint64)
-
-    # combine component label and infer_subc label
-    if max_val > 1:
-        new_seg[omask] = (comp_seg[omask] * shift) + segmentation[omask]
+        shift = 10**(int(np.floor(np.log10(max_val))) + 1)
+        # Use in-place math to save memory
+        new_seg = np.zeros_like(segmentation, dtype=np.uint64)
+        new_seg[omask] = comp_seg[omask].astype(np.uint64) * shift
+        new_seg[omask] += segmentation[omask].astype(np.uint64)
     else:
-        new_seg[omask] = comp_seg[omask]
+        new_seg = comp_seg
 
     # All of disconnected object labels
-    all_lab = set(pd.unique(new_seg.ravel()))
+    all_lab = np.unique(new_seg[omask])
 
-    # Applying the segmentation labels to the skeleton
+    # Applying the segmentation labels to the raw skeleton
     lab_skel = skeleton * new_seg
 
     # Labels present in the skeleton
-    skel_lab = set(pd.unique(lab_skel.ravel()))
+    skel_lab = np.unique(lab_skel[lab_skel > 0])
 
-    # Checker to see if there are any objects without a skeleton
-    if all_lab == skel_lab:
+    # collect the missing labels
+    mis_lab = np.setdiff1d(all_lab, skel_lab, assume_unique=True)
 
-        # reapply original labels
-        return ((lab_skel > 0) * segmentation).astype(float)
-    else:
-        # gets a list of the missing labels
-        mis_lab = all_lab - skel_lab
+    # check if there are missing labels
+    if len(mis_lab) > 0:
 
-        for lab in mis_lab:
-            # list of coordinates of the object's voxels
-            coord_list = np.nonzero(new_seg == lab)
-
-            # The coordinate closest to the middle of the object (due to rounding)
-            av_coord = np.round(np.mean(coord_list,axis = 1)).astype(int)
-
-            #checker and result
-            if new_seg[tuple(av_coord)] == lab:
-                lab_skel[tuple(av_coord)] = lab
-            # if av coord is outside the label pick the coordinate listed in the middle
-            else:
-                lab_skel[tuple(np.array(coord_list)[:,len(coord_list)//2])] = lab
-        
-        return ((lab_skel > 0) * segmentation).astype(float)
+        # get regionprops for the new segmentation
+        # this helps us quickly find the coordinates of the missing labels and assign them to the skeleton
+        props = regionprops(new_seg)
     
-    
+        # For each missing label, find a coordinate to place a point in the skeleton (centroid)
+        for prop in props:
+            if prop.label in mis_lab:
+                # get the centroid coordinate
+                cent_coord = tuple(np.round(prop.centroid).astype(int))
+                
+                # check if centroid is within the label
+                if new_seg[cent_coord] == prop.label:
+                    lab_skel[cent_coord] = prop.label
+                else:
+                    # pick a coordinate listed within the label
+                    middle_coord = tuple(prop.coords[len(prop.coords) // 2])
+                    lab_skel[middle_coord] = prop.label
+
+    # Reapply original labels and return
+    return ((lab_skel > 0) * segmentation).astype(float)
+
 def _walk_path_lab(
         jgraph, node, neighbor, visited, degrees, indices, path_data, startj
         ):
@@ -803,8 +803,7 @@ def skel_width(skel: Skeleton, segmentation: np.ndarray, obj_list: np.ndarray) -
 
     # dictionary that contains the coordinates of the skeleton points for each label (object)
     sp_by_label = defaultdict(list)
-    for idx, label in enumerate(skel
-    .pixel_values):
+    for idx, label in enumerate(skel.pixel_values):
         sp_by_label[label].append(coords_scaled[idx])
 
     ##########################################################
