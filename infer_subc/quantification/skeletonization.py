@@ -758,6 +758,8 @@ def skel_width(skel: Skeleton, segmentation: np.ndarray, obj_list: np.ndarray) -
     The width is calculated by finding the distance of the nearest boundary point (for each point in the skeleton object)
     and taking the average of those distances (multiplied by 2 to get the full width). This function uses similar logic to 
     the mitograph method for calculating width, which can be found here https://github.com/vianamp/MitoGraph/blob/master/MitoGraph.cxx#L1154
+    While this measurement is informative, the function is limited by the resolution of the image. Thus, width values of zero can result 
+    from segmented objects that are a few voxels wide.
 
     Parameters
     ----------
