@@ -10,5 +10,6 @@ matplotlib
 dask 
 napari
 centrosome
+skan
 
 # recreate with "pip freeze > requirements.txt"

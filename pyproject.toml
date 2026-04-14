@@ -47,7 +47,8 @@ dependencies = [
     'scikit-learn', #>=0.18.0,<0.19.0 
     'pandas',   #>=0.23.4 
     'centrosome',
-    'aicspylibczi>=3.1.1'
+    'aicspylibczi>=3.1.1',
+    'skan'
     # 'seaborn'
 ]
 
