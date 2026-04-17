@@ -22,21 +22,24 @@ from infer_subc.core.img import apply_mask
 from infer_subc.quantification.stats import *
 
 def create_skel(segmentation: np.ndarray) -> np.ndarray:
-    ''' A function that generates punctate objects for the round organelle objects that lack a skeleton.
-        This function is based off of skimage's skeletonize function. More information about said function
-        can be found here https://scikit-image.org/docs/0.25.x/api/skimage.morphology.html#skimage.morphology.skeletonize
+    """
+    A function that skeletonizes the organelle segmentation. This function aslo generates punctate objects 
+    for the round organelle objects that lack a skeleton. This function is based off of skimage's skeletonize 
+    function. More information about said function can be found here 
+    https://scikit-image.org/docs/0.25.x/api/skimage.morphology.html#skimage.morphology.skeletonize
 
-   Parameters
+    Parameters
     ------------
-    segmentation:
+    segmentation : array
         the segmentated organelle image as a numpy array. It is assumed that the segmentation has already
-          been masked and only contains the organelle of interest.
+        been masked and only contains the organelle of interest.
 
     Returns
     -------------
-    A properly skeletonized np.ndarray with float labels due to skan requirements. Labels correspond to the original
-    infer-subc segmentation labels.
-    '''
+    skel_arr : array
+        A properly skeletonized np.ndarray with float labels due to skan requirements. Labels correspond to the original
+        infer-subc segmentation labels.
+    """
 
     # where the organelles exist
     omask = segmentation > 0
@@ -1073,9 +1076,9 @@ def get_skeleton_metrics(org_skel_arr: np.ndarray,
     if output_all_tables:
         branch_table = get_skel_branch(org_skel)
         node_table = get_skel_node(org_skel)
-        return branch_table, node_table, skel_table
+        return branch_table, node_table, skel_table.rename(columns={"obj-id": "label"})
     else:
-        return skel_table
+        return skel_table.rename(columns={"obj-id": "label"})
     
 def fission_score(skel: Skeleton) -> float:
 
