@@ -148,8 +148,7 @@ def infer_masks(in_img: np.ndarray,
     ### stack masks ###
     ###################
     maskstack = stack_masks(nuc_mask=nuc_obj, 
-                            cellmask=cellmask_obj,
-                            cyto_mask=cyto_obj)
+                            cellmask=cellmask_obj)
     
     return maskstack
 

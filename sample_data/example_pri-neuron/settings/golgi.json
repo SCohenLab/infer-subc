@@ -3,7 +3,7 @@
         "category": "extraction",
         "function": "select_channel_from_raw",
         "parameter_values": {
-            "chan": 4
+            "chan": 2
         },
         "parent": 0
     },
@@ -21,8 +21,8 @@
         "function": "masked_object_thresh",
         "parameter_values": {
             "cutoff_size": 1200,
-            "global_method": "ave_tri_med",
-            "local_adjust": 0.6
+            "global_method": "triangle",
+            "local_adjust": 0.9
         },
         "parent": 2
     },
@@ -30,8 +30,8 @@
         "category": "core",
         "function": "topology_preserving_thinning",
         "parameter_values": {
-            "min_thickness": 4,
-            "thin": 2
+            "min_thickness": 8,
+            "thin": 1
         },
         "parent": 3
     },
@@ -39,13 +39,13 @@
         "category": "core",
         "function": "dot_filter_3",
         "parameter_values": {
-            "dot_cutoff_1": 0.04,
+            "dot_cutoff_1": 0.1,
             "dot_cutoff_2": 0.0,
             "dot_cutoff_3": 0.0,
-            "dot_scale_1": 1.6,
+            "dot_scale_1": 0.5,
             "dot_scale_2": 0.0,
             "dot_scale_3": 0.0,
-            "method": "slice_by_slice"
+            "method": "3D"
         },
         "parent": 2
     },
@@ -64,13 +64,24 @@
             "hole_max": 0,
             "hole_min": 0,
             "method": "3D",
-            "min_size": 4
+            "min_size": 2
         },
         "parent": 6
     },
     "8": {
         "category": "postpostprocessing",
-        "function": "label_uint16",
-        "parent": 7
+        "function": "label_declump",
+        "parameter_values": {
+            "declump": false,
+            "iterations": 1,
+            "min_size": 0,
+            "open": false,
+            "sigma": 1.0,
+            "thresh_adj": 1.0
+        },
+        "parent": [
+            1,
+            7
+        ]
     }
 }

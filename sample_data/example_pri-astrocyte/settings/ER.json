@@ -55,7 +55,7 @@
             "hole_max": 0,
             "hole_min": 0,
             "method": "3D",
-            "min_size": 1
+            "min_size": 4
         },
         "parent": 5
     },
