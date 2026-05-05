@@ -378,7 +378,7 @@ def batch_process_org_morph(dataset_name: str,
     # check if any existing data is present in outfiles to skip already processed images
     unique_keys = ['dataset', 'image_name']
 
-    morpho_path = quant_path / f"{dataset_name}_org_morphology_metrics.csv"
+    morpho_path = quant_path / f"{dataset_name}-organelle_morphology_metrics.csv"
     existing_morpho_keys = load_existing_keys_csv(morpho_path, unique_keys)
 
     # reading list of files from the raw path
@@ -481,12 +481,12 @@ def batch_org_morph_summary_stats(csv_path_list: List[str],
         # list all csv files in the location
         files_store = sorted(loc.glob("*.csv"))
 
-        # find the unique datasets in this location based on the prefixes before "_org_morphology_metrics"
-        prefixes = set(f.name.split("_org_morphology_metrics")[0] for f in files_store if "_org_morphology_metrics" in f.name)
+        # find the unique datasets in this location based on the prefixes before "-organelle_morphology_metrics"
+        prefixes = set(f.name.split("-organelle_morphology_metrics")[0] for f in files_store if "-organelle_morphology_metrics" in f.name)
         for prefix in prefixes:
             ds_count += 1
             # select only the files from this dataset
-            files_subset = [f for f in files_store if f.name.startswith(prefix +"_org_morphology_metrics")]
+            files_subset = [f for f in files_store if f.name.startswith(prefix +"-organelle_morphology_metrics")]
             for file in files_subset:
                 fl_count += 1
                 stem = file.stem
@@ -549,11 +549,11 @@ def batch_org_morph_summary_stats(csv_path_list: List[str],
     # flatten datasheet and export
     ###################
     # export before unstacking
-    if (Path(out_path) / f"{out_prefix}_per_org_morphology_summarystats.csv").exists():
-        raise FileExistsError(f"CAUTION: {out_prefix}_per_org_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `quant_data_path` to continue without error.")
+    if (Path(out_path) / f"{out_prefix}-per_org_morphology_summarystats.csv").exists():
+        raise FileExistsError(f"CAUTION: {out_prefix}-per_org_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `quant_data_path` to continue without error.")
     else:
-        org_summary.to_csv(str(out_path) + f"/{out_prefix}_per_org_morphology_summarystats.csv", mode='x')
-        print(f"Exported per-organelle morphology summary statistics (before unstacking) to {out_path}/{out_prefix}_per_org_morphology_summarystats.csv")
+        org_summary.to_csv(str(out_path) + f"/{out_prefix}-per_org_morphology_summarystats.csv", mode='x')
+        print(f"Exported per-organelle morphology summary statistics (before unstacking) to {out_path}/{out_prefix}-per_org_morphology_summarystats.csv")
 
     org_morph_final = org_summary.unstack(-1)
     org_morph_final.columns = ["_".join((col_name[1], col_name[-1], col_name[0])) for col_name in org_morph_final.columns.to_flat_index()]
@@ -565,10 +565,10 @@ def batch_org_morph_summary_stats(csv_path_list: List[str],
     ###################
     # export summary sheets
     ###################
-    if (Path(out_path) / f"{out_prefix}_organelle_morphology_summarystats.csv").exists():
-        raise FileExistsError(f"CAUTION: {out_prefix}_organelle_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `quant_data_path` to continue without error.")
+    if (Path(out_path) / f"{out_prefix}-organelle_morphology_summarystats.csv").exists():
+        raise FileExistsError(f"CAUTION: {out_prefix}-organelle_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `quant_data_path` to continue without error.")
     else:
-        org_morph_final.to_csv(str(out_path) + f"/{out_prefix}_organelle_morphology_summarystats.csv", mode='x')
-        print(f"Exported organelle morphology summary statistics (after unstacking) to {out_path}/{out_prefix}_organelle_morphology_summarystats.csv")
+        org_morph_final.to_csv(str(out_path) + f"/{out_prefix}-organelle_morphology_summarystats.csv", mode='x')
+        print(f"Exported organelle morphology summary statistics (after unstacking) to {out_path}/{out_prefix}-organelle_morphology_summarystats.csv")
     print(f"Organelle morphology summary is complete.")
     return org_summary

@@ -411,7 +411,7 @@ def get_interaction_metrics(source_file_path: str,
                              dist_num_bins: Union[int, None]=5,
                              dist_center_on: Union[bool, None]=False,
                              dist_keep_center_as_bin: Union[bool, None]=True,
-                             dist_zernike_degrees: Union[int, None]=9) -> Union[dict, pd.DataFrame, pd.DataFrame, np.ndarray, pd.DataFrame]:
+                             dist_zernike_degrees: Union[int, None]=9) -> tuple[dict, pd.DataFrame, Union[pd.DataFrame, None], Union[np.ndarray, None], Union[pd.DataFrame, None]]:
    
     """
     Quantify organelle interaction metrics including morphology, distribution, and degree of interactions for a image or region
@@ -574,7 +574,6 @@ def get_interaction_metrics(source_file_path: str,
         morph_combo_tabs.append(inter_tab)
 
         # measure interaction site distibutions
-        #### TODO: UPDATE CODE ONCE RENE IS DONE ####
         if include_dist:
             XY_distribution, XY_bins, XY_wedges = get_XY_distribution(mask=mask,
                                                                       mask_name=mask_name,
@@ -739,20 +738,20 @@ def batch_process_interactions_quant(dataset_name: str,
     unique_keys = ['dataset', 'image_name']
 
     if include_morpho:
-        morpho_tab_path = quant_path / f"{dataset_name}_interactions_morphology_metrics.csv"
+        morpho_tab_path = quant_path / f"{dataset_name}-interactions_morphology_metrics.csv"
         existing_morpho_keys = load_existing_keys_csv(morpho_tab_path, unique_keys)
     elif not include_morpho:
-        morpho_tab_path = quant_path / f"{dataset_name}_interactions_labels.csv"
+        morpho_tab_path = quant_path / f"{dataset_name}-interactions_labels.csv"
         existing_morpho_keys = load_existing_keys_csv(morpho_tab_path, unique_keys)
 
     if include_dist:
-        dist_tab_path = quant_path / f"{dataset_name}_interactions_distribution_metrics.csv"
+        dist_tab_path = quant_path / f"{dataset_name}-interactions_distribution_metrics.csv"
         existing_dist_keys = load_existing_keys_csv(dist_tab_path, unique_keys)
     else:
         existing_dist_keys = set()
 
     if include_interaction_degrees:
-        int_degree_tab_path = quant_path / f"{dataset_name}_interactions_degree_metrics.csv"
+        int_degree_tab_path = quant_path / f"{dataset_name}-interactions_degree_metrics.csv"
         existing_int_degree_keys = load_existing_keys_csv(int_degree_tab_path, unique_keys)
     else:
         existing_int_degree_keys = set()
@@ -762,8 +761,8 @@ def batch_process_interactions_quant(dataset_name: str,
     else:
         existing_keys = existing_morpho_keys.intersection(existing_dist_keys).intersection(existing_int_degree_keys)
 
-    int_degree_img_path = quant_path / "interaction_degree_images"
-    interaction_sites_path = quant_path / "interaction_site_segmentations"
+    int_degree_img_path = quant_path / f"{dataset_name}-interaction_degree_images"
+    interaction_sites_path = quant_path / f"{dataset_name}-interaction_site_segmentations"
 
 
     # list of organelle segmentation and masks files to collect from each image
@@ -1031,31 +1030,31 @@ def batch_interactions_summary_stats(out_prefix: str,
         # list all csv files in the location
         files_store = sorted(loc.glob("*.csv"))
 
-        # find the unique datasets in this location based on the prefixes before "_interactions_"
-        prefixes = set(f.name.split("_interactions_")[0] for f in files_store)
+        # find the unique datasets in this location based on the prefixes before "-interactions_"
+        prefixes = set(f.name.split("-interactions_")[0] for f in files_store)
         print(f"Found the following datasets in {loc}:", prefixes)
         for prefix in prefixes:
             ds_count = ds_count + 1
-            files_subset = [f for f in files_store if f.name.startswith(prefix +"_interactions")]
+            files_subset = [f for f in files_store if f.name.startswith(prefix +"-interactions")]
 
             # if both morphology and labels files are present, remove the labels file from the list to be processed
-            if any("_interactions_morphology_metrics.csv" in f.name for f in files_subset) and any("_interactions_labels.csv" in f.name for f in files_subset):
-                    files_subset = [f for f in files_subset if not "_interactions_labels.csv" in f.name]
+            if any("-interactions_morphology_metrics.csv" in f.name for f in files_subset) and any("-interactions_labels.csv" in f.name for f in files_subset):
+                    files_subset = [f for f in files_subset if not "-interactions_labels.csv" in f.name]
 
             for file in files_subset:
                 fl_count = fl_count + 1
                 stem = file.stem
                 
-                if "_interactions_labels" in stem:
+                if "-interactions_labels" in stem:
                     inter_labels = pd.read_csv(file)
                     int_labs.append(inter_labels)
-                elif "_interactions_morphology_metrics" in stem:
+                elif "-interactions_morphology_metrics" in stem:
                     morph = pd.read_csv(file)
                     int_morph.append(morph)
-                elif "_interactions_distribution_metrics" in stem:
+                elif "-interactions_distribution_metrics" in stem:
                     dist = pd.read_csv(file)
                     int_dist.append(dist)
-                elif "_interactions_degree_metrics" in stem:
+                elif "-interactions_degree_metrics" in stem:
                     degree = pd.read_csv(file)
                     int_degree.append(degree)
                 else:
@@ -1070,14 +1069,14 @@ def batch_interactions_summary_stats(out_prefix: str,
     degree_df = pd.concat(int_degree, axis=0, join='outer') if int_degree else None
 
     # list all possible interaction site combinations
-    all_pos = _all_combos(organelle_names, splitter)
+    all_pos = all_combos(organelle_names, splitter)
 
     ################################################
     # Summarize interactions count & morphology data
     ################################################
     if morph_df is not None:
         ### calculate interaction count/volume & summarize per organelle object for all interaction sites
-        per_org_summary = _perorg_interactions_cnt(interaction_morpho_df=morph_df, 
+        per_org_summary = perorg_interactions_cnt(interaction_morpho_df=morph_df, 
                                                    org_list=organelle_names,
                                                    splitter=splitter)
 
@@ -1097,10 +1096,10 @@ def batch_interactions_summary_stats(out_prefix: str,
         org_sum_tab.sort_index(inplace=True)
 
         # export before unstacking
-        if (Path(out_path) / f"{out_prefix}_interaction_count_volume_summarystats.csv").exists():
-            raise FileExistsError(f"CAUTION: {out_prefix}_interaction_count_volume_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+        if (Path(out_path) / f"{out_prefix}-per_inter_count_volume_summarystats.csv").exists():
+            raise FileExistsError(f"CAUTION: {out_prefix}-per_inter_count_volume_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
         else:
-            org_sum_tab.to_csv(str(out_path) + f"/{out_prefix}_interaction_count_volume_summarystats.csv", mode='x')
+            org_sum_tab.to_csv(str(out_path) + f"/{out_prefix}-per_inter_count_volume_summarystats.csv", mode='x')
 
         # unstack and format interaction count/volume summary table
         inter_count_vol_final = org_sum_tab.unstack(-1)
@@ -1166,10 +1165,10 @@ def batch_interactions_summary_stats(out_prefix: str,
         inter_sum_tab.sort_index(inplace=True)
 
         # export before unstacking
-        if (Path(out_path) / f"{out_prefix}_interaction_morphology_summarystats.csv").exists():
-            raise FileExistsError(f"CAUTION: {out_prefix}_interaction_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+        if (Path(out_path) / f"{out_prefix}-per_inter_morphology_summarystats.csv").exists():
+            raise FileExistsError(f"CAUTION: {out_prefix}-per_inter_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
         else:
-            inter_sum_tab.to_csv(str(out_path) + f"/{out_prefix}_interaction_morphology_summarystats.csv", mode='x')
+            inter_sum_tab.to_csv(str(out_path) + f"/{out_prefix}-per_inter_morphology_summarystats.csv", mode='x')
 
         # unstack and format interaction morphology summary table   
         inter_morph_final = inter_sum_tab.unstack(-1)
@@ -1217,10 +1216,10 @@ def batch_interactions_summary_stats(out_prefix: str,
         labs_inter_sum_tab.sort_index(inplace=True)
 
         # export before unstacking
-        if (Path(out_path) / f"{out_prefix}_interaction_labels_summarystats.csv").exists():
-            raise FileExistsError(f"CAUTION: {out_prefix}_interaction_labels_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+        if (Path(out_path) / f"{out_prefix}-per_inter_labels_summarystats.csv").exists():
+            raise FileExistsError(f"CAUTION: {out_prefix}-per_inter_labels_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
         else:
-            labs_inter_sum_tab.to_csv(str(out_path) + f"/{out_prefix}_interaction_labels_summarystats.csv", mode='x')
+            labs_inter_sum_tab.to_csv(str(out_path) + f"/{out_prefix}-per_inter_labels_summarystats.csv", mode='x')
 
         # unstack and format interaction labels summary table
         inter_labels_final = labs_inter_sum_tab.unstack(-1)
@@ -1334,10 +1333,10 @@ def batch_interactions_summary_stats(out_prefix: str,
         dist_summary.reset_index(inplace=True)
 
         # export before unstacking
-        if (Path(out_path) / f"{out_prefix}_interaction_distribution_summarystats.csv").exists():
-            raise FileExistsError(f"CAUTION: {out_prefix}_interaction_distribution_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+        if (Path(out_path) / f"{out_prefix}-per_inter_distribution_summarystats.csv").exists():
+            raise FileExistsError(f"CAUTION: {out_prefix}-per_inter_distribution_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
         else:
-            dist_summary.to_csv(str(out_path) + f"/{out_prefix}_interaction_distribution_summarystats.csv", mode='x')
+            dist_summary.to_csv(str(out_path) + f"/{out_prefix}-per_inter_distribution_summarystats.csv", mode='x')
 
         # unstack and format interaction distribution summary table
         dist_final = dist_summary.set_index(['dataset', 'image_name', 'mask_name', 'scale', 'object']).unstack(-1)
@@ -1368,10 +1367,10 @@ def batch_interactions_summary_stats(out_prefix: str,
     ##########################
     # Export combined results
     ##########################
-    if (Path(out_path) / f"{out_prefix}_combined_summarystats.csv").exists():
-        raise FileExistsError(f"CAUTION: {out_prefix}_combined_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+    if (Path(out_path) / f"{out_prefix}-interactions_combined_summarystats.csv").exists():
+        raise FileExistsError(f"CAUTION: {out_prefix}-interactions_combined_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
     else:
-        final_combo_tab.to_csv(str(out_path) + f"/{out_prefix}_combined_summarystats.csv", mode='x')
+        final_combo_tab.to_csv(str(out_path) + f"/{out_prefix}-interactions_combined_summarystats.csv", mode='x')
 
     print(f"Interactions summary is complete.")
     return final_combo_tab
