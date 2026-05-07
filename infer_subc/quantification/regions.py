@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from infer_subc.quantification.morphology import get_morphology_metrics
-from infer_subc.quantification.batch import load_existing_keys_csv, append_atomic_csv
+from infer_subc.quantification.csv_io import load_existing_keys_csv, append_atomic_csv
 from infer_subc.utils.batch import list_image_files, find_segmentation_tiff_files
 from infer_subc.core.file_io import read_czi_image, read_tiff_image
 
@@ -84,8 +84,8 @@ def get_regions_morphology(source_file_path: str,
         mask = None
         mask_name = None
     else:
-        mask = list_region_segs[list_region_names.index(mask_name)]
-        print(f"Using '{mask_name}' as the mask for analysis.")
+        mask = (list_region_segs[list_region_names.index(mask_name)] > 0).astype(int) # ensure mask is binary and integer type for later multiplication with segmentation images
+        print(f"Mask '{mask_name}' will be applied before analysis.")
 
     # merge intensity images to create a single np.ndarray
     if list_intensity_img is None:

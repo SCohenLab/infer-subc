@@ -13,7 +13,7 @@ from infer_subc.quantification.stats import *
 from infer_subc.quantification.stats_helpers import *
 from infer_subc.organelles import * 
 from infer_subc.quantification.morphology import get_morphology_metrics
-from infer_subc.quantification.batch import load_existing_keys_csv, append_atomic_csv
+from infer_subc.quantification.csv_io import load_existing_keys_csv, append_atomic_csv
 from infer_subc.core.file_io import export_inferred_organelle
 
 
@@ -202,7 +202,7 @@ def create_interaction_sites(interaction_orgs: List[str],
                               org_seg_list: List[np.ndarray],
                               name_splitter: str="X",
                               mask: Union[np.ndarray, None]=None,
-                              mask_name: Union[str, None]=None) -> tuple[np.ndarray, pd.DataFrame]:
+                              mask_name: Union[str, None]=None) -> tuple[np.ndarray, np.ndarray, pd.DataFrame]:
     
     '''
     Create an image of the overlap regions between the selected organelles and a table of unique identifiers 
@@ -405,7 +405,7 @@ def get_interaction_metrics(source_file_path: str,
                              scale: Union[tuple, None]=None,
                              splitter: str="X",
                              include_morpho:bool=True,
-                             include_interaction_degrees:bool=True,
+                             include_inter_degrees:bool=True,
                              include_dist:bool=True, 
                              dist_centering_obj: Union[str, None]=None,
                              dist_num_bins: Union[int, None]=5,
@@ -453,7 +453,7 @@ def get_interaction_metrics(source_file_path: str,
         Whether to compute morphology metrics for each interaction site.
     channel_axis : int, default=0
         The index of the channel dimension axis in the intensity image.
-    include_interaction_degrees : bool, default=True
+    include_inter_degrees : bool, default=True
         Whether to compute interaction degree analysis for the entire image or mask region.
     include_dist : bool, default=True
         Whether to compute distribution metrics for the each interaction site type.
@@ -483,9 +483,9 @@ def get_interaction_metrics(source_file_path: str,
     dist_final_combo : pd.DataFrame or None
         XY and Z distribution metrics for each interaction site (if include_dist=True)
     degree_img : np.ndarray or None
-        Degree of interactions image (if include_interaction_degrees=True)
+        Degree of interactions image (if include_inter_degrees=True)
     degree_tab : pd.DataFrame or None
-        Degree of interactions table (if include_interaction_degrees=True)
+        Degree of interactions table (if include_inter_degrees=True)
     """
 
     # Validate inputs
@@ -511,7 +511,8 @@ def get_interaction_metrics(source_file_path: str,
         mask = None
         mask_name = None
     else:
-        mask = list_region_segs[list_region_names.index(mask_name)]
+        mask = (list_region_segs[list_region_names.index(mask_name)] > 0).astype(int) # ensure mask is binary and integer type for later multiplication with segmentation images
+        print(f"Mask '{mask_name}' will be applied before analysis.")
 
     # list all possible interaction site types based on the org_file_names list specified above
     possib_int_types = all_combos(list_obj_names, splitter)
@@ -610,7 +611,7 @@ def get_interaction_metrics(source_file_path: str,
     else:
         dist_final_combo = None
 
-    if include_interaction_degrees:
+    if include_inter_degrees:
         degree_img, degree_tab = create_interaction_degrees(org_name_list=list_obj_names,
                                                             org_seg_list=list_obj_segs,
                                                             mask=mask,
@@ -641,7 +642,7 @@ def batch_process_interactions_quant(dataset_name: str,
                                       seg_suffix:Union[str, None]=None,
                                       int_splitter:str="X",
                                       include_morpho:bool=True,
-                                      include_interaction_degrees:bool=True,
+                                      include_inter_degrees:bool=True,
                                       include_dist:bool=True, 
                                       dist_centering_obj: Union[str, None]=None,
                                       dist_num_bins: Union[int, None]=5,
@@ -693,7 +694,7 @@ def batch_process_interactions_quant(dataset_name: str,
         Whether to compute morphology metrics
     include_morpho : bool, default=True
         Whether to compute morphology metrics for each interaction site
-    include_interaction_degrees : bool, default=True
+    include_inter_degrees : bool, default=True
         Whether to compute interaction degree analysis
     include_dist : bool, default=True
         Whether to compute distribution metrics
@@ -750,7 +751,7 @@ def batch_process_interactions_quant(dataset_name: str,
     else:
         existing_dist_keys = set()
 
-    if include_interaction_degrees:
+    if include_inter_degrees:
         int_degree_tab_path = quant_path / f"{dataset_name}-interactions_degree_metrics.csv"
         existing_int_degree_keys = load_existing_keys_csv(int_degree_tab_path, unique_keys)
     else:
@@ -821,7 +822,7 @@ def batch_process_interactions_quant(dataset_name: str,
                                                                                                     splitter=int_splitter,
                                                                                                     scale=scale_tup,
                                                                                                     include_morpho=include_morpho,
-                                                                                                    include_interaction_degrees=include_interaction_degrees,
+                                                                                                    include_inter_degrees=include_inter_degrees,
                                                                                                     include_dist=include_dist, 
                                                                                                     dist_centering_obj=dist_centering_obj,
                                                                                                     dist_num_bins=dist_num_bins,
@@ -860,7 +861,7 @@ def batch_process_interactions_quant(dataset_name: str,
             del dist_tab  # free up memory
 
             # save the degree table data per image directly to csv
-            if include_interaction_degrees:
+            if include_inter_degrees:
                 if (dataset_name, img_f.stem) in existing_int_degree_keys:
                     print(f"Skipping interaction degree metrics for {img_f.name} as it is already listed in the output file.")
                 else:
