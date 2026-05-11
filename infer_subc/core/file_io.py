@@ -534,7 +534,7 @@ def sample_input_QC(cell_type: Union[str, None]) -> tuple[Path, Path, str, str, 
         # the specific settings for each set of sample data
         if cell_type == "pri-neuron":
             suffixes_list = ['masks_A', 'lyso', 'mito', 'golgi', 'perox', 'ER', 'LD']
-            channels_list = [None, 3, 4, 2, 5, 1, 0, None]
+            channels_list = [None, 3, 4, 2, 5, 1, 0]
             multichannel_dict = {'masks_A': ['nuc', 'cell']}
         if cell_type == "pri-astrocyte":
             suffixes_list = ['masks_B', 'lyso', 'mito', 'golgi', 'perox', 'ER', 'LD']
@@ -546,7 +546,7 @@ def sample_input_QC(cell_type: Union[str, None]) -> tuple[Path, Path, str, str, 
             multichannel_dict = {'masks_C': ['nuc', 'cell'], 'soma_neurites': ['soma', 'neurites']}
         if cell_type == "iPSC":
             suffixes_list = ['masks_D', 'lyso', 'mito', 'golgi', 'perox', 'ER', 'LD']
-            channels_list = [None, 2, 3, 4, 5, 6, 0, None]
+            channels_list = [None, 2, 3, 4, 5, 6, 0]
             multichannel_dict = {'masks_D': ['nuc', 'cell']}
 
         return raw_data_path, seg_data_path, raw_im_type, seg_im_type, edit_loc, fulldataset_loc, suffixes_list, channels_list, multichannel_dict
@@ -594,22 +594,22 @@ def sample_quant_settings(cell_type: Union[str, None]) -> tuple[List, List, List
         # the specific settings for each set of sample data
         if cell_type == "pri-neuron":
             org_names = ['lyso', 'mito', 'golgi', 'perox', 'ER', 'LD']
-            channels_list = [None, 3, 4, 2, 5, 1, 0, None]
+            channels_list = [3, 4, 2, 5, 1, 0]
             regions_list = ['nuc', 'cell']
             mask_name = 'cell'
         if cell_type == "pri-astrocyte":
             org_names = ['lyso', 'mito', 'golgi', 'perox', 'ER', 'LD']
-            channels_list = [None, 3, 4, 2, 5, 1, 0]
+            channels_list = [3, 4, 2, 5, 1, 0]
             regions_list = ['nuc', 'cell']
             mask_name = 'cell'
         if cell_type == "iNeuron":
             org_names = ['lyso', 'mito', 'golgi', 'perox', 'ER', 'LD', 'soma_neurites']
-            channels_list = [None, 4, 3, 2, 1, 0, 6, None]
+            channels_list = [4, 3, 2, 1, 0, 6]
             regions_list = ['nuc', 'cell', 'soma', 'neurites']
             mask_name = 'soma'
         if cell_type == "iPSC":
             org_names = ['lyso', 'mito', 'golgi', 'perox', 'ER', 'LD']
-            channels_list = [None, 2, 3, 4, 5, 6, 0, None]
+            channels_list = [2, 3, 4, 5, 6, 0]
             regions_list = ['nuc', 'cell']
             mask_name = 'cell'
 

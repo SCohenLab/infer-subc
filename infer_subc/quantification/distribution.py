@@ -1,6 +1,7 @@
 import itertools
 from pathlib import Path
 import time
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -13,7 +14,7 @@ import centrosome.zernike
 
 from infer_subc.core.img import apply_mask
 from infer_subc.utils.batch import list_image_files, find_segmentation_tiff_files
-from infer_subc.core.file_io import read_czi_image, read_tiff_image
+from infer_subc.core.file_io import read_czi_image, read_tiff_image, export_inferred_organelle
 from infer_subc.quantification.csv_io import append_atomic_csv, load_existing_keys_csv
 from typing import Tuple, Any, Union, List
 
@@ -929,7 +930,8 @@ def batch_process_distribution_quant(dataset_name: str,
                                     num_bins: Union[int, None]=5,
                                     center_on: Union[bool, None]=False,
                                     keep_center_as_bin: Union[bool, None]=True,
-                                    zernike_degrees: Union[int, None]=9):
+                                    zernike_degrees: Union[int, None]=9,
+                                    export_distribution_bins_imgs: bool=False):
     """  
     batch process distribution quantification; this function is currently optimized to process images from one file folder per image type (e.g., raw, segmentation)
     the output csv files are saved to the indicated quant_path folder
@@ -972,7 +974,9 @@ def batch_process_distribution_quant(dataset_name: str,
     zernike_degrees : int or None, default=9
         Zernike polynomial degree for shape analysis in the XY distribution analysis
         If None and include_dist=True, no Zernike features will be calculated
-    
+    export_distribution_bins_imgs : bool, default=False
+        Whether to export the distribution bins as images
+
     Returns:
     --------
     None
@@ -1008,8 +1012,6 @@ def batch_process_distribution_quant(dataset_name: str,
 
     # loop through list of images and quantify distribution metrics if data for that image do not already exist;
     for img_f in img_file_list:
-        img_start = time.time()
-        count = count + 1
         # skip files that have already been processed
         if (dataset_name, img_f.stem) in existing_dist_keys:
             print(f"Skipping {img_f.name} as it is already listed in the output file(s).")
@@ -1017,6 +1019,8 @@ def batch_process_distribution_quant(dataset_name: str,
 
         # process analysis for this cells
         else:
+            img_start = time.time()
+            count = count + 1
             filez = find_segmentation_tiff_files(img_f, segs_to_collect, seg_path, seg_suffix)
 
             # read in raw file and metadata
@@ -1034,18 +1038,18 @@ def batch_process_distribution_quant(dataset_name: str,
             else:
                 scale_tup = None
 
-            dist_tab = get_distribution_metrics(source_file_path=img_f,
-                                            list_obj_names=organelle_names,
-                                            list_obj_segs=organelles, 
-                                            list_region_names=region_names,
-                                            list_region_segs=regions, 
-                                            mask_name=mask_name,
-                                            scale=scale_tup,
-                                            centering_obj=centering_obj,
-                                            num_bins=num_bins,
-                                            center_on=center_on,
-                                            keep_center_as_bin=keep_center_as_bin,
-                                            zernike_degrees=zernike_degrees)
+            dist_tab, XY_bins_img, XY_wedges_img = get_distribution_metrics(source_file_path=img_f,
+                                                                    list_obj_names=organelle_names,
+                                                                    list_obj_segs=organelles, 
+                                                                    list_region_names=region_names,
+                                                                    list_region_segs=regions, 
+                                                                    mask_name=mask_name,
+                                                                    scale=scale_tup,
+                                                                    centering_obj=centering_obj,
+                                                                    num_bins=num_bins,
+                                                                    center_on=center_on,
+                                                                    keep_center_as_bin=keep_center_as_bin,
+                                                                    zernike_degrees=zernike_degrees)
             
             dist_tab = dist_tab.astype(str)  # ensure all data is string to avoid dtype issues
 
@@ -1053,6 +1057,24 @@ def batch_process_distribution_quant(dataset_name: str,
             dist_tab.insert(loc=0,column='dataset',value=dataset_name)
             append_atomic_csv(dist_path, dist_tab)
             del dist_tab  # free up memory
+
+            if export_distribution_bins_imgs:
+                # location to save distribution bins images
+                dist_bins_path = quant_path / f"{dataset_name}-distribution_bins_imgs"
+                if not Path.exists(dist_bins_path):
+                    Path.mkdir(dist_bins_path)
+                    print(f"Making {dist_bins_path} to save distribution bins images.")
+
+                # export XY bins and wedges as images
+                if not Path(dist_bins_path / f"{img_f.stem}-XY_bins.tiff").exists():
+                    export_inferred_organelle(XY_bins_img.astype(np.uint16), "XY_bins", meta_dict, dist_bins_path)
+                else:
+                    warnings.warn(f"The XY distribution bins images already exist for {meta_dict['file_name'].stem} in {dist_bins_path}. They will not be overwritten.", UserWarning)
+
+                if not Path(dist_bins_path / f"{img_f.stem}-XY_wedges.tiff").exists():
+                    export_inferred_organelle(XY_wedges_img.astype(np.uint16), "XY_wedges", meta_dict, dist_bins_path)
+                else:
+                    warnings.warn(f"The XY distribution wedges images already exist for {meta_dict['file_name'].stem} in {dist_bins_path}. They will not be overwritten.", UserWarning)
 
             end2 = time.time()
             print(f"Completed distribution quantification of {meta_dict['file_name']} in {(end2-img_start)/60} mins.")

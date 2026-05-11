@@ -235,6 +235,8 @@ def get_org_morphology(source_file_path: str,
         List of 3D region segmentation arrays matching the order specified in list_region_names. Specify None if no regions are provided.
     mask_name: Union[str, None]
         Name of the region to use as the mask for analysis; if not specified, the entire image will be quantified.
+        The mask_name should match one of the names provided in list_region_names. This object will be used to mask
+        all other objects before quantitative analysis is performed. It will also be included as one of the analyzed objects.
     scale: Union[tuple,None] = None
         a tuple that contains the real world dimensions for each dimension in the image (Z, Y, X)
 

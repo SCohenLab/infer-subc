@@ -403,7 +403,7 @@ def batch_process_quantification(dataset_name: str,
                         # save the degree image
                         if export_inter_degree_imgs:
                             if not (Path(int_degree_img_path)/f"{img_f.name}-interactions_degree.tiff").exists():
-                                export_inferred_organelle(int_degree_img, "interactions_degree", meta_dict, int_degree_img_path)
+                                export_inferred_organelle(int_degree_img.astype(np.uint16), "interactions_degree", meta_dict, int_degree_img_path)
                             else:
                                 warnings.warn(f"The {img_f.name}-interactions_degree.tiff image already exists in {int_degree_img_path}. It will not be overwritten.")
                     del int_degree_tab  # free up memory

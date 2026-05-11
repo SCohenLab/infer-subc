@@ -411,7 +411,9 @@ def get_interaction_metrics(source_file_path: str,
                              dist_num_bins: Union[int, None]=5,
                              dist_center_on: Union[bool, None]=False,
                              dist_keep_center_as_bin: Union[bool, None]=True,
-                             dist_zernike_degrees: Union[int, None]=9) -> tuple[dict, pd.DataFrame, Union[pd.DataFrame, None], Union[np.ndarray, None], Union[pd.DataFrame, None]]:
+                             dist_zernike_degrees: Union[int, None]=9) -> tuple[dict, pd.DataFrame, Union[pd.DataFrame, None], 
+                                                                                Union[np.ndarray, None], Union[pd.DataFrame, None], 
+                                                                                Union[np.ndarray, None], Union[np.ndarray, None]]:
    
     """
     Quantify organelle interaction metrics including morphology, distribution, and degree of interactions for a image or region
@@ -610,6 +612,8 @@ def get_interaction_metrics(source_file_path: str,
         dist_final_combo.insert(loc=0,column='image_name',value=source_file_path.stem)
     else:
         dist_final_combo = None
+        XY_bins_imgs = [None]
+        XY_wedges_imgs = [None]
 
     if include_inter_degrees:
         degree_img, degree_tab = create_interaction_degrees(org_name_list=list_obj_names,
@@ -624,7 +628,7 @@ def get_interaction_metrics(source_file_path: str,
         degree_img = None
         degree_tab = None
         
-    return inter_sites, morph_final_combo, dist_final_combo, degree_img, degree_tab
+    return inter_sites, morph_final_combo, dist_final_combo, degree_img, degree_tab, XY_bins_imgs[0], XY_wedges_imgs[0] 
 
 
 
@@ -650,7 +654,8 @@ def batch_process_interactions_quant(dataset_name: str,
                                       dist_keep_center_as_bin: Union[bool, None]=True,
                                       dist_zernike_degrees: Union[int, None]=9,
                                       export_inter_degree_imgs:bool=True,
-                                      export_interaction_sites:bool=True):
+                                      export_interaction_sites:bool=True,
+                                      export_distribution_bins_imgs:bool=True) -> None:
     """
     Batch process interaction quantification for a single dataset (e.g., images collected on the same data). 
     Morphology, distribution, and degree of interaction metrics analysis are all optionally available. 
@@ -715,6 +720,8 @@ def batch_process_interactions_quant(dataset_name: str,
         Whether to export interaction degree images
     export_interaction_sites : bool
         Whether to export interaction site images (including interaction site objects across the entire image; not masked)
+    export_distribution_bins_imgs : bool
+        Whether to export the XY distribution bins and wedges images
 
     Returns:
     --------
@@ -762,9 +769,9 @@ def batch_process_interactions_quant(dataset_name: str,
     else:
         existing_keys = existing_morpho_keys.intersection(existing_dist_keys).intersection(existing_int_degree_keys)
 
-    int_degree_img_path = quant_path / f"{dataset_name}-interaction_degree_images"
-    interaction_sites_path = quant_path / f"{dataset_name}-interaction_site_segmentations"
-
+    int_degree_img_path = quant_path / f"{dataset_name}-interaction_degree_images" if export_inter_degree_imgs else None
+    interaction_sites_path = quant_path / f"{dataset_name}-interaction_site_segmentations" if export_interaction_sites else None
+    dist_bins_path = quant_path / f"{dataset_name}-distribution_bins_imgs" if export_distribution_bins_imgs else None
 
     # list of organelle segmentation and masks files to collect from each image
     segs_to_collect = organelle_names + region_names if region_names is not None else organelle_names
@@ -812,7 +819,7 @@ def batch_process_interactions_quant(dataset_name: str,
             else:
                 scale_tup = None
 
-            inter_dict, morph_tab, dist_tab, int_degree_img, int_degree_tab = get_interaction_metrics(source_file_path=img_f,
+            inter_dict, morph_tab, dist_tab, int_degree_img, int_degree_tab, XY_bins, XY_wedges = get_interaction_metrics(source_file_path=img_f,
                                                                                                     list_obj_names=organelle_names,
                                                                                                     list_obj_segs=organelles,
                                                                                                     list_intensity_img=intensities,
@@ -858,7 +865,21 @@ def batch_process_interactions_quant(dataset_name: str,
                     dist_tab = dist_tab.astype(str)  # ensure all data is string to avoid dtype issues
                     dist_tab.insert(loc=0,column='dataset',value=dataset_name)
                     append_atomic_csv(dist_tab_path, dist_tab)
+
+                    if export_distribution_bins_imgs:
+                        # export XY bins and wedges as images
+                        if not Path(dist_bins_path / f"{img_f.stem}-XY_bins.tiff").exists():
+                            export_inferred_organelle(XY_bins.astype(np.uint16), "XY_bins", meta_dict, dist_bins_path)
+                        else:
+                            warnings.warn(f"The XY distribution bins images already exist for {meta_dict['file_name'].stem} in {dist_bins_path}. They will not be overwritten.", UserWarning)
+
+                        if not Path(dist_bins_path / f"{img_f.stem}-XY_wedges.tiff").exists():
+                            export_inferred_organelle(XY_wedges.astype(np.uint16), "XY_wedges", meta_dict, dist_bins_path)
+                        else:
+                            warnings.warn(f"The XY distribution wedges images already exist for {meta_dict['file_name'].stem} in {dist_bins_path}. They will not be overwritten.", UserWarning)
             del dist_tab  # free up memory
+            del XY_bins  # free up memory
+            del XY_wedges  # free up memory
 
             # save the degree table data per image directly to csv
             if include_inter_degrees:
@@ -870,21 +891,22 @@ def batch_process_interactions_quant(dataset_name: str,
 
                 # save the degree image
                 if export_inter_degree_imgs:
-                    if not (Path(int_degree_img_path)/f"{meta_dict['file_name'].stem}-interactions_degree.tiff").exists():
-                        export_inferred_organelle(int_degree_img, f"interactions_degree", meta_dict, int_degree_img_path)
+                    if not (Path(int_degree_img_path)/f"{img_f.stem}-interactions_degree.tiff").exists():
+                        export_inferred_organelle(int_degree_img.astype(np.uint16), f"interactions_degree", meta_dict, int_degree_img_path)
                     else:
-                        warnings.warn(f"The {meta_dict['file_name'].stem}-interactions_degree.tiff image already exists in {int_degree_img_path}. It will not be overwritten.")
+                        warnings.warn(f"The {img_f.stem}-interactions_degree.tiff image already exists in {int_degree_img_path}. It will not be overwritten.")
             del int_degree_tab  # free up memory
             del int_degree_img  # free up memory
             
             end2 = time.time()
-            print(f"Completed quantification of {meta_dict['file_name']} in {(end2-img_start)/60} mins.")
+            print(f"Completed quantification of {img_f.name} in {(end2-img_start)/60} mins.")
             print(f"{count}/{len_file_list} images have been processed.")
             print(f"Time elapsed: {(end2-img_start)/60} mins")
 
     batch_end = time.time()
     print(f"Quantification for {count} files is COMPLETE! Files saved to '{quant_path}'.")
     print(f"It took {(batch_end - batch_start)/60} minutes to quantify these files.")
+
 
 
 def perorg_interactions_cnt(interaction_morpho_df:pd.DataFrame, 
