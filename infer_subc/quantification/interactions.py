@@ -80,7 +80,8 @@ def create_overlap(inter_name:str,
 
 def find_inter_labels(overlap_img: np.ndarray,
                        interaction_name: str,
-                       org_dict: dict[str, np.ndarray]) -> pd.DataFrame:
+                       org_dict: dict[str, np.ndarray],
+                       name_splitter: str = "X") -> pd.DataFrame:
     '''
     Identify which organelle IDs are involved in each unique interaction site; 
     the organelle ID numbers are joined by underscores and returned in a table of 
@@ -95,6 +96,9 @@ def find_inter_labels(overlap_img: np.ndarray,
         A string of organelle names separated by the specified splitter.
     org_dict : dict[str:np.ndarray]
         A dictionary of organelle segmentations with organelle names as keys and segmentation image arrays as values.
+    name_splitter : str, optional
+        The character used to split the organelle names in the orgs string, by default "X". 
+        For example, "mitoXlyso" would indicate an interaction between mito and lyso.
         
     Returns
     -------
@@ -109,13 +113,13 @@ def find_inter_labels(overlap_img: np.ndarray,
     props = regionprops_table(overlap_img, properties=['label', 'slice'])
 
     # create a list of the organelle ID numbers involved in each interaction site
-    involved = interaction_name.split("X")
+    involved = interaction_name.split(name_splitter)
     indexes = {'ID': [], 'label': []}
 
     for index, l in enumerate(props["label"]):
         over_inv = []
         for org in involved:
-            volume = overlap_img[props["slice"][index]] 
+            volume = overlap_img[props["slice"][index]]
             lorg = org_dict[org][props["slice"][index]]
             volume = volume==l
             lorg = lorg[volume]                                 
@@ -130,6 +134,7 @@ def find_inter_labels(overlap_img: np.ndarray,
     inter_tab.insert(0, 'object', interaction_name, True)
     
     return inter_tab
+
 
 def assess_if_higher_order_int(site: np.ndarray,
                                 site_name: str,

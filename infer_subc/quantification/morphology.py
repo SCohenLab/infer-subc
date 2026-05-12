@@ -101,7 +101,9 @@ def get_morphology_metrics(segmentation_img: np.ndarray,
     -----------------------
     'standard_deviation_intensity',
     'surface_area',
-    'SA_to_volume_ratio`
+    'SA_to_volume_ratio',
+    'sum_intensity',
+    'mask_volume'
 
 
     Returns
@@ -121,7 +123,7 @@ def get_morphology_metrics(segmentation_img: np.ndarray,
     elif mask is None and mask_name is None:
         input_labels = segmentation_img
         mask_name = "whole_image"
-    else:
+    elif mask is not None and mask_name is not None:
         input_labels = apply_mask(segmentation_img, mask)
 
     ##########################################
@@ -147,7 +149,7 @@ def get_morphology_metrics(segmentation_img: np.ndarray,
 
     if intensity_img is not None:
         if channel_axis == len(scale):
-            pass
+            intensity_img = intensity_img
         else:
             intensity_img = np.moveaxis(intensity_img, channel_axis, -1)
 
@@ -161,7 +163,10 @@ def get_morphology_metrics(segmentation_img: np.ndarray,
                            spacing=scale)
     
     # measure the mask volume as well for easier normalization in downstream functions
-    mask_vol = regionprops_table(mask,properties=["area"], spacing=scale)['area'][0]
+    if mask is not None:
+        mask_vol = regionprops_table(mask,properties=["area"], spacing=scale)['area'][0]
+    else:
+        mask_vol = regionprops_table(np.ones_like(segmentation_img),properties=["area"], spacing=scale)['area'][0]
 
     props_table = pd.DataFrame(props)
 
@@ -185,6 +190,10 @@ def get_morphology_metrics(segmentation_img: np.ndarray,
     props_table.insert(props_table.columns.get_loc('volume') + 1, "surface_area", surface_area_tab)
     props_table.insert(props_table.columns.get_loc('surface_area') + 1, "SA_to_volume_ratio", props_table["surface_area"].div(props_table["volume"]))
     props_table.insert(0, column="mask_name", value=mask_name)
+
+    for col in [c for c in props_table.columns if "mean_intensity" in c]:
+        props_table[f"sum_intensity-{col.split('-')[-1]}"] = props_table[col] * props_table["volume"]
+
     props_table[f"{mask_name}_volume"] = mask_vol
 
     for col in [c for c in props_table.columns if "intensity" in c]:
@@ -507,7 +516,7 @@ def batch_org_morph_summary_stats(csv_path_list: List[str],
     # summary stat group
     ###################
     group_by = ['dataset', 'image_name', 'mask_name', 'scale', 'object']
-    sharedcolumns = ["SA_to_volume_ratio", "equivalent_diameter", "extent", "euler_number", "solidity", "axis_major_length"]
+    sharedcolumns = ["SA_to_volume_ratio", "equivalent_diameter", "extent", "euler_number", "solidity", "axis_major_length"] + list(org_df.filter(regex=".*intensity.*").columns)
     ag_func_standard = ['mean', 'median', 'std']
 
     ###################

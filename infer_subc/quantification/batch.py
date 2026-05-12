@@ -57,7 +57,7 @@ def batch_process_quantification(dataset_name: str,
                                 dist_center_on: Union[bool, None]=False,
                                 dist_keep_center_as_bin: Union[bool, None]=True,
                                 dist_zernike_degrees: Union[int, None]=9,
-):
+                                export_dist_bins_imgs: bool = True):
     """
     Batch process interaction quantification for a single dataset (e.g., images collected on the same data). 
     Morphology, distribution, and degree of interaction metrics analysis are all optionally available. 
@@ -141,7 +141,10 @@ def batch_process_quantification(dataset_name: str,
         Zernike polynomial degree for shape analysis in the XY distribution analysis. If None and include_inter_dist=True or include_org_dist=True, 
         no Zernike features will be calculated. 
         This setting is used in both the interaction site and organelle distribution analysis.
-
+    export_dist_bins_imgs : bool, default=True
+        Whether to export images of the distribution bins used in the distribution analysis. These images will be exported into a new directory: 
+        quant_path / f"{dataset_name}-distribution_bins_imgs". 
+        If not specified, the default is True.
 
     Returns:
     --------
@@ -213,7 +216,7 @@ def batch_process_quantification(dataset_name: str,
     # Define export paths for interactions outputs
     int_degree_img_path = quant_path / f"{dataset_name}-interaction_degree_images" if export_inter_degree_imgs else None
     interaction_sites_path = quant_path / f"{dataset_name}-interaction_site_segmentations" if export_interaction_sites else None
-
+    dist_bins_path = quant_path / f"{dataset_name}-distribution_bins_imgs" if export_dist_bins_imgs else None
 
     #####
     # create a combined list segmentation images to collect for each image
@@ -329,7 +332,7 @@ def batch_process_quantification(dataset_name: str,
                 if (dataset_name, img_f.stem) in existing_inter_keys:
                     print(f"Skipping interactions analysis for {img_f.name} as it is already listed in all of the interactions output file(s).")
                 else:
-                    inter_dict, inter_morph_tab, inter_dist_tab, int_degree_img, int_degree_tab = get_interaction_metrics(source_file_path=img_f,
+                    inter_dict, inter_morph_tab, inter_dist_tab, int_degree_img, int_degree_tab, XY_bins, XY_wedges = get_interaction_metrics(source_file_path=img_f,
                                                                                                                         list_obj_names=organelle_names,
                                                                                                                         list_obj_segs=organelles,
                                                                                                                         list_intensity_img=intensities,
@@ -339,7 +342,7 @@ def batch_process_quantification(dataset_name: str,
                                                                                                                         splitter=int_splitter,
                                                                                                                         scale=scale,
                                                                                                                         include_morpho=include_inter_morpho,
-                                                                                                                        include_interaction_degrees=include_inter_degrees,
+                                                                                                                        include_inter_degrees=include_inter_degrees,
                                                                                                                         include_dist=include_inter_dist, 
                                                                                                                         dist_centering_obj=dist_centering_obj,
                                                                                                                         dist_num_bins=dist_num_bins,
@@ -389,7 +392,21 @@ def batch_process_quantification(dataset_name: str,
                             inter_dist_tab = inter_dist_tab.astype(str)  # ensure all data is string to avoid dtype issues
                             inter_dist_tab.insert(loc=0,column='dataset',value=dataset_name)
                             append_atomic_csv(quant_path / analyses_config['inter_dist'][1], inter_dist_tab)
+
+                            if export_dist_bins_imgs:
+                                # export XY bins and wedges as images
+                                if not Path(dist_bins_path / f"{img_f.stem}-XY_bins.tiff").exists():
+                                    export_inferred_organelle(XY_bins.astype(np.uint16), "XY_bins", meta_dict, dist_bins_path)
+                                else:
+                                    warnings.warn(f"The XY distribution bins images already exist for {img_f.stem} in {dist_bins_path}. They will not be overwritten.", UserWarning)
+
+                                if not Path(dist_bins_path / f"{img_f.stem}-XY_wedges.tiff").exists():
+                                    export_inferred_organelle(XY_wedges.astype(np.uint16), "XY_wedges", meta_dict, dist_bins_path)
+                                else:
+                                    warnings.warn(f"The XY distribution wedges images already exist for {img_f.stem} in {dist_bins_path}. They will not be overwritten.", UserWarning)
                     del inter_dist_tab  # free up memory
+                    del XY_bins  # free up memory
+                    del XY_wedges  # free up memory
 
                     # save the degree table data per image directly to csv
                     if include_inter_degrees:
@@ -414,18 +431,18 @@ def batch_process_quantification(dataset_name: str,
                 if (dataset_name, img_f.stem) in existing_keys_dict['org_dist']:
                     print(f"Skipping organelle distribution analysis for {img_f.name} as it is already listed in the output file(s).")
                 else:
-                    dist_tab = get_distribution_metrics(source_file_path=img_f,
-                                                        list_obj_names=organelle_names,
-                                                        list_obj_segs=organelles, 
-                                                        list_region_names=region_names,
-                                                        list_region_segs=regions, 
-                                                        mask_name=mask_name,
-                                                        scale=scale,
-                                                        centering_obj=dist_centering_obj,
-                                                        num_bins=dist_num_bins,
-                                                        center_on=dist_center_on,
-                                                        keep_center_as_bin=dist_keep_center_as_bin,
-                                                        zernike_degrees=dist_zernike_degrees)
+                    dist_tab, XY_bins_img, XY_wedges_img = get_distribution_metrics(source_file_path=img_f,
+                                                                                    list_obj_names=organelle_names,
+                                                                                    list_obj_segs=organelles, 
+                                                                                    list_region_names=region_names,
+                                                                                    list_region_segs=regions, 
+                                                                                    mask_name=mask_name,
+                                                                                    scale=scale,
+                                                                                    centering_obj=dist_centering_obj,
+                                                                                    num_bins=dist_num_bins,
+                                                                                    center_on=dist_center_on,
+                                                                                    keep_center_as_bin=dist_keep_center_as_bin,
+                                                                                    zernike_degrees=dist_zernike_degrees)
                     
                     dist_tab = dist_tab.astype(str)  # ensure all data is string to avoid dtype issues
 
@@ -433,6 +450,18 @@ def batch_process_quantification(dataset_name: str,
                     dist_tab.insert(loc=0,column='dataset',value=dataset_name)
                     append_atomic_csv(quant_path / analyses_config['org_dist'][1], dist_tab)
                     del dist_tab  # free up memory
+
+                    if export_dist_bins_imgs and not include_inter_dist:  # only export distribution bins images here if interaction distribution analysis is not included, as the same distribution bins images will be used for both analyses
+                        # export XY bins and wedges as images
+                        if not Path(dist_bins_path / f"{img_f.stem}-XY_bins.tiff").exists():
+                            export_inferred_organelle(XY_bins_img.astype(np.uint16), "XY_bins", meta_dict, dist_bins_path)
+                        else:
+                            warnings.warn(f"The XY distribution bins images already exist for {img_f.stem} in {dist_bins_path}. They will not be overwritten.", UserWarning)
+
+                        if not Path(dist_bins_path / f"{img_f.stem}-XY_wedges.tiff").exists():
+                            export_inferred_organelle(XY_wedges_img.astype(np.uint16), "XY_wedges", meta_dict, dist_bins_path)
+                        else:
+                            warnings.warn(f"The XY distribution wedges images already exist for {img_f.stem} in {dist_bins_path}. They will not be overwritten.", UserWarning)
 
             # end timer for single image
             end2 = time.time()
@@ -580,7 +609,7 @@ def batch_process_summarystats(out_prefix: str,
     if org_morpho_df is not None:
         # summary stat group
         org_group_by = ['dataset', 'image_name', 'mask_name', 'scale', 'object']
-        org_sharedcolumns = ["SA_to_volume_ratio", "equivalent_diameter", "extent", "euler_number", "solidity", "axis_major_length"] + list(regions_df.filter(regex=".*intensity.*").columns)
+        org_sharedcolumns = ["SA_to_volume_ratio", "equivalent_diameter", "extent", "euler_number", "solidity", "axis_major_length"] + list(org_morpho_df.filter(regex=".*intensity.*").columns)
         org_ag_func_standard = ['mean', 'median', 'std']
 
         # summarize shared measurements between org_df and contacts_df

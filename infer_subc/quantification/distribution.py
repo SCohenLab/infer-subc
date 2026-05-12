@@ -614,10 +614,10 @@ def get_XY_distribution(obj:np.ndarray,
         the name or nickname for the obj being measured; this will appear as a column in the output datasheet
     centering_obj: np.ndarray
         a binary 3D (ZYX) np.ndarray of the object that will be used as the center of the concentric rings ("bins")
-    mask: np.ndarray,
-        a binary 3D (ZYX) np.ndarray of the area that will be measured from
+    mask: np.ndarray
+        a binary 3D (ZYX) np.ndarray of the area that will be measured from; if None, the whole image will be used as the mask
     mask_name: str
-        the name or nickname for the mask object; this name will appear in the metrics output
+        the name or nickname for the mask object; this name will appear in the metrics output; if None, "whole_image" will be used as the mask name in the metrics output
     scale: Union[tuple, None]=None
         a tuple that contains the real world dimensions for each dimension in the image (Z, Y, X)
     num_bins: Union[int,None] = None
@@ -1061,9 +1061,6 @@ def batch_process_distribution_quant(dataset_name: str,
             if export_distribution_bins_imgs:
                 # location to save distribution bins images
                 dist_bins_path = quant_path / f"{dataset_name}-distribution_bins_imgs"
-                if not Path.exists(dist_bins_path):
-                    Path.mkdir(dist_bins_path)
-                    print(f"Making {dist_bins_path} to save distribution bins images.")
 
                 # export XY bins and wedges as images
                 if not Path(dist_bins_path / f"{img_f.stem}-XY_bins.tiff").exists():
