@@ -44,7 +44,7 @@ git clone https://github.com/SCohenLab/infer-subc.git
 >
 > We have used the following file formats as input in both the Napari plugin and the Jupyter notebooks during development and testing of `infer-subc`:
 > 
-> - Single or multi-channel ".tiff"/".tif" or ".czi" files
+> - Multi-channel ".tiff"/".tif" or ".czi" files
 > - 3D (Z-stack) images
 > - Ideal dimension order: CZYX
 
@@ -129,7 +129,7 @@ git clone https://github.com/SCohenLab/infer-subc.git
 
 > ***NOTE**: Proceed to the Organelle Quantification section below if you have already created instance segmentations of organelles and/or subcellular regions you plan to include in quantification.*
 
-The starting point for the `infer-subc` analysis pipeline is to perform instance segmentation on single or multichannel confocal microscopy images, where each channel labels a different intracellular organelle (or structure). In the infer-subc segmentation workflows included in Part 1, each organelle will be segmented from a *single* intensity channel from the input microscopy image. 
+The starting point for the `infer-subc` analysis pipeline is to perform instance segmentation on multichannel confocal microscopy images, where each channel labels a different intracellular organelle (or structure). In the infer-subc segmentation workflows included in Part 1, each organelle will be segmented from a *single* intensity channel from the input microscopy image. 
 
 Subcellular regions of interest, including the cell mask, nucleus, soma, and neurites, can be segemented to include region-specific quantitative analysis in Part 2 (see more below).
 
@@ -153,7 +153,7 @@ We recommend our `infer-subc` implementation for Napari called [`organelle-segme
 
 The installation of the `organelle-segmenter-plugin` package is required for this method (see setup instructions above).
 
-1. Open Napari. Then drag-and-drop or use the `File` > `Open File(s)...` controls to open a <mark>single-</mark> or multi-channel confocal microscopy image. This image will be used to test the segmentation settings you want to apply during batch processing.
+1. Open Napari. Then drag-and-drop or use the `File` > `Open File(s)...` controls to open a multi-channel confocal microscopy image. This image will be used to test the segmentation settings you want to apply during batch processing.
 2. Start the plugin by navigating to `Plugin` > `Infer sub-Cellular Object Npe2 plugin` > `Workflow editor`. The Workflow Editor will appear as a new right-side panel.
 3. In the Workflow Editor, select the image you uploaded from the dropdown list. 
 4. Select the workflow corresponding to your first desired organelle or subcellular region.
@@ -202,7 +202,7 @@ This notebook also ensures your data meet several assumptions necessary for quan
 
 ## 🧮📐 Organelle Quantification 
 
-After all organelles and subcellular regions are segmented and quality checked, <mark>single</mark> or multi-organelle analysis can be carried out using Jupyter Notebook-based pipeline(s). There are two main analysis approaches you can utilize:
+After all organelles and subcellular regions are segmented and quality checked, multi-organelle analysis can be carried out using Jupyter Notebook-based pipeline(s). There are two main analysis approaches you can utilize:
 
 **1. Individual analysis pipelines:**
 
