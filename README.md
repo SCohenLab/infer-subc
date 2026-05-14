@@ -19,11 +19,9 @@
 ## ⚙️ Setup 
 `infer-subc` and the companion segmentation plugin `organelle-segmenter-plugin` for [Napari](https://napari.org/) are available via `PyPI`. Install the packages as follows: 
 
-<mark> THE PIP STATMENTS NEED TO BE UPDATED BELOW </MARK>
-
 ```
-pip install infer-subc-main
-pip install infer-subc-plugin
+pip install infer-subc
+pip install infer-subc
 ```
 
 We recommend installing and using these packages in a Python environment (e.g., conda). A list of setup steps are included in [env_create.sh](./env_create.sh).
@@ -225,7 +223,7 @@ The [organelle_signature_analysis](./notebooks/part_2_quantification/organelle_s
 
 
 # Additional Information
-## Built With <mark> include more info on the custom packages & link to their licenses??
+## Built With
 A quick note on the tools and resources used...
 
 - [`aicssegmentation`](https://github.com/AllenCell/aics-segmentation) [©️](https://github.com/AllenCell/aics-segmentation/blob/main/LICENSE) -- Advanced segmentation functions created as part of the 'classic' analysis workflows
@@ -264,4 +262,5 @@ Distributed under the terms of the [BSD-3](/infer-subc/LICENSE) license.
 1. Shannon N. Rhoads, Weizhen Dong, Chih-Hsuan Hsu, Ngudiankama R. Mfulama, Joey V. Ragusa, Michael Ye, Andy Henrie, Maria Clara Zanellati, Graham H. Diering, Todd J. Cohen, Sarah Cohen. *Neurons and astrocytes have distinct organelle signatures and responses to stress.* bioRxiv 2024.10.30.621066; doi: https://doi.org/10.1101/2024.10.30.621066
 2. Zanellati MC, Coman Z, Bhowmik D, Hsu CH, Basundra R, Rhoads SN, Mfulama NR, Ehrmann BM, Deshmukh M, Cohen S. Organelle communication networks rewire to support lipid metabolism during neuronal differentiation. bioRxiv [Preprint]. 2026 Mar 7:2026.02.10.704675. PMID: 41726917; PMCID: PMC12919030. doi: https://doi.org/10.64898/2026.02.10.704675 
 3. Hsu CH, Kinrade AJ, Zanellati MC, Cohen S. Tubulin acetylation governs organelle remodeling and lysosomal reformation during neuronal differentiation. bioRxiv [Preprint]. 2026 Feb 14:2026.02.13.705749. PMID: 41726912; PMCID: PMC12918986. doi: https://doi.org/10.64898/2026.02.13.705749 
+4. Hsu CH, Kinrade AJ, Cohen S. Tubulin polyglutamylation modulates Golgi morphodynamics and neurite branching during neuronal morphogenesis. bioRxiv [Preprint]. 2026 Apr 14:2026.04.13.718193. PMID: 42039652; PMCID: PMC13105029. doi: https://doi.org/10.64898/2026.04.13.718193 
 
