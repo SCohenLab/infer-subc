@@ -2417,6 +2417,51 @@
             }
         }
     },
+    "double_watershed_closing_stack": {
+        "name": "Watershed for cellmask",
+        "python::module": "infer_subc.organelles.membrane",
+        "python::function": "double_watershed_stack",
+        "parameters": {
+            "Watershed_Method": {
+                "widget_type": "drop-down",
+                "data_type": "str",
+                "options": [
+                    "3D",
+                    "slice-by-slice"
+                ]
+            },
+            "Min_Hole_Width": {
+                "data_type": "int",
+                "increment": 1,
+                "max": 10000,
+                "min": 0,
+                "widget_type": "slider"
+            },
+            "Max_Hole_Width": {
+                "data_type": "int",
+                "increment": 1,
+                "max": 10000,
+                "min": 4,
+                "widget_type": "slider"
+            },
+            "Method": {
+                "widget_type": "drop-down",
+                "data_type":"str",
+                "options": [
+                    "Ball",
+                    "Disk",
+                    "None"
+                ]
+            },
+            "Size": {
+                "widget_type": "slider",
+                "data_type": "int",
+                "min": 0,
+                "max": 25,
+                "increment": 1
+            }
+        }
+    },
     "invert_pm_watershed":{
         "name": "Watershed for cellmask",
         "python::module": "infer_subc.organelles.membrane",

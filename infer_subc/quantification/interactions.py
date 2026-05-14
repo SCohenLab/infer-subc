@@ -13,7 +13,7 @@ from infer_subc.quantification.stats import *
 from infer_subc.quantification.stats_helpers import *
 from infer_subc.organelles import * 
 from infer_subc.quantification.morphology import get_morphology_metrics
-from infer_subc.quantification.batch import load_existing_keys_csv, append_atomic_csv
+from infer_subc.quantification.csv_io import load_existing_keys_csv, append_atomic_csv
 from infer_subc.core.file_io import export_inferred_organelle
 
 
@@ -80,7 +80,8 @@ def create_overlap(inter_name:str,
 
 def find_inter_labels(overlap_img: np.ndarray,
                        interaction_name: str,
-                       org_dict: dict[str, np.ndarray]) -> pd.DataFrame:
+                       org_dict: dict[str, np.ndarray],
+                       name_splitter: str = "X") -> pd.DataFrame:
     '''
     Identify which organelle IDs are involved in each unique interaction site; 
     the organelle ID numbers are joined by underscores and returned in a table of 
@@ -95,6 +96,9 @@ def find_inter_labels(overlap_img: np.ndarray,
         A string of organelle names separated by the specified splitter.
     org_dict : dict[str:np.ndarray]
         A dictionary of organelle segmentations with organelle names as keys and segmentation image arrays as values.
+    name_splitter : str, optional
+        The character used to split the organelle names in the orgs string, by default "X". 
+        For example, "mitoXlyso" would indicate an interaction between mito and lyso.
         
     Returns
     -------
@@ -109,13 +113,13 @@ def find_inter_labels(overlap_img: np.ndarray,
     props = regionprops_table(overlap_img, properties=['label', 'slice'])
 
     # create a list of the organelle ID numbers involved in each interaction site
-    involved = interaction_name.split("X")
+    involved = interaction_name.split(name_splitter)
     indexes = {'ID': [], 'label': []}
 
     for index, l in enumerate(props["label"]):
         over_inv = []
         for org in involved:
-            volume = overlap_img[props["slice"][index]] 
+            volume = overlap_img[props["slice"][index]]
             lorg = org_dict[org][props["slice"][index]]
             volume = volume==l
             lorg = lorg[volume]                                 
@@ -130,6 +134,7 @@ def find_inter_labels(overlap_img: np.ndarray,
     inter_tab.insert(0, 'object', interaction_name, True)
     
     return inter_tab
+
 
 def assess_if_higher_order_int(site: np.ndarray,
                                 site_name: str,
@@ -202,7 +207,7 @@ def create_interaction_sites(interaction_orgs: List[str],
                               org_seg_list: List[np.ndarray],
                               name_splitter: str="X",
                               mask: Union[np.ndarray, None]=None,
-                              mask_name: Union[str, None]=None) -> tuple[np.ndarray, pd.DataFrame]:
+                              mask_name: Union[str, None]=None) -> tuple[np.ndarray, np.ndarray, pd.DataFrame]:
     
     '''
     Create an image of the overlap regions between the selected organelles and a table of unique identifiers 
@@ -405,13 +410,15 @@ def get_interaction_metrics(source_file_path: str,
                              scale: Union[tuple, None]=None,
                              splitter: str="X",
                              include_morpho:bool=True,
-                             include_interaction_degrees:bool=True,
+                             include_inter_degrees:bool=True,
                              include_dist:bool=True, 
                              dist_centering_obj: Union[str, None]=None,
                              dist_num_bins: Union[int, None]=5,
                              dist_center_on: Union[bool, None]=False,
                              dist_keep_center_as_bin: Union[bool, None]=True,
-                             dist_zernike_degrees: Union[int, None]=9) -> Union[dict, pd.DataFrame, pd.DataFrame, np.ndarray, pd.DataFrame]:
+                             dist_zernike_degrees: Union[int, None]=9) -> tuple[dict, pd.DataFrame, Union[pd.DataFrame, None], 
+                                                                                Union[np.ndarray, None], Union[pd.DataFrame, None], 
+                                                                                Union[np.ndarray, None], Union[np.ndarray, None]]:
    
     """
     Quantify organelle interaction metrics including morphology, distribution, and degree of interactions for a image or region
@@ -453,7 +460,7 @@ def get_interaction_metrics(source_file_path: str,
         Whether to compute morphology metrics for each interaction site.
     channel_axis : int, default=0
         The index of the channel dimension axis in the intensity image.
-    include_interaction_degrees : bool, default=True
+    include_inter_degrees : bool, default=True
         Whether to compute interaction degree analysis for the entire image or mask region.
     include_dist : bool, default=True
         Whether to compute distribution metrics for the each interaction site type.
@@ -483,9 +490,9 @@ def get_interaction_metrics(source_file_path: str,
     dist_final_combo : pd.DataFrame or None
         XY and Z distribution metrics for each interaction site (if include_dist=True)
     degree_img : np.ndarray or None
-        Degree of interactions image (if include_interaction_degrees=True)
+        Degree of interactions image (if include_inter_degrees=True)
     degree_tab : pd.DataFrame or None
-        Degree of interactions table (if include_interaction_degrees=True)
+        Degree of interactions table (if include_inter_degrees=True)
     """
 
     # Validate inputs
@@ -511,7 +518,8 @@ def get_interaction_metrics(source_file_path: str,
         mask = None
         mask_name = None
     else:
-        mask = list_region_segs[list_region_names.index(mask_name)]
+        mask = (list_region_segs[list_region_names.index(mask_name)] > 0).astype(int) # ensure mask is binary and integer type for later multiplication with segmentation images
+        print(f"Mask '{mask_name}' will be applied before analysis.")
 
     # list all possible interaction site types based on the org_file_names list specified above
     possib_int_types = all_combos(list_obj_names, splitter)
@@ -574,7 +582,6 @@ def get_interaction_metrics(source_file_path: str,
         morph_combo_tabs.append(inter_tab)
 
         # measure interaction site distibutions
-        #### TODO: UPDATE CODE ONCE RENE IS DONE ####
         if include_dist:
             XY_distribution, XY_bins, XY_wedges = get_XY_distribution(mask=mask,
                                                                       mask_name=mask_name,
@@ -610,8 +617,10 @@ def get_interaction_metrics(source_file_path: str,
         dist_final_combo.insert(loc=0,column='image_name',value=source_file_path.stem)
     else:
         dist_final_combo = None
+        XY_bins_imgs = [None]
+        XY_wedges_imgs = [None]
 
-    if include_interaction_degrees:
+    if include_inter_degrees:
         degree_img, degree_tab = create_interaction_degrees(org_name_list=list_obj_names,
                                                             org_seg_list=list_obj_segs,
                                                             mask=mask,
@@ -624,7 +633,7 @@ def get_interaction_metrics(source_file_path: str,
         degree_img = None
         degree_tab = None
         
-    return inter_sites, morph_final_combo, dist_final_combo, degree_img, degree_tab
+    return inter_sites, morph_final_combo, dist_final_combo, degree_img, degree_tab, XY_bins_imgs[0], XY_wedges_imgs[0] 
 
 
 
@@ -642,7 +651,7 @@ def batch_process_interactions_quant(dataset_name: str,
                                       seg_suffix:Union[str, None]=None,
                                       int_splitter:str="X",
                                       include_morpho:bool=True,
-                                      include_interaction_degrees:bool=True,
+                                      include_inter_degrees:bool=True,
                                       include_dist:bool=True, 
                                       dist_centering_obj: Union[str, None]=None,
                                       dist_num_bins: Union[int, None]=5,
@@ -650,7 +659,8 @@ def batch_process_interactions_quant(dataset_name: str,
                                       dist_keep_center_as_bin: Union[bool, None]=True,
                                       dist_zernike_degrees: Union[int, None]=9,
                                       export_inter_degree_imgs:bool=True,
-                                      export_interaction_sites:bool=True):
+                                      export_interaction_sites:bool=True,
+                                      export_distribution_bins_imgs:bool=True) -> None:
     """
     Batch process interaction quantification for a single dataset (e.g., images collected on the same data). 
     Morphology, distribution, and degree of interaction metrics analysis are all optionally available. 
@@ -694,7 +704,7 @@ def batch_process_interactions_quant(dataset_name: str,
         Whether to compute morphology metrics
     include_morpho : bool, default=True
         Whether to compute morphology metrics for each interaction site
-    include_interaction_degrees : bool, default=True
+    include_inter_degrees : bool, default=True
         Whether to compute interaction degree analysis
     include_dist : bool, default=True
         Whether to compute distribution metrics
@@ -715,6 +725,8 @@ def batch_process_interactions_quant(dataset_name: str,
         Whether to export interaction degree images
     export_interaction_sites : bool
         Whether to export interaction site images (including interaction site objects across the entire image; not masked)
+    export_distribution_bins_imgs : bool
+        Whether to export the XY distribution bins and wedges images
 
     Returns:
     --------
@@ -739,20 +751,20 @@ def batch_process_interactions_quant(dataset_name: str,
     unique_keys = ['dataset', 'image_name']
 
     if include_morpho:
-        morpho_tab_path = quant_path / f"{dataset_name}_interactions_morphology_metrics.csv"
+        morpho_tab_path = quant_path / f"{dataset_name}-interactions_morphology_metrics.csv"
         existing_morpho_keys = load_existing_keys_csv(morpho_tab_path, unique_keys)
     elif not include_morpho:
-        morpho_tab_path = quant_path / f"{dataset_name}_interactions_labels.csv"
+        morpho_tab_path = quant_path / f"{dataset_name}-interactions_labels.csv"
         existing_morpho_keys = load_existing_keys_csv(morpho_tab_path, unique_keys)
 
     if include_dist:
-        dist_tab_path = quant_path / f"{dataset_name}_interactions_distribution_metrics.csv"
+        dist_tab_path = quant_path / f"{dataset_name}-interactions_distribution_metrics.csv"
         existing_dist_keys = load_existing_keys_csv(dist_tab_path, unique_keys)
     else:
         existing_dist_keys = set()
 
-    if include_interaction_degrees:
-        int_degree_tab_path = quant_path / f"{dataset_name}_interactions_degree_metrics.csv"
+    if include_inter_degrees:
+        int_degree_tab_path = quant_path / f"{dataset_name}-interactions_degree_metrics.csv"
         existing_int_degree_keys = load_existing_keys_csv(int_degree_tab_path, unique_keys)
     else:
         existing_int_degree_keys = set()
@@ -762,9 +774,9 @@ def batch_process_interactions_quant(dataset_name: str,
     else:
         existing_keys = existing_morpho_keys.intersection(existing_dist_keys).intersection(existing_int_degree_keys)
 
-    int_degree_img_path = quant_path / "interaction_degree_images"
-    interaction_sites_path = quant_path / "interaction_site_segmentations"
-
+    int_degree_img_path = quant_path / f"{dataset_name}-interaction_degree_images" if export_inter_degree_imgs else None
+    interaction_sites_path = quant_path / f"{dataset_name}-interaction_site_segmentations" if export_interaction_sites else None
+    dist_bins_path = quant_path / f"{dataset_name}-distribution_bins_imgs" if export_distribution_bins_imgs else None
 
     # list of organelle segmentation and masks files to collect from each image
     segs_to_collect = organelle_names + region_names if region_names is not None else organelle_names
@@ -812,7 +824,7 @@ def batch_process_interactions_quant(dataset_name: str,
             else:
                 scale_tup = None
 
-            inter_dict, morph_tab, dist_tab, int_degree_img, int_degree_tab = get_interaction_metrics(source_file_path=img_f,
+            inter_dict, morph_tab, dist_tab, int_degree_img, int_degree_tab, XY_bins, XY_wedges = get_interaction_metrics(source_file_path=img_f,
                                                                                                     list_obj_names=organelle_names,
                                                                                                     list_obj_segs=organelles,
                                                                                                     list_intensity_img=intensities,
@@ -822,7 +834,7 @@ def batch_process_interactions_quant(dataset_name: str,
                                                                                                     splitter=int_splitter,
                                                                                                     scale=scale_tup,
                                                                                                     include_morpho=include_morpho,
-                                                                                                    include_interaction_degrees=include_interaction_degrees,
+                                                                                                    include_inter_degrees=include_inter_degrees,
                                                                                                     include_dist=include_dist, 
                                                                                                     dist_centering_obj=dist_centering_obj,
                                                                                                     dist_num_bins=dist_num_bins,
@@ -844,7 +856,7 @@ def batch_process_interactions_quant(dataset_name: str,
                 for inter_name, inter_img in inter_dict.items():
                     inter_site_cnt+=1
                     if not (Path(interaction_sites_path)/f"{meta_dict['file_name'].stem}-{inter_name}.tiff").exists():
-                        export_inferred_organelle(inter_img, f"{inter_name}", meta_dict, interaction_sites_path)
+                        export_inferred_organelle(inter_img.astype(np.uint16), f"{inter_name}", meta_dict, interaction_sites_path)
                     else:
                         if inter_site_cnt<=1:
                             warnings.warn(f"Some of the interaction site images already exist for {meta_dict['file_name'].stem} in {interaction_sites_path}. They will not be overwritten.", UserWarning)
@@ -858,10 +870,24 @@ def batch_process_interactions_quant(dataset_name: str,
                     dist_tab = dist_tab.astype(str)  # ensure all data is string to avoid dtype issues
                     dist_tab.insert(loc=0,column='dataset',value=dataset_name)
                     append_atomic_csv(dist_tab_path, dist_tab)
+
+                    if export_distribution_bins_imgs:
+                        # export XY bins and wedges as images
+                        if not Path(dist_bins_path / f"{img_f.stem}-XY_bins.tiff").exists():
+                            export_inferred_organelle(XY_bins.astype(np.uint16), "XY_bins", meta_dict, dist_bins_path)
+                        else:
+                            warnings.warn(f"The XY distribution bins images already exist for {meta_dict['file_name'].stem} in {dist_bins_path}. They will not be overwritten.", UserWarning)
+
+                        if not Path(dist_bins_path / f"{img_f.stem}-XY_wedges.tiff").exists():
+                            export_inferred_organelle(XY_wedges.astype(np.uint16), "XY_wedges", meta_dict, dist_bins_path)
+                        else:
+                            warnings.warn(f"The XY distribution wedges images already exist for {meta_dict['file_name'].stem} in {dist_bins_path}. They will not be overwritten.", UserWarning)
             del dist_tab  # free up memory
+            del XY_bins  # free up memory
+            del XY_wedges  # free up memory
 
             # save the degree table data per image directly to csv
-            if include_interaction_degrees:
+            if include_inter_degrees:
                 if (dataset_name, img_f.stem) in existing_int_degree_keys:
                     print(f"Skipping interaction degree metrics for {img_f.name} as it is already listed in the output file.")
                 else:
@@ -870,21 +896,22 @@ def batch_process_interactions_quant(dataset_name: str,
 
                 # save the degree image
                 if export_inter_degree_imgs:
-                    if not (Path(int_degree_img_path)/f"{meta_dict['file_name'].stem}-interactions_degree.tiff").exists():
-                        export_inferred_organelle(int_degree_img, f"interactions_degree", meta_dict, int_degree_img_path)
+                    if not (Path(int_degree_img_path)/f"{img_f.stem}-interactions_degree.tiff").exists():
+                        export_inferred_organelle(int_degree_img.astype(np.uint16), f"interactions_degree", meta_dict, int_degree_img_path)
                     else:
-                        warnings.warn(f"The {meta_dict['file_name'].stem}-interactions_degree.tiff image already exists in {int_degree_img_path}. It will not be overwritten.")
+                        warnings.warn(f"The {img_f.stem}-interactions_degree.tiff image already exists in {int_degree_img_path}. It will not be overwritten.")
             del int_degree_tab  # free up memory
             del int_degree_img  # free up memory
             
             end2 = time.time()
-            print(f"Completed quantification of {meta_dict['file_name']} in {(end2-img_start)/60} mins.")
+            print(f"Completed quantification of {img_f.name} in {(end2-img_start)/60} mins.")
             print(f"{count}/{len_file_list} images have been processed.")
             print(f"Time elapsed: {(end2-img_start)/60} mins")
 
     batch_end = time.time()
     print(f"Quantification for {count} files is COMPLETE! Files saved to '{quant_path}'.")
     print(f"It took {(batch_end - batch_start)/60} minutes to quantify these files.")
+
 
 
 def perorg_interactions_cnt(interaction_morpho_df:pd.DataFrame, 
@@ -1031,31 +1058,31 @@ def batch_interactions_summary_stats(out_prefix: str,
         # list all csv files in the location
         files_store = sorted(loc.glob("*.csv"))
 
-        # find the unique datasets in this location based on the prefixes before "_interactions_"
-        prefixes = set(f.name.split("_interactions_")[0] for f in files_store)
+        # find the unique datasets in this location based on the prefixes before "-interactions_"
+        prefixes = set(f.name.split("-interactions_")[0] for f in files_store)
         print(f"Found the following datasets in {loc}:", prefixes)
         for prefix in prefixes:
             ds_count = ds_count + 1
-            files_subset = [f for f in files_store if f.name.startswith(prefix +"_interactions")]
+            files_subset = [f for f in files_store if f.name.startswith(prefix +"-interactions")]
 
             # if both morphology and labels files are present, remove the labels file from the list to be processed
-            if any("_interactions_morphology_metrics.csv" in f.name for f in files_subset) and any("_interactions_labels.csv" in f.name for f in files_subset):
-                    files_subset = [f for f in files_subset if not "_interactions_labels.csv" in f.name]
+            if any("-interactions_morphology_metrics.csv" in f.name for f in files_subset) and any("-interactions_labels.csv" in f.name for f in files_subset):
+                    files_subset = [f for f in files_subset if not "-interactions_labels.csv" in f.name]
 
             for file in files_subset:
                 fl_count = fl_count + 1
                 stem = file.stem
                 
-                if "_interactions_labels" in stem:
+                if "-interactions_labels" in stem:
                     inter_labels = pd.read_csv(file)
                     int_labs.append(inter_labels)
-                elif "_interactions_morphology_metrics" in stem:
+                elif "-interactions_morphology_metrics" in stem:
                     morph = pd.read_csv(file)
                     int_morph.append(morph)
-                elif "_interactions_distribution_metrics" in stem:
+                elif "-interactions_distribution_metrics" in stem:
                     dist = pd.read_csv(file)
                     int_dist.append(dist)
-                elif "_interactions_degree_metrics" in stem:
+                elif "-interactions_degree_metrics" in stem:
                     degree = pd.read_csv(file)
                     int_degree.append(degree)
                 else:
@@ -1070,14 +1097,14 @@ def batch_interactions_summary_stats(out_prefix: str,
     degree_df = pd.concat(int_degree, axis=0, join='outer') if int_degree else None
 
     # list all possible interaction site combinations
-    all_pos = _all_combos(organelle_names, splitter)
+    all_pos = all_combos(organelle_names, splitter)
 
     ################################################
     # Summarize interactions count & morphology data
     ################################################
     if morph_df is not None:
         ### calculate interaction count/volume & summarize per organelle object for all interaction sites
-        per_org_summary = _perorg_interactions_cnt(interaction_morpho_df=morph_df, 
+        per_org_summary = perorg_interactions_cnt(interaction_morpho_df=morph_df, 
                                                    org_list=organelle_names,
                                                    splitter=splitter)
 
@@ -1097,10 +1124,10 @@ def batch_interactions_summary_stats(out_prefix: str,
         org_sum_tab.sort_index(inplace=True)
 
         # export before unstacking
-        if (Path(out_path) / f"{out_prefix}_interaction_count_volume_summarystats.csv").exists():
-            raise FileExistsError(f"CAUTION: {out_prefix}_interaction_count_volume_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+        if (Path(out_path) / f"{out_prefix}-per_inter_count_volume_summarystats.csv").exists():
+            raise FileExistsError(f"CAUTION: {out_prefix}-per_inter_count_volume_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
         else:
-            org_sum_tab.to_csv(str(out_path) + f"/{out_prefix}_interaction_count_volume_summarystats.csv", mode='x')
+            org_sum_tab.to_csv(str(out_path) + f"/{out_prefix}-per_inter_count_volume_summarystats.csv", mode='x')
 
         # unstack and format interaction count/volume summary table
         inter_count_vol_final = org_sum_tab.unstack(-1)
@@ -1166,10 +1193,10 @@ def batch_interactions_summary_stats(out_prefix: str,
         inter_sum_tab.sort_index(inplace=True)
 
         # export before unstacking
-        if (Path(out_path) / f"{out_prefix}_interaction_morphology_summarystats.csv").exists():
-            raise FileExistsError(f"CAUTION: {out_prefix}_interaction_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+        if (Path(out_path) / f"{out_prefix}-per_inter_morphology_summarystats.csv").exists():
+            raise FileExistsError(f"CAUTION: {out_prefix}-per_inter_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
         else:
-            inter_sum_tab.to_csv(str(out_path) + f"/{out_prefix}_interaction_morphology_summarystats.csv", mode='x')
+            inter_sum_tab.to_csv(str(out_path) + f"/{out_prefix}-per_inter_morphology_summarystats.csv", mode='x')
 
         # unstack and format interaction morphology summary table   
         inter_morph_final = inter_sum_tab.unstack(-1)
@@ -1217,10 +1244,10 @@ def batch_interactions_summary_stats(out_prefix: str,
         labs_inter_sum_tab.sort_index(inplace=True)
 
         # export before unstacking
-        if (Path(out_path) / f"{out_prefix}_interaction_labels_summarystats.csv").exists():
-            raise FileExistsError(f"CAUTION: {out_prefix}_interaction_labels_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+        if (Path(out_path) / f"{out_prefix}-per_inter_labels_summarystats.csv").exists():
+            raise FileExistsError(f"CAUTION: {out_prefix}-per_inter_labels_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
         else:
-            labs_inter_sum_tab.to_csv(str(out_path) + f"/{out_prefix}_interaction_labels_summarystats.csv", mode='x')
+            labs_inter_sum_tab.to_csv(str(out_path) + f"/{out_prefix}-per_inter_labels_summarystats.csv", mode='x')
 
         # unstack and format interaction labels summary table
         inter_labels_final = labs_inter_sum_tab.unstack(-1)
@@ -1334,10 +1361,10 @@ def batch_interactions_summary_stats(out_prefix: str,
         dist_summary.reset_index(inplace=True)
 
         # export before unstacking
-        if (Path(out_path) / f"{out_prefix}_interaction_distribution_summarystats.csv").exists():
-            raise FileExistsError(f"CAUTION: {out_prefix}_interaction_distribution_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+        if (Path(out_path) / f"{out_prefix}-per_inter_distribution_summarystats.csv").exists():
+            raise FileExistsError(f"CAUTION: {out_prefix}-per_inter_distribution_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
         else:
-            dist_summary.to_csv(str(out_path) + f"/{out_prefix}_interaction_distribution_summarystats.csv", mode='x')
+            dist_summary.to_csv(str(out_path) + f"/{out_prefix}-per_inter_distribution_summarystats.csv", mode='x')
 
         # unstack and format interaction distribution summary table
         dist_final = dist_summary.set_index(['dataset', 'image_name', 'mask_name', 'scale', 'object']).unstack(-1)
@@ -1368,10 +1395,10 @@ def batch_interactions_summary_stats(out_prefix: str,
     ##########################
     # Export combined results
     ##########################
-    if (Path(out_path) / f"{out_prefix}_combined_summarystats.csv").exists():
-        raise FileExistsError(f"CAUTION: {out_prefix}_combined_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+    if (Path(out_path) / f"{out_prefix}-interactions_combined_summarystats.csv").exists():
+        raise FileExistsError(f"CAUTION: {out_prefix}-interactions_combined_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
     else:
-        final_combo_tab.to_csv(str(out_path) + f"/{out_prefix}_combined_summarystats.csv", mode='x')
+        final_combo_tab.to_csv(str(out_path) + f"/{out_prefix}-interactions_combined_summarystats.csv", mode='x')
 
     print(f"Interactions summary is complete.")
     return final_combo_tab

@@ -18,6 +18,18 @@
         },
         "parent": 0
     },
+    "10": {
+        "category": "postpostprocessing",
+        "function": "double_watershed_closing_stack",
+        "parameter_values": {
+            "Max_Hole_Width": 10000,
+            "Method": "Disk",
+            "Min_Hole_Width": 0,
+            "Size": 15,
+            "Watershed_Method": "3D"
+        },
+        "parent": [7,5,6,8,9]
+    },
     "2": {
         "category": "extraction",
         "function": "membrane_composite",
@@ -122,23 +134,5 @@
             "Small_Obj_Width": 1
         },
         "parent": [7,6]
-    },
-    "10": {
-        "category": "postpostprocessing",
-        "function": "double_watershed_closing",
-        "parameter_values": {
-            "Max_Hole_Width": 10000,
-            "Method": "Disk",
-            "Min_Hole_Width": 0,
-            "Size": 15,
-            "Watershed_Method": "3D"
-        },
-        "parent": [7,5,6,8,9]
-    },
-    "11": {
-        "category": "export",
-        "function": "stack_masks",
-        "parent": [7,10],
-        "annotation": "export  canonical masks (nuc,cellmask)"
     }
 }

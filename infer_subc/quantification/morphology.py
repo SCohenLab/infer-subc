@@ -11,7 +11,7 @@ from infer_subc.core.img import *
 from infer_subc.organelles import * 
 from infer_subc.utils.batch import list_image_files, find_segmentation_tiff_files
 from infer_subc.core.file_io import read_czi_image, read_tiff_image
-from infer_subc.quantification.batch import append_atomic_csv, load_existing_keys_csv
+from infer_subc.quantification.csv_io import append_atomic_csv, load_existing_keys_csv
 
 
 def surface_area_from_props(labels: np.ndarray,
@@ -101,7 +101,9 @@ def get_morphology_metrics(segmentation_img: np.ndarray,
     -----------------------
     'standard_deviation_intensity',
     'surface_area',
-    'SA_to_volume_ratio`
+    'SA_to_volume_ratio',
+    'sum_intensity',
+    'mask_volume'
 
 
     Returns
@@ -121,7 +123,7 @@ def get_morphology_metrics(segmentation_img: np.ndarray,
     elif mask is None and mask_name is None:
         input_labels = segmentation_img
         mask_name = "whole_image"
-    else:
+    elif mask is not None and mask_name is not None:
         input_labels = apply_mask(segmentation_img, mask)
 
     ##########################################
@@ -147,7 +149,7 @@ def get_morphology_metrics(segmentation_img: np.ndarray,
 
     if intensity_img is not None:
         if channel_axis == len(scale):
-            pass
+            intensity_img = intensity_img
         else:
             intensity_img = np.moveaxis(intensity_img, channel_axis, -1)
 
@@ -161,7 +163,10 @@ def get_morphology_metrics(segmentation_img: np.ndarray,
                            spacing=scale)
     
     # measure the mask volume as well for easier normalization in downstream functions
-    mask_vol = regionprops_table(mask,properties=["area"], spacing=scale)['area'][0]
+    if mask is not None:
+        mask_vol = regionprops_table(mask,properties=["area"], spacing=scale)['area'][0]
+    else:
+        mask_vol = regionprops_table(np.ones_like(segmentation_img),properties=["area"], spacing=scale)['area'][0]
 
     props_table = pd.DataFrame(props)
 
@@ -185,6 +190,10 @@ def get_morphology_metrics(segmentation_img: np.ndarray,
     props_table.insert(props_table.columns.get_loc('volume') + 1, "surface_area", surface_area_tab)
     props_table.insert(props_table.columns.get_loc('surface_area') + 1, "SA_to_volume_ratio", props_table["surface_area"].div(props_table["volume"]))
     props_table.insert(0, column="mask_name", value=mask_name)
+
+    for col in [c for c in props_table.columns if "mean_intensity" in c]:
+        props_table[f"sum_intensity-{col.split('-')[-1]}"] = props_table[col] * props_table["volume"]
+
     props_table[f"{mask_name}_volume"] = mask_vol
 
     for col in [c for c in props_table.columns if "intensity" in c]:
@@ -235,6 +244,8 @@ def get_org_morphology(source_file_path: str,
         List of 3D region segmentation arrays matching the order specified in list_region_names. Specify None if no regions are provided.
     mask_name: Union[str, None]
         Name of the region to use as the mask for analysis; if not specified, the entire image will be quantified.
+        The mask_name should match one of the names provided in list_region_names. This object will be used to mask
+        all other objects before quantitative analysis is performed. It will also be included as one of the analyzed objects.
     scale: Union[tuple,None] = None
         a tuple that contains the real world dimensions for each dimension in the image (Z, Y, X)
 
@@ -266,7 +277,8 @@ def get_org_morphology(source_file_path: str,
         mask = None
         mask_name = None
     else:
-        mask = list_region_segs[list_region_names.index(mask_name)]
+        mask = (list_region_segs[list_region_names.index(mask_name)] > 0).astype(int) # ensure mask is binary and integer type for later multiplication with segmentation images
+        print(f"Mask '{mask_name}' will be applied before analysis.")
     
     # merge intensity images to create a single np.ndarray
     if list_intensity_img is None:
@@ -378,7 +390,7 @@ def batch_process_org_morph(dataset_name: str,
     # check if any existing data is present in outfiles to skip already processed images
     unique_keys = ['dataset', 'image_name']
 
-    morpho_path = quant_path / f"{dataset_name}_org_morphology_metrics.csv"
+    morpho_path = quant_path / f"{dataset_name}-organelle_morphology_metrics.csv"
     existing_morpho_keys = load_existing_keys_csv(morpho_path, unique_keys)
 
     # reading list of files from the raw path
@@ -481,12 +493,12 @@ def batch_org_morph_summary_stats(csv_path_list: List[str],
         # list all csv files in the location
         files_store = sorted(loc.glob("*.csv"))
 
-        # find the unique datasets in this location based on the prefixes before "_org_morphology_metrics"
-        prefixes = set(f.name.split("_org_morphology_metrics")[0] for f in files_store if "_org_morphology_metrics" in f.name)
+        # find the unique datasets in this location based on the prefixes before "-organelle_morphology_metrics"
+        prefixes = set(f.name.split("-organelle_morphology_metrics")[0] for f in files_store if "-organelle_morphology_metrics" in f.name)
         for prefix in prefixes:
             ds_count += 1
             # select only the files from this dataset
-            files_subset = [f for f in files_store if f.name.startswith(prefix +"_org_morphology_metrics")]
+            files_subset = [f for f in files_store if f.name.startswith(prefix +"-organelle_morphology_metrics")]
             for file in files_subset:
                 fl_count += 1
                 stem = file.stem
@@ -504,7 +516,7 @@ def batch_org_morph_summary_stats(csv_path_list: List[str],
     # summary stat group
     ###################
     group_by = ['dataset', 'image_name', 'mask_name', 'scale', 'object']
-    sharedcolumns = ["SA_to_volume_ratio", "equivalent_diameter", "extent", "euler_number", "solidity", "axis_major_length"]
+    sharedcolumns = ["SA_to_volume_ratio", "equivalent_diameter", "extent", "euler_number", "solidity", "axis_major_length"] + list(org_df.filter(regex=".*intensity.*").columns)
     ag_func_standard = ['mean', 'median', 'std']
 
     ###################
@@ -549,11 +561,11 @@ def batch_org_morph_summary_stats(csv_path_list: List[str],
     # flatten datasheet and export
     ###################
     # export before unstacking
-    if (Path(out_path) / f"{out_prefix}_per_org_morphology_summarystats.csv").exists():
-        raise FileExistsError(f"CAUTION: {out_prefix}_per_org_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `quant_data_path` to continue without error.")
+    if (Path(out_path) / f"{out_prefix}-per_org_morphology_summarystats.csv").exists():
+        raise FileExistsError(f"CAUTION: {out_prefix}-per_org_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `quant_data_path` to continue without error.")
     else:
-        org_summary.to_csv(str(out_path) + f"/{out_prefix}_per_org_morphology_summarystats.csv", mode='x')
-        print(f"Exported per-organelle morphology summary statistics (before unstacking) to {out_path}/{out_prefix}_per_org_morphology_summarystats.csv")
+        org_summary.to_csv(str(out_path) + f"/{out_prefix}-per_org_morphology_summarystats.csv", mode='x')
+        print(f"Exported per-organelle morphology summary statistics (before unstacking) to {out_path}/{out_prefix}-per_org_morphology_summarystats.csv")
 
     org_morph_final = org_summary.unstack(-1)
     org_morph_final.columns = ["_".join((col_name[1], col_name[-1], col_name[0])) for col_name in org_morph_final.columns.to_flat_index()]
@@ -565,10 +577,10 @@ def batch_org_morph_summary_stats(csv_path_list: List[str],
     ###################
     # export summary sheets
     ###################
-    if (Path(out_path) / f"{out_prefix}_organelle_morphology_summarystats.csv").exists():
-        raise FileExistsError(f"CAUTION: {out_prefix}_organelle_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `quant_data_path` to continue without error.")
+    if (Path(out_path) / f"{out_prefix}-organelle_morphology_summarystats.csv").exists():
+        raise FileExistsError(f"CAUTION: {out_prefix}-organelle_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `quant_data_path` to continue without error.")
     else:
-        org_morph_final.to_csv(str(out_path) + f"/{out_prefix}_organelle_morphology_summarystats.csv", mode='x')
-        print(f"Exported organelle morphology summary statistics (after unstacking) to {out_path}/{out_prefix}_organelle_morphology_summarystats.csv")
+        org_morph_final.to_csv(str(out_path) + f"/{out_prefix}-organelle_morphology_summarystats.csv", mode='x')
+        print(f"Exported organelle morphology summary statistics (after unstacking) to {out_path}/{out_prefix}-organelle_morphology_summarystats.csv")
     print(f"Organelle morphology summary is complete.")
     return org_summary

@@ -214,38 +214,38 @@ def close_and_fill(in_img: np.ndarray,
             in_img = binary_erosion(in_img.copy())
     return in_img
 
-# def double_watershed(nuc: np.ndarray,
-#                      raw_img_A: np.ndarray,
-#                      raw_img_B: np.ndarray,
-#                      thresh_img_A: np.ndarray,
-#                      thresh_img_B: np.ndarray,
-#                      Watershed_Method: str,
-#                      Min_Hole_Width: int,
-#                      Max_Hole_Width: int,
-#                      Method: str,
-#                      Size: int):
+def double_watershed_stack(nuc: np.ndarray,
+                     raw_img_A: np.ndarray,
+                     raw_img_B: np.ndarray,
+                     thresh_img_A: np.ndarray,
+                     thresh_img_B: np.ndarray,
+                     Watershed_Method: str,
+                     Min_Hole_Width: int,
+                     Max_Hole_Width: int,
+                     Method: str,
+                     Size: int):
     
-#     choose_nuc = nuc
+    choose_nuc = nuc
 
-#     cm_A = masked_inverted_watershed(raw_img_A, 
-#                                      choose_nuc, 
-#                                      thresh_img_A,
-#                                      method=Watershed_Method)
-#     cm_B = masked_inverted_watershed(raw_img_B, 
-#                                      choose_nuc, 
-#                                      thresh_img_B,
-#                                      method=Watershed_Method)
+    cm_A = masked_inverted_watershed(raw_img_A, 
+                                     choose_nuc, 
+                                     thresh_img_A,
+                                     method=Watershed_Method)
+    cm_B = masked_inverted_watershed(raw_img_B, 
+                                     choose_nuc, 
+                                     thresh_img_B,
+                                     method=Watershed_Method)
     
-#     cm_combo = cm_A.astype(bool) + cm_B.astype(bool)
-#     cm_out = close_and_fill(in_img=cm_combo,
-#                              Min_Hole_Width=Min_Hole_Width,
-#                              Max_Hole_Width=Max_Hole_Width,
-#                              Method=Method,
-#                              Size=Size)
+    cm_combo = cm_A.astype(bool) + cm_B.astype(bool)
+    cm_out = close_and_fill(in_img=cm_combo,
+                             Min_Hole_Width=Min_Hole_Width,
+                             Max_Hole_Width=Max_Hole_Width,
+                             Method=Method,
+                             Size=Size)
     
-#     out_img = np.stack([nuc, cm_out], axis=0)
+    out_img = np.stack([nuc, cm_out], axis=0)
 
-#     return out_img
+    return out_img
 
 def double_watershed(nuc: np.ndarray,
                      raw_img_A: np.ndarray,

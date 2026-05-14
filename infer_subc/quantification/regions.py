@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from infer_subc.quantification.morphology import get_morphology_metrics
-from infer_subc.quantification.batch import load_existing_keys_csv, append_atomic_csv
+from infer_subc.quantification.csv_io import load_existing_keys_csv, append_atomic_csv
 from infer_subc.utils.batch import list_image_files, find_segmentation_tiff_files
 from infer_subc.core.file_io import read_czi_image, read_tiff_image
 
@@ -84,8 +84,8 @@ def get_regions_morphology(source_file_path: str,
         mask = None
         mask_name = None
     else:
-        mask = list_region_segs[list_region_names.index(mask_name)]
-        print(f"Using '{mask_name}' as the mask for analysis.")
+        mask = (list_region_segs[list_region_names.index(mask_name)] > 0).astype(int) # ensure mask is binary and integer type for later multiplication with segmentation images
+        print(f"Mask '{mask_name}' will be applied before analysis.")
 
     # merge intensity images to create a single np.ndarray
     if list_intensity_img is None:
@@ -201,7 +201,7 @@ def batch_process_regions_morph(dataset_name: str,
     # check if any existing data is present in outfiles to skip already processed images
     unique_keys = ['dataset', 'image_name']
 
-    regions_path = quant_path / f"{dataset_name}_regions_morphology_metrics.csv"
+    regions_path = quant_path / f"{dataset_name}-regions_morphology_metrics.csv"
     existing_morpho_keys = load_existing_keys_csv(regions_path, unique_keys)
 
     # reading list of files from the raw path
@@ -295,16 +295,16 @@ def batch_regions_morph_summary_stats(csv_path_list: List[str],
         # list all csv files in the location
         files_store = sorted(loc.glob("*.csv"))
 
-        # find the unique datasets in this location based on the prefixes before "_regions_morphology_metrics"
-        prefixes = set(f.name.split("_regions_morphology_metrics")[0] for f in files_store if "_regions_morphology_metrics" in f.name)
+        # find the unique datasets in this location based on the prefixes before "-regions_morphology_metrics"
+        prefixes = set(f.name.split("-regions_morphology_metrics")[0] for f in files_store if "-regions_morphology_metrics" in f.name)
         for prefix in prefixes:
             ds_count += 1
             # select only the files from this dataset
-            files_subset = [f for f in files_store if f.name.startswith(prefix +"_regions_morphology_metrics")]
+            files_subset = [f for f in files_store if f.name.startswith(prefix +"-regions_morphology_metrics")]
             for file in files_subset:
                 fl_count += 1
                 stem = file.stem
-                if "_regions_morph" in stem:
+                if "-regions_morph" in stem:
                     test_regions = pd.read_csv(file, index_col=0)
                     regions_tab.append(test_regions)
 
@@ -362,11 +362,11 @@ def batch_regions_morph_summary_stats(csv_path_list: List[str],
     # flatten datasheet and export
     ###################
     # export before unstacking
-    if (Path(out_path) / f"{out_prefix}_per_region_morphology_summarystats.csv").exists():
-        raise FileExistsError(f"CAUTION: {out_prefix}_per_region_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+    if (Path(out_path) / f"{out_prefix}-per_region_morphology_summarystats.csv").exists():
+        raise FileExistsError(f"CAUTION: {out_prefix}-per_region_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
     else:
-        regions_summary.to_csv(str(out_path) + f"/{out_prefix}_per_region_morphology_summarystats.csv", mode='x')
-        print(f"Exported per-region morphology summary statistics (before unstacking) to {out_path}/{out_prefix}_per_region_morphology_summarystats.csv")
+        regions_summary.to_csv(str(out_path) + f"/{out_prefix}-per_region_morphology_summarystats.csv", mode='x')
+        print(f"Exported per-region morphology summary statistics (before unstacking) to {out_path}/{out_prefix}-per_region_morphology_summarystats.csv")
     regions_morph_final = regions_summary.unstack(-1)
     regions_morph_final.columns = ["_".join((col_name[1], col_name[-1], col_name[0])) for col_name in regions_morph_final.columns.to_flat_index()]
     regions_morph_final.columns = [col.replace('sum', 'total') for col in regions_morph_final.columns]
@@ -377,10 +377,10 @@ def batch_regions_morph_summary_stats(csv_path_list: List[str],
     ###################
     # export summary sheets
     ###################
-    if (Path(out_path) / f"{out_prefix}_regions_morphology_summarystats.csv").exists():
-        raise FileExistsError(f"CAUTION: {out_prefix}_regions_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
+    if (Path(out_path) / f"{out_prefix}-regions_morphology_summarystats.csv").exists():
+        raise FileExistsError(f"CAUTION: {out_prefix}-regions_morphology_summarystats.csv already exists and will not be overwritten. Move the existing file, change the `out_prefix` or `out_path` to continue without error.")
     else:
-        regions_morph_final.to_csv(str(out_path) + f"/{out_prefix}_regions_morphology_summarystats.csv", mode='x')
-        print(f"Exported regions morphology summary statistics (after unstacking) to {out_path}/{out_prefix}_regions_morphology_summarystats.csv")
+        regions_morph_final.to_csv(str(out_path) + f"/{out_prefix}-regions_morphology_summarystats.csv", mode='x')
+        print(f"Exported regions morphology summary statistics (after unstacking) to {out_path}/{out_prefix}-regions_morphology_summarystats.csv")
     print(f"Regions morphology summary is complete.")
     return regions_summary
