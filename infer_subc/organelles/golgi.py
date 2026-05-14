@@ -90,12 +90,12 @@ def infer_golgi(
     ###################
     # EXTRACT
     ###################    
-    golgi = select_channel_from_raw(in_img, golgi_ch)
+    golgi_raw = select_channel_from_raw(in_img, golgi_ch)
 
     ###################
     # PRE_PROCESSING
     ###################    
-    golgi =  scale_and_smooth(golgi,
+    golgi =  scale_and_smooth(golgi_raw,
                               median_size = median_sz, 
                               gauss_sigma = gauss_sig)
     ###################
@@ -120,7 +120,7 @@ def infer_golgi(
     ###################
     # LABELING
     ###################
-    struct_obj1 = watershed_declumping(raw_img = golgi,
+    struct_obj1 = watershed_declumping(raw_img = golgi_raw,
                                        seg_img = struct_obj,
                                        declump = declump,
                                        sigma = dec_sig,

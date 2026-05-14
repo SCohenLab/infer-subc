@@ -856,7 +856,7 @@ def batch_process_interactions_quant(dataset_name: str,
                 for inter_name, inter_img in inter_dict.items():
                     inter_site_cnt+=1
                     if not (Path(interaction_sites_path)/f"{meta_dict['file_name'].stem}-{inter_name}.tiff").exists():
-                        export_inferred_organelle(inter_img, f"{inter_name}", meta_dict, interaction_sites_path)
+                        export_inferred_organelle(inter_img.astype(np.uint16), f"{inter_name}", meta_dict, interaction_sites_path)
                     else:
                         if inter_site_cnt<=1:
                             warnings.warn(f"Some of the interaction site images already exist for {meta_dict['file_name'].stem} in {interaction_sites_path}. They will not be overwritten.", UserWarning)

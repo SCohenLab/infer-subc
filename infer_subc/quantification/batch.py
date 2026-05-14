@@ -376,7 +376,7 @@ def batch_process_quantification(dataset_name: str,
                             inter_site_cnt+=1
                             # check that the file does not already exist before exporting
                             if not (Path(interaction_sites_path)/f"{img_f.name}-{inter_name}.tiff").exists():
-                                export_inferred_organelle(inter_img, f"{inter_name}", meta_dict, interaction_sites_path)
+                                export_inferred_organelle(inter_img.astype(np.uint16), f"{inter_name}", meta_dict, interaction_sites_path)
                             else:
                                 if inter_site_cnt<=1:
                                     warnings.warn(f"Some of the interaction site images already exist for {img_f.name} in {interaction_sites_path}. They will not be overwritten.", UserWarning)
