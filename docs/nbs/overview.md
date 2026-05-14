@@ -13,6 +13,7 @@ Robust inference of subcellular objects:
 - 7️⃣. [Infer ***peroxisome***](https://github.com/ndcn/infer-subc/blob/68976b1f56e0f2bac191e297077b8378c663793c/notebooks/07_peroxisome.ipynb)
 - 8️⃣. [Infer ***endoplasmic reticulum***](https://github.com/ndcn/infer-subc/blob/68976b1f56e0f2bac191e297077b8378c663793c/notebooks/08_infer_ER.ipynb)
 - 9️⃣. [Infer ***lipid body***](https://github.com/ndcn/infer-subc/blob/68976b1f56e0f2bac191e297077b8378c663793c/notebooks/09_lipid_droplet.ipynb) 
+- 🔟. [Infer ***soma and neurites***](https://github.com/SCohenLab/infer-subc/tree/main/notebooks/part_1_segmentation_workflows/1.8_infer_soma_neurites.ipynb)
 
 
 other examples

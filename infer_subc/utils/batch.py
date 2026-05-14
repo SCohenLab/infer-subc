@@ -1,17 +1,24 @@
 from typing import Union, Dict, List
 from pathlib import Path
 import time
+import numpy as np
+
+import napari
+from napari.settings import get_settings
+settings = get_settings()
+settings.application.ipy_interactive = True
 
 from infer_subc.core.file_io import list_image_files, export_tiff, read_tiff_image, read_czi_image, export_inferred_organelle
 from infer_subc.core.img import label_uint16, apply_mask, min_max_intensity_normalization, label, size_filter_linear_size
-
-from infer_subc.organelles.masks import infer_masks, infer_masks_A, infer_masks_B
+from infer_subc.organelles.masks import infer_masks, infer_masks_A, infer_masks_B, infer_masks_C, infer_masks_D
 from infer_subc.organelles.er import infer_ER
 from infer_subc.organelles.golgi import infer_golgi
 from infer_subc.organelles.lipid import infer_LD
 from infer_subc.organelles.lysosome import infer_lyso
 from infer_subc.organelles.mitochondria import infer_mito
 from infer_subc.organelles.peroxisome import infer_perox
+from infer_subc.organelles.cellmask import infer_soma_neurites
+from infer_subc.organelles.declumping import watershed_declumping
 
 
 
@@ -118,18 +125,17 @@ def find_segmentation_tiff_files(prototype:Union[Path,str],
 
     # segmentations
     for org_n in name_list:
-        org_name = Path(seg_path) / f"{prototype.stem}{suffix}{org_n}.tiff"
+        org_name = Path(seg_path) / f"{prototype.stem}{suffix}-{org_n}.tiff"
         if org_name.exists(): 
             out_files[org_n] = org_name
         elif org_name.exists() == False: 
-            org_name = Path(seg_path) / f"{prototype.stem}{suffix}{org_n}.tif"
+            org_name = Path(seg_path) / f"{prototype.stem}{suffix}-{org_n}.tif"
             out_files[org_n] = org_name
         else: 
             print(f"{org_n} .tiff file not found in {seg_path} returning")
             out_files[org_n] = None
     
     return out_files
-
 
 
 def batch_process_segmentation(raw_path: Union[Path,str],
@@ -139,12 +145,15 @@ def batch_process_segmentation(raw_path: Union[Path,str],
                                masks_settings: Union[List, None],
                                masks_A_settings: Union[List, None],
                                masks_B_settings: Union[List, None],
+                               masks_C_settings: Union[List, None],
+                               masks_D_settings: Union[List, None],
                                lyso_settings: Union[List, None],
                                mito_settings: Union[List, None],
                                golgi_settings: Union[List, None],
                                perox_settings: Union[List, None],
                                ER_settings: Union[List, None],
-                               LD_settings: Union[List, None]):
+                               LD_settings: Union[List, None],
+                               som_neu_settings: Union[List, None]):
     """
     This function batch processes the segmentation workflows for multiple organelles and masks across multiple images.
 
@@ -228,7 +237,45 @@ def batch_process_segmentation(raw_path: Union[Path,str],
                         nuc_small_obj_width: int,
                         cell_fillhole_max: int,
                         cyto_small_object_width2: int]
+    For infer_masks_C:
+    - `masks_C_settings` = [pm_ch: Union[int,None],
+                   nuc_ch: Union[int,None],
+                   parameters_I: list[list, bool, str, int, str, int, float, bool, float, str, int, int, int, int],
+                   parameters_II: list[list, bool, str, int, str, int, float, bool, float, str, int, int, int, int],
+                   nuc_med_filter_size: int,
+                   nuc_gaussian_smoothing_sigma: float,
+                   nuc_threshold_factor: float,
+                   nuc_thresh_min: float,
+                   nuc_thresh_max: float,
+                   nuc_hole_min_width: int,
+                   nuc_hole_max_width: int,
+                   nuc_small_object_width: int,
+                   nuc_fill_filter_method: str,
+                   nuc_search_img: str,
+                   cell_watershed_method: str,
+                   cell_min_hole_width: int,
+                   cell_max_hole_width: int,
+                   cell_method: str,
+                   cell_size: int)]
 
+    For infer_masks_D:
+    - `masks_D_settings` = [pm_ch: Union[int,None],
+                   nuc_ch: Union[int,None],
+                   weights: list[int],
+                   median_sz: int, 
+                   gauss_sig: float,
+                   thresh_factor: float,
+                   thresh_min: float,
+                   thresh_max: float,
+                   min_hole_w: int,
+                   max_hole_w: int,
+                   small_obj_w: int,
+                   fill_filter_method: str,
+                   invert_pm: bool,
+                   cell_method: str,
+                   hole_min: int,
+                   hole_max: int,
+                   fill_2d: bool]
 
     For infer_lyso:
     - `lyso_settings` = [lyso_ch: int,
@@ -345,7 +392,26 @@ def batch_process_segmentation(raw_path: Union[Path,str],
                     small_obj_w: int,
                     fill_filter_method: str]
     
+    For infer_soma_neurites
+    - `som_neu_settings` = [rad_method: str,
+                            soma_method: str,
+                            neurite_method: str]
 
+def batch_process_segmentation(raw_path: Union[Path,str],
+                               raw_file_type: str,
+                               seg_path: Union[Path, str],
+                               name_suffix: Union[str, None],
+                               masks_settings: Union[List, None],
+                               masks_A_settings: Union[List, None],
+                               masks_B_settings: Union[List, None],
+                               lyso_settings: Union[List, None],
+                               mito_settings: Union[List, None],
+                               golgi_settings: Union[List, None],
+                               perox_settings: Union[List, None],
+                               ER_settings: Union[List, None],
+                               LD_settings: Union[List, None]):
+    """
+    This function batch processes the segmentation workflows for multiple organelles and masks across multiple images.
 
     Returns:
     ----------
@@ -406,25 +472,25 @@ def batch_process_segmentation(raw_path: Union[Path,str],
             else:
                 print("multiple mask segmentations made for same image")
 
-        # # run masks_C function
-        # if masks_C_settings:
-        #     masks_C = infer_masks_C(img_data, *masks_C_settings)
-        #     export_inferred_organelle(masks_C, name_suffix+"masks_C", meta_dict, seg_path)
-        #     seg_list.append("masks_C")
-        #     if mask is None:
-        #         mask = masks_C
-        #     else:
-        #         print("multiple mask segmentations made for same image")
+        # run masks_C function
+        if masks_C_settings:
+            masks_C = infer_masks_C(img_data, *masks_C_settings)
+            export_inferred_organelle(masks_C, name_suffix+"masks_C", meta_dict, seg_path)
+            seg_list.append("masks_C")
+            if mask is None:
+                mask = masks_C
+            else:
+                print("multiple mask segmentations made for same image")
         
-        # # run masks_D function
-        # if masks_D_settings:
-        #     masks_D = infer_masks_D(img_data, *masks_D_settings)
-        #     export_inferred_organelle(masks_D, name_suffix+"masks_D", meta_dict, seg_path)
-        #     seg_list.append("masks_D")
-        #     if mask is None:
-        #         mask = masks_D
-        #     else:
-        #         print("multiple mask segmentations made for same image")
+        # run masks_D function
+        if masks_D_settings:
+            masks_D = infer_masks_D(img_data, *masks_D_settings)
+            export_inferred_organelle(masks_D, name_suffix+"masks_D", meta_dict, seg_path)
+            seg_list.append("masks_D")
+            if mask is None:
+                mask = masks_D
+            else:
+                print("multiple mask segmentations made for same image")
 
         # run 1.2_infer_lysosomes function
         if lyso_settings:
@@ -457,10 +523,10 @@ def batch_process_segmentation(raw_path: Union[Path,str],
             export_inferred_organelle(LD_seg, name_suffix+"LD", meta_dict, seg_path)
             seg_list.append("LD")
         
-        # if som_neu_settings:
-        #     som_neu_seg = infer_soma_neurites(in_seg=mask, multichannel_input=True, chan=1, *som_neu_settings)
-        #     export_inferred_organelle(som_neu_seg, name_suffix+"soma_neurites", meta_dict, seg_path)  
-        #     seg_list.append("soma_neurites")
+        if som_neu_settings:
+            som_neu_seg = infer_soma_neurites(in_seg=mask, multichannel_input=True, chan=1, *som_neu_settings)
+            export_inferred_organelle(som_neu_seg, name_suffix+"soma_neurites", meta_dict, seg_path)  
+            seg_list.append("soma_neurites")
 
         # if som_neu_settings:
         #     som_neu_seg = infer_soma_neurites(in_seg=mask, multichannel_input=True, chan=0, method=som_neu_seg[0])
@@ -472,6 +538,121 @@ def batch_process_segmentation(raw_path: Union[Path,str],
 
     return print(f"Batch processing complete: {count} images segmented in {(end-start)/60} minutes.")
 
+
+def batch_process_pre_segmented(raw_path: Union[Path,str],
+                                raw_file_type: str,
+                                seg_path: Union[Path, str],
+                                name_suffix: Union[str, None],
+                                mask_suffix: Union[str, None],
+                                soma_neur_settings: Union[List, None],
+                                declump_lyso_settings: Union[List, None],
+                                declump_mito_settings: Union[List, None],
+                                declump_golgi_settings: Union[List, None],
+                                declump_perox_settings: Union[List, None],
+                                declump_ER_settings: Union[List, None],
+                                declump_LD_settings: Union[List, None]):
+    """
+    This function batch processes pre-segmented files and applies further segmentation of them.
+
+    Parameters:
+    ----------
+
+    raw_path: Union[Path,str]
+        A string or a Path object of the path to your raw (e.g., intensity) images that will be used to find the corresponding segmentations
+    raw_file_type: str
+        The raw file type (e.g., ".tiff" or ".czi")
+    seg_path: Union[Path, str]
+        A string or a Path object of the path where the segmentation outputs were saved. 
+        The new edited segmentaitons will be saved here as well.
+    name_suffix: str
+        An optional string that was included before the segmentation suffix at the end of the output file. 
+        For example, if the name_suffix was "20240105", the segmentation file output from the 1.1_masks workflow would have included:
+        "{base-file-name}-20240105-masks"
+    mask_suffix: str
+        A string pertaining to the segmentation suffix at the end of the output mask file.
+        For example, if the segmentation file ran through the 1.1_infer_masks_from-composite workflow, the suffix would be "masks" 
+    {}_settings: Union[List, None]
+        For each workflow that you wish to include in the batch processing, 
+        fill out the information in the associated settings list. 
+        The necessary settings for each function are included below.
+
+    For infer_soma_neurites:
+    - `soma_neur_settings` = [multichannel_input: bool, 
+                              chan: int, 
+                              rad_method: str,
+                              soma_method: str,
+                              neurite_method: str]
+    """
+    start = time.time()
+    count = 0
+
+    if isinstance(raw_path, str): raw_path = Path(raw_path)
+    if isinstance(seg_path, str): seg_path = Path(seg_path)
+
+    if not Path.exists(seg_path):
+        Path.mkdir(seg_path)
+        print(f"The specified 'seg_path' was not found. Creating {seg_path}.")
+    
+    if not name_suffix:
+        name_suffix=""
+
+    # reading list of files from the raw path
+    img_file_list = list_image_files(raw_path, raw_file_type)
+
+    for fil in img_file_list:
+        count = count + 1
+        print(f"Beginning additional segmentation of {fil}'s segmentations")
+        seg_list = []
+
+        img_data, meta_dict = read_czi_image(fil)
+
+        if soma_neur_settings:
+            mask = read_tiff_image(find_segmentation_tiff_files(fil, [mask_suffix], seg_path, name_suffix)[mask_suffix])
+            som_neu_seg = infer_soma_neurites(mask, *soma_neur_settings)
+            export_inferred_organelle(som_neu_seg, name_suffix+"soma_neurites", meta_dict, seg_path)  
+            seg_list.append("soma_neurites")
+        
+        if declump_lyso_settings:
+            lyso = read_tiff_image(find_segmentation_tiff_files(fil, ['lyso'], seg_path, name_suffix)['lyso'])
+            lyso = watershed_declumping(img_data, lyso, *declump_lyso_settings)
+            export_inferred_organelle(lyso, name_suffix+"lyso_declump", meta_dict, seg_path)  
+            seg_list.append("lyso_declump")
+        
+        if declump_mito_settings:
+            mito = read_tiff_image(find_segmentation_tiff_files(fil, ['mito'], seg_path, name_suffix)['mito'])
+            mito = watershed_declumping(img_data, mito, *declump_mito_settings)
+            export_inferred_organelle(mito, name_suffix+"mito_declump", meta_dict, seg_path)  
+            seg_list.append("mito_declump")
+        
+        if declump_golgi_settings:
+            golgi = read_tiff_image(find_segmentation_tiff_files(fil, ['golgi'], seg_path, name_suffix)['golgi'])
+            golgi = watershed_declumping(img_data, golgi, *declump_golgi_settings)
+            export_inferred_organelle(golgi, name_suffix+"golgi_declump", meta_dict, seg_path)  
+            seg_list.append("golgi_declump")
+        
+        if declump_perox_settings:
+            perox = read_tiff_image(find_segmentation_tiff_files(fil, ['perox'], seg_path, name_suffix)['perox'])
+            perox = watershed_declumping(img_data, perox, *declump_perox_settings)
+            export_inferred_organelle(perox, name_suffix+"perox_declump", meta_dict, seg_path)  
+            seg_list.append("perox_declump")
+        
+        
+        if declump_ER_settings:
+            er = read_tiff_image(find_segmentation_tiff_files(fil, ['ER'], seg_path, name_suffix)['ER'])
+            er = watershed_declumping(img_data, er, *declump_ER_settings)
+            export_inferred_organelle(er, name_suffix+"ER_declump", meta_dict, seg_path)  
+            seg_list.append("ER_declump")
+
+        
+        if declump_LD_settings:
+            ld = read_tiff_image(find_segmentation_tiff_files(fil, ['LD'], seg_path, name_suffix)['LD'])
+            ld = watershed_declumping(img_data, ld, *declump_LD_settings)
+            export_inferred_organelle(ld, name_suffix+"LD_declump", meta_dict, seg_path)  
+            seg_list.append("LD_declump")
+        
+        end = time.time()
+        print(f"Processing for {fil} completed in {(end - start)/60} minutes.")
+    return print(f"Batch processing complete: {count} images segmented in {(end-start)/60} minutes.")
 
 
 
@@ -564,7 +745,7 @@ def batch_process_segmentation(raw_path: Union[Path,str],
 #     # channel_axis = meta_dict['channel_axis']
 
 #     inferred_organelles, layer_names, optimal_Z = fixed_infer_organelles(img_data)
-#     out_file_n = export_inferred_organelle(inferred_organelles, layer_names, meta_dict, data_root_path)
+#      export_inferred_organelle(inferred_organelles, layer_names, meta_dict, data_root_path)
 
 #     ## TODO:  collect stats...
 
@@ -601,3 +782,191 @@ def batch_process_segmentation(raw_path: Union[Path,str],
 #     """wrapper to stack the inferred objects into a single numpy.ndimage"""
 
 #     return np.stack(layers, axis=0)
+
+def QC_filter(in_img: np.ndarray,
+              raw_img: np.ndarray,
+              method: Union[int, str, None]):
+    """
+    Filter the input image based on the specified method.
+    
+    Parameters:
+    ----------
+
+    in_img : np.ndarray
+        The input image to be filtered.
+    raw_img : np.ndarray
+        The raw input image.
+    method : Union[int, str, None]
+        The filtering method to apply.
+    
+    Returns:
+    -------
+    np.ndarray
+        The filtered output image.
+    """
+    out_img = np.zeros_like(in_img, dtype=np.uint16)
+    if (type(method) is int) and (method > 0):
+        # when we have multicellular images, this can be used to filter by size
+        # print("Applying size filter with linear size...")
+        # out_img = size_filter_linear_size(in_img, min_size=method, method='3D') #simple size filtering
+        print("incorrect setting")
+    elif type(method) is str:
+        if method.isdigit():
+            # when we have multicellular images, this can be used to filter by size
+            # print("Applying size filter with linear size...")
+            # out_img = size_filter_linear_size(in_img, min_size=int(method), method='3D')
+            print("incorrect setting")
+        elif method.lower() == 'largest':
+            print("Applying the largest object filter...")
+            counts_per_label = np.bincount(label(in_img)[label(in_img)!=0])
+            out_img[label(in_img) == np.argmax(counts_per_label)] = 1
+        elif method.lower() == 'brightest':
+            print("Applying the brightest object filter...")
+            composite = apply_mask(min_max_intensity_normalization(raw_img).sum(axis=0), in_img)
+            intensity_per_label = [composite[label(in_img) == i].sum()/(label(in_img) == i).sum() for i in np.unique(label(in_img))]
+            out_img[label(in_img) == (np.argmax(intensity_per_label[1:])+1)] = 1 
+        elif method.lower() == 'er':
+            out_img = in_img.copy()
+            out_img[out_img>0] = 1
+        elif method.lower() == 'none':
+            print("No filtering applied.")
+            out_img = in_img # option to not apply any filtering given user error
+    elif method == None or method == 0:
+        print("No filtering applied.")
+        out_img = in_img # no filtering is applied
+    return out_img
+
+def filter_segmentation(suffix, filt, edited, raw, status="Fail"):
+    """
+    This function applies filters to the object segmentations to ensure they meet criteria to run the quantification.
+    After the filter is performed, users may view the filtered image, and choose to keep it or edit the previously edited image and rerun the filter. 
+
+    Parameters:
+    ----------
+
+    suffix : str
+        The suffix to identify the specific segmentation being filtered.
+    filt : Union[int, str, None]
+        The method of filtering to apply in the QC_filter function. The value must equal either an integer, 'Largest', 'Brightest', or 'ER'.
+    edited : np.ndarray
+        The edited segmentation image.
+    raw : np.ndarray
+        The raw input image.
+    status : str
+        The current status of the segmentation. Defaults to "Fail".
+
+    Returns:
+    -------
+    Tuple[np.ndarray, str]
+        A tuple containing the filtered segmentation and the status ("Pass" or "Fail" or "N/A").
+
+    """
+
+    if not (filt is None):
+        if len(np.unique(label(edited))) > 2:
+            
+            status = "Fail"
+            settings = get_settings()
+            settings.application.ipy_interactive = False
+            viewer2 = napari.Viewer()
+            print(f"\nYour {suffix} segmentation contains MORE THAN ONE {suffix} object. For quantification, you must only have ONE {suffix} object, attempting to correct this automatically...")
+            filtered_obj_seg = QC_filter(edited, raw, method=filt)
+
+            if len(np.unique(filtered_obj_seg)) == 2:
+                print(f"The image has been processed to automatically remove any small objects using the {filt} method.")
+                viewer2.add_image(raw, name=f'{suffix}_raw', blending='additive')
+                viewer2.add_labels(edited.copy(), name=f'{suffix}_seg')
+                viewer2.add_labels(filtered_obj_seg.copy(), name=f'{suffix}_seg_filtered')
+                settings = get_settings()
+                settings.application.ipy_interactive = False
+                print(f"Head to the Napari window to see your filtered {suffix} segmentation output!")
+                print(f"Note: if further edits are desired, please edit the {suffix}_seg layer instead of the {suffix}_seg_filtered layer.")
+                print("Please close the Napari window to continue.")
+                
+                napari.run()
+                settings.application.ipy_interactive = True
+                seg_edited = viewer2.layers[f'{suffix}_seg'].data
+                seg_filtered = viewer2.layers[f'{suffix}_seg_filtered'].data
+
+                if not (filtered_obj_seg.copy() == seg_filtered).all():
+                    print(f"You have erroneously eddited the {suffix}_seg_filtered layer, restarting from beginning of the filtering process...")
+                    return filter_segmentation(suffix, filt, edited, raw, status)
+
+                if not (edited.copy() == seg_edited).all():
+                    print(f"You have edited the {suffix}_seg layer, now retrying the filtering process...")
+                    return filter_segmentation(suffix, filt, seg_edited, raw, status)
+                else:
+                    print(f"You appear satsified with the {suffix} segmentation, saving...")     
+                    status = "Pass"
+                    return (filtered_obj_seg, status)
+                    
+            elif len(np.unique(filtered_obj_seg)) > 2:
+                print("We tried to remove small objects, but there are still multiple cell mask objects in the image. Please try other 'filter_cell' values above or edit the segmentation manually in Napari again.")
+                viewer2.add_image(raw, name=f'{suffix}_raw', blending='additive')
+                viewer2.add_labels(edited, name=f'{suffix}_seg')
+                viewer2.add_labels(filtered_obj_seg, name=f'{suffix}_seg_filtered')
+
+                print(f"Head to the Napari window to see your filtered {suffix} segmentation output!")
+                print(f"Note: please edit the {suffix}_seg layer instead of the {suffix}_seg_filtered layer, or change the filter type chosen for this segmentation and rerun the block when prompted later.")
+                print("Please close the Napari window to continue.")
+
+                napari.run()
+
+                if not (filtered_obj_seg == viewer2.layers[f'{suffix}_seg_filtered'].data).all():
+                    print(f"You have erroneously eddited the {suffix}_seg_filtered layer, restarting from beginning of the filtering process...")
+                    return filter_segmentation(suffix, filt, edited, raw, status)
+
+                if not (viewer2.layers[f'{suffix}_seg'].data == edited).all():
+                    print(f"You have edited the {suffix}_seg layer, now retrying the filtering process...")
+                    return filter_segmentation(suffix, filt, viewer2.layers[f'{suffix}_seg'].data, viewer2.layers[f'raw'].data, status)
+                else:
+                    print(f"As you have not chosen to edit the {suffix}_seg layer, we will now return the previous segmentation.")
+                    return (edited, status)
+            else:
+                print("There are no objects in the segmentation... Please check your segmentation files, and/or obj_filter value. We will now return the prior segmentation.")
+                return (edited, status)
+        else:
+            print(f"Your {suffix} segmentation looks good, no corrections needed!")
+            status = "Pass"
+            return (edited, status)
+    else:
+        print(f"You have chosen not to filter the {suffix} segmentation, returning original segmentation...")
+        return (edited, "N/A")
+    
+def edit_segmentation(suffix, viewer, edit):
+    """
+    This function enables editing of segmentation masks in Napari based on chosen segmentations.
+
+    Parameters:
+    ---------- 
+
+    suffix : str
+        The suffix of the segmentation file that is also used to name the layers in the Napari viewer.
+    viewer : napari.Viewer
+        The Napari viewer instance used previously for displaying all segmentations for an image.
+    edit : bool
+        A True/False flag to indicate whether editing of the image is desired or not.
+
+    Returns:
+    -------
+    np.ndarray
+        The edited segmentation mask as a NumPy array.
+    """
+    if edit:
+        settings = get_settings()
+        settings.application.ipy_interactive = False
+        viewer2 = napari.Viewer()
+        print("\nYou have chosen to edit the segmentation for", suffix)
+        viewer2.add_image(viewer.layers['raw'].data, name=f'raw')
+        try:
+            viewer2.add_image(viewer.layers[f'{suffix}_raw'].data, name=f'{suffix}_raw', blending='additive')
+        except (ValueError, KeyError):
+            print(f"No raw image found for {suffix}.")
+        viewer2.add_labels(viewer.layers[f'{suffix}_seg'].data, name=f'{suffix}_seg')
+        print(f"Head to the Napari window to edit your {suffix} segmentation output in the {suffix}_seg layer.")
+        print(f"When you close out of the viewer, the edited {suffix} segmentation will be saved automatically")
+        napari.run()
+        settings.application.ipy_interactive = True
+        return viewer2.layers[f'{suffix}_seg'].data
+    else:
+        return viewer.layers[f'{suffix}_seg'].data

@@ -6,7 +6,7 @@ import time
 
 import pandas as pd
 
-from infer_subc.utils.stats import (get_contact_metrics_3D, 
+from infer_subc.quantification.stats import (get_contact_metrics_3D, 
                     get_org_morphology_3D, 
                     get_XY_distribution, 
                     get_Z_distribution, 

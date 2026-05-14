@@ -4,8 +4,20 @@ import time
 import numpy as np
 
 from skimage.filters import scharr
+from skimage.morphology import (isotropic_opening, 
+                                isotropic_dilation, 
+                                isotropic_erosion, 
+                                binary_opening, 
+                                binary_dilation, 
+                                binary_erosion)
 
-from infer_subc.core.img import label_bool_as_uint16
+from skimage.morphology.footprints import ball, disk
+from skimage.measure import label
+
+from scipy.ndimage import zoom
+
+
+from infer_subc.core.img import label_bool_as_uint16, make_aggregate, size_filter_linear_size
 from infer_subc.core.file_io import export_inferred_organelle, import_inferred_organelle
 from infer_subc.core.img import (
     masked_object_thresh,
@@ -17,8 +29,8 @@ from infer_subc.core.img import (
     fill_and_filter_linear_size,
     get_max_label,
     get_interior_labels,
+    select_cellmask_from_img
 )
-
 
 def raw_cellmask_fromaggr(img_in: np.ndarray, scale_min_max: bool = True) -> np.ndarray:
     """define cellmask image
@@ -107,29 +119,36 @@ def choose_max_label_cellmask_union_nucleus(cellmask_img: np.ndarray,
 ##########################
 # 1. infer_cellmask
 ##########################
+##########################
+# infer_cellmask_fromaggr
+##########################
 def infer_cellmask_fromcomposite(in_img: np.ndarray,
-                                 weights: list[int],
-                                 nuclei_labels: np.ndarray,
-                                 median_sz: int,
-                                 gauss_sig: float,
-                                 mo_method: str,
-                                 mo_adjust: float,
-                                 mo_cutoff_size: int,
-                                 min_hole_w: int,
-                                 max_hole_w: int,
-                                 small_obj_w: int,
-                                 fill_filter_method: str,
-                                 watershed_method: str
-                                 ) -> np.ndarray:
+                                  weights: list[int],
+                                  rescale: bool,
+                                  nuclei_labels: np.ndarray,
+                                  median_sz: int,
+                                  gauss_sig: float,
+                                  mo_method: str,
+                                  mo_adjust: float,
+                                  mo_cutoff_size: int,
+                                  min_hole_w: int,
+                                  max_hole_w: int,
+                                  small_obj_w: int,
+                                  fill_filter_method: str,
+                                  watershed_method: str
+                                  ) -> np.ndarray:
     """
     Procedure to infer cellmask from linear unmixed input.
 
     Parameters
     ------------
     in_img: 
-        a 3d image containing all the channels (CZYX)
+        a 3d image containing all the channels
     weights:
         a list of int that corresond to the weights for each channel in the composite; use 0 if a channel should not be included in the composite image
+    rescale:
+        True - rescale composite image
+        False - don't rescale composite image
     nuclei_labels: 
         a 3d image containing the inferred nuclei labels
     median_sz: 
@@ -144,14 +163,12 @@ def infer_cellmask_fromcomposite(in_img: np.ndarray,
         Masked Object threshold `local_adjust`
     mo_cutoff_size: 
         Masked Object threshold `size_min`
-    min_hole_w: 
-        minimum size for hole filling for cellmask signal post-processing
     max_hole_w: 
         hole filling cutoff for cellmask signal post-processing
     small_obj_w: 
         minimum object size cutoff for cellmask signal post-processing
     fill_filter_method:
-        determines if small hole filling and small object removal should be run 'sice-by-slice' or in '3D'
+        determines if the fill and filter function should be run 'sice-by-slice' or in '3D' 
     watershed_method:
         determines if the watershed should be run 'sice-by-slice' or in '3D' 
 
@@ -164,12 +181,12 @@ def infer_cellmask_fromcomposite(in_img: np.ndarray,
     ###################
     # EXTRACT
     ###################
-    struct_img = weighted_aggregate(in_img, *weights)
+    struct_img = make_aggregate(in_img, *weights, rescale)
 
     ###################
     # PRE_PROCESSING
     ###################                         
-    struct_img =  scale_and_smooth(struct_img,
+    struct_img = scale_and_smooth(struct_img,
                                    median_size = median_sz, 
                                    gauss_sigma = gauss_sig)
     
@@ -314,97 +331,97 @@ def infer_cellmask_fromcytoplasm(cytoplasm_mask: np.ndarray,
 ##########################
 #  fixed_infer_cellmask_fromcytoplasm
 ##########################
-def fixed_infer_cellmask_fromcytoplasm(cytoplasm_mask: np.ndarray,
-                                        nucleus_mask:np.ndarray) -> np.ndarray:
-    """
-    Procedure to infer cellmask from the cytoplasm mask
+# def fixed_infer_cellmask_fromcytoplasm(cytoplasm_mask: np.ndarray,
+#                                         nucleus_mask:np.ndarray) -> np.ndarray:
+#     """
+#     Procedure to infer cellmask from the cytoplasm mask
 
-    Parameters
-    ------------
-    in_img: np.ndarray
-        a 3d image containing cytoplasm segmentation
+#     Parameters
+#     ------------
+#     in_img: np.ndarray
+#         a 3d image containing cytoplasm segmentation
  
-    Returns
-    -------------
-    nuclei_object
-        inferred nuclei
+#     Returns
+#     -------------
+#     nuclei_object
+#         inferred nuclei
     
-    """
-    min_hole_w = 0
-    max_hole_w = 30
-    small_obj_w = 0
-    fill_filter_method = "3D"
+#     """
+#     min_hole_w = 0
+#     max_hole_w = 30
+#     small_obj_w = 0
+#     fill_filter_method = "3D"
 
-    return infer_cellmask_fromcytoplasm(cytoplasm_mask,
-                                         nucleus_mask,
-                                         min_hole_w,
-                                         max_hole_w,
-                                         small_obj_w,
-                                         fill_filter_method)
-
-
+#     return infer_cellmask_fromcytoplasm(cytoplasm_mask,
+#                                          nucleus_mask,
+#                                          min_hole_w,
+#                                          max_hole_w,
+#                                          small_obj_w,
+#                                          fill_filter_method)
 
 
-def infer_and_export_cellmask(
-    in_img: np.ndarray, nuclei_obj: np.ndarray, meta_dict: Dict, out_data_path: Path
-) -> np.ndarray:
-    """
-    infer cellmask and write inferred cellmask to ome.tif file
-
-    Parameters
-    ------------
-    in_img:
-        a 3d  np.ndarray image of the inferred organelle (labels or boolean)
-    nuclei_obj:
-        a 3d image containing the inferred nuclei
-    meta_dict:
-        dictionary of meta-data (ome)
-    out_data_path:
-        Path object where tiffs are written to
-
-    Returns
-    -------------
-    exported file name
-
-    """
-    cellmask = fixed_infer_cellmask_fromcomposite(in_img, nuclei_obj)
-    out_file_n = export_inferred_organelle(cellmask, "cell", meta_dict, out_data_path)
-    print(f"inferred cellmask. wrote {out_file_n}")
-    return cellmask>0
 
 
-def get_cellmask(in_img: np.ndarray, nuclei_obj: np.ndarray, meta_dict: Dict, out_data_path: Path) -> np.ndarray:
-    """
-    load cellmask if it exists, otherwise calculate and write inferred cellmask to ome.tif file
+# def infer_and_export_cellmask(
+#     in_img: np.ndarray, nuclei_obj: np.ndarray, meta_dict: Dict, out_data_path: Path
+# ) -> np.ndarray:
+#     """
+#     infer cellmask and write inferred cellmask to ome.tif file
 
-    Parameters
-    ------------
-    in_img:
-        a 3d  np.ndarray image of the inferred organelle (labels or boolean)
-    nuclei_obj:
-        a 3d image containing the inferred nuclei
-    meta_dict:
-        dictionary of meta-data (ome)
-    out_data_path:
-        Path object where tiffs are written to
+#     Parameters
+#     ------------
+#     in_img:
+#         a 3d  np.ndarray image of the inferred organelle (labels or boolean)
+#     nuclei_obj:
+#         a 3d image containing the inferred nuclei
+#     meta_dict:
+#         dictionary of meta-data (ome)
+#     out_data_path:
+#         Path object where tiffs are written to
 
-    Returns
-    -------------
-    exported file name
+#     Returns
+#     -------------
+#     exported file name
 
-    """
+#     """
+#     cellmask = fixed_infer_cellmask_fromcomposite(in_img, nuclei_obj)
+#     out_file_n = export_inferred_organelle(cellmask, "cell", meta_dict, out_data_path)
+#     print(f"inferred cellmask. wrote {out_file_n}")
+#     return cellmask>0
 
-    try:
-        cellmask = import_inferred_organelle("cell", meta_dict, out_data_path)
-    except:
-        start = time.time()
-        print("starting segmentation...")
-        cellmask = fixed_infer_cellmask_fromcomposite(in_img, nuclei_obj)
-        out_file_n = export_inferred_organelle(cellmask, "cell", meta_dict, out_data_path)
-        end = time.time()
-        print(f"inferred (and exported) cellmask in ({(end - start):0.2f}) sec")
 
-    return cellmask
+# def get_cellmask(in_img: np.ndarray, nuclei_obj: np.ndarray, meta_dict: Dict, out_data_path: Path) -> np.ndarray:
+#     """
+#     load cellmask if it exists, otherwise calculate and write inferred cellmask to ome.tif file
+
+#     Parameters
+#     ------------
+#     in_img:
+#         a 3d  np.ndarray image of the inferred organelle (labels or boolean)
+#     nuclei_obj:
+#         a 3d image containing the inferred nuclei
+#     meta_dict:
+#         dictionary of meta-data (ome)
+#     out_data_path:
+#         Path object where tiffs are written to
+
+#     Returns
+#     -------------
+#     exported file name
+
+#     """
+
+#     try:
+#         cellmask = import_inferred_organelle("cell", meta_dict, out_data_path)
+#     except:
+#         start = time.time()
+#         print("starting segmentation...")
+#         cellmask = fixed_infer_cellmask_fromcomposite(in_img, nuclei_obj)
+#         out_file_n = export_inferred_organelle(cellmask, "cell", meta_dict, out_data_path)
+#         end = time.time()
+#         print(f"inferred (and exported) cellmask in ({(end - start):0.2f}) sec")
+
+    # return cellmask
 
 ### USED ###
 ##########################
@@ -481,3 +498,321 @@ def select_highest_intensity_cell(raw_image: np.ndarray,
     good_cell = cell_labels == keep_label
 
     return good_cell
+
+def find_radius(cell_mask: np.ndarray, method: str, verbose: bool=False) -> np.ndarray:
+    """
+    Determines the radius of the cells in the mask, and outputs a copy of the mask with the radii encoded as their labels.
+
+    Parameters:
+    ----------
+    cell_mask : np.ndarray
+        A mask of the cells.
+    method : str
+        The method to use for finding the radius. Can be 'isotropic' or 'binary'.
+        The `binary` method uses a saucer-like shape to remove the soma from the neurites. 
+        The "saucer" is comprised of 3 2-Dimensional disks stacked into a 3-Dimensional space. 
+        This method is more likely to oversegment the soma as compared to the `isotropic` methods. 
+        This results in the initial portions of the neurites possibly being included in the soma segmentation. 
+        Using the `binary` method will allow for the selection of more irregularly shaped soma objects.
+    verbose: bool
+        If True, prints out information about the radius finding process.
+        
+    Returns:
+    -------
+    np.ndarray
+        A mask of the cells with their radii encoded as labels.
+    """
+    radii_mask = np.zeros_like(cell_mask)
+    cell_mask_resize = zoom(cell_mask.copy(), (1, 0.5, 0.5)) # resizing cell mask to speed up processing
+    zz, yy, xx = cell_mask_resize.shape                      # collecting y-length of image NOTE: may want to collect sqrt(yy^2 + xx^2) and use in place of yy   
+
+    cell_nums = np.unique(cell_mask[cell_mask != 0])
+    label_factor = 10 ** len(str(cell_nums.max()))
+
+    for cell_num in cell_nums:
+        test_img = (cell_mask_resize == cell_num)
+        rad_range = [i+1 for i in range(yy // 4)]  # Dividing by 4 because mask is resized
+
+        if method == 'isotropic':
+            while len(rad_range) > 2:                   # repeats code until only 1 or 2 radii remain
+                rad = rad_range[len(rad_range) // 2]    # sets test radius to radius in middle of rad_range list
+                if verbose: print(f"Trying radius of {rad}")
+
+                # testing erosion with test radius
+                if np.all(isotropic_erosion(test_img.astype(np.uint8), rad) == 0):
+                    rad_range = rad_range[:rad_range.index(rad)]
+                    if verbose: print(f"{rad} is too large")
+                else:
+                    rad_range = rad_range[rad_range.index(rad)+1:]
+                    if verbose: print(f"{rad} is too small")
+                if verbose: print(f"{len(rad_range)} possible radii remaining")
+        elif method == 'binary':
+            while len(rad_range) > 2:                   # repeats code until only 1 or 2 radii remain
+                rad = rad_range[len(rad_range) // 2]    # sets test radius to radius in middle of rad_range list
+                if verbose: print(f"Trying radius of {rad}")
+
+                #creates 'saucer'
+                edge = disk(rad // 4)
+                middle = disk(rad)
+                w = (middle.shape[0] - edge.shape[0]) // 2
+                edge = np.pad(edge, ((w, w), (w, w)), mode='constant', constant_values=0)
+                fp = np.stack((edge, middle, edge))
+
+                # testing erosion using test radius
+                if np.all(binary_erosion(test_img.astype(np.uint8), fp) == 0):
+                    rad_range = rad_range[:rad_range.index(rad)]
+                    if verbose: print(f"{rad} is too large")
+                else:
+                    rad_range = rad_range[rad_range.index(rad)+1:]
+                    if verbose: print(f"{rad} is too small")
+                if verbose: print(f"{len(rad_range)} possible radii remaining")
+
+        if len(rad_range) == 1:
+            opti_rad = rad_range[0] // 2
+        elif len(rad_range) == 2:
+            opti_rad = (rad_range[0] + rad_range[1]) // 4
+        radii_mask[cell_mask == cell_num] = (opti_rad * label_factor) + cell_num
+    return radii_mask
+
+def infer_soma_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, method: str='binary'):
+    """
+    Infers the soma region from the cell mask and radii mask by deriving the radius of each cell.
+
+    Parameters:
+    ----------
+
+    cell_mask : np.ndarray
+        A mask of the cells.
+    radii_mask : np.ndarray
+        A mask of the cells with their radii encoded as labels.
+    method : str
+        The method to use for inferring the soma. Can be 'isotropic' or 'binary'.
+
+    Returns:
+    -------
+    np.ndarray
+        A mask of the inferred soma regions.
+    """
+    soma_out_1 = np.zeros_like(cell_mask)
+
+    cell_nums = np.unique(cell_mask[cell_mask != 0])
+    label_factor = 10 ** len(str(cell_nums.max()))
+
+    for cell_num in cell_nums:                              # repeat for each cell in the image
+        # determine the radius of the chosen cell
+        soma_img_solo = (cell_mask == cell_num)
+        opti_rad = np.unique(radii_mask[soma_img_solo])[0]
+        opti_rad = (opti_rad - cell_num) / label_factor
+
+        if method == 'isotropic': 
+            # opening and dilation to ensure removal of neurites
+            neurites_removed = isotropic_opening(soma_img_solo.astype(np.uint8), opti_rad)
+            soma_initial = isotropic_dilation(neurites_removed, opti_rad) & soma_img_solo
+        elif method == 'binary':
+
+            # creation of 'saucer'
+            edge = disk(int(opti_rad // 2))
+            middle = disk(int(opti_rad))
+            w = (middle.shape[0] - edge.shape[0]) // 2
+            edge = np.pad(edge, ((w, w), (w, w)), mode='constant', constant_values=0)
+            fp = np.stack((edge, middle, edge))
+
+            #opening and dilation to ensure removal of neurites
+            neurites_removed = binary_opening(soma_img_solo.astype(np.uint8), fp)
+            soma_initial = binary_dilation(neurites_removed, footprint=ball(int(opti_rad // 2))) & soma_img_solo
+        else:
+            raise ValueError(f"method of {method} was given, but only 'isotropic' or 'binary' is allowed.")
+
+        soma_out_1[soma_initial] = cell_num
+    return soma_out_1
+
+def infer_neurites_from_mask(cell_mask: np.ndarray, radii_mask: np.ndarray, soma_out_1: np.ndarray, method: str):
+    """
+    Uses the cell mask and the soma output to infer the neurite regions.
+
+    Parameters:
+    ----------
+
+    cell_mask : np.ndarray
+        A mask of the cells.
+    radii_mask : np.ndarray
+        A mask of the cells with their radii encoded as labels.
+    soma_out_1 : np.ndarray
+        A mask of the inferred soma regions.
+    method : str
+        The method to use for inferring the neurites. Can be 'isotropic' or 'binary'.
+
+    Returns:
+    -------
+    np.ndarray
+        A mask of the inferred neurite regions.
+    """
+    neurites_out_1 = np.zeros_like(cell_mask)
+
+    cell_nums = np.unique(cell_mask[cell_mask != 0])
+    label_factor = 10 ** len(str(cell_nums.max()))
+    binary_soma = soma_out_1 > 0
+
+    for cell_num in cell_nums:                          # repeat across cell numbers
+        # determine radius for cell
+        solo_mask = (cell_mask == cell_num)
+        opti_rad = np.unique(radii_mask[solo_mask])[0]
+        opti_rad = (opti_rad - cell_num) / label_factor
+
+        # mask out soma from full cell mask
+        neurite_mask = ~binary_soma & solo_mask
+
+        # filter out small objects that may instead be missing outcrops from the soma
+        # size exclusion was determined imperically on example neurons from 63X magnification images.
+        # TODO: add optional parameter to adjust size filteringre
+        if method == 'isotropic':
+            filtered = size_filter_linear_size(img=label(neurite_mask), min_size=(opti_rad*2), method='3D') * solo_mask
+        elif method == 'binary':
+            filtered = size_filter_linear_size(img=label(neurite_mask), min_size=(opti_rad//2), method='3D') * solo_mask
+        else:
+            raise ValueError(f"method of {method} was given, but only 'isotropic' or 'binary' is allowed.")
+
+        # label the neurites to unique IDs while also encoding their cell radius
+        neurite_labels = label(filtered)
+        neurite_labels[neurite_labels > 0] = (neurite_labels[neurite_labels > 0] * label_factor) + cell_num
+        neurites_out_1[solo_mask] = neurite_labels[solo_mask]
+    return neurites_out_1
+
+def clean_soma_from_neurites(cell_mask: np.ndarray, neurites_out_1: np.ndarray) -> np.ndarray:
+    """
+    Cleans the soma regions from the neurites by masking out the neurites from the cell mask.
+
+    Parameters:
+    ----------
+
+    cell_mask : np.ndarray
+        A mask of the cells.
+    neurites_out_1 : np.ndarray
+        A mask of the inferred neurite regions.
+
+    Returns:
+    -------
+    np.ndarray
+        A cleaned mask of the soma regions.
+    """
+    soma_out_2 = np.zeros_like(cell_mask)
+
+    cell_nums = np.unique(cell_mask[cell_mask != 0])
+    label_factor = 10 ** len(str(cell_nums.max()))
+
+    # Create a mask for all neurites at once
+    neurites_mask = (neurites_out_1 % label_factor) > 0
+
+    # For each cell, mask soma regions in one go
+    soma_mask = (~neurites_mask) & (cell_mask != 0)
+
+    # Find the most common value in soma_mask for each cell and assign only those pixels
+    for cell_num in cell_nums:
+        cell_region = (cell_mask == cell_num)
+        soma_region = label(soma_mask & cell_region)
+        # Only keep the largest connected region (most common value)
+        if np.any(soma_region):
+            bincount = np.bincount(soma_region.ravel())
+            main_val = np.argmax(bincount[1:]) + 1 if len(bincount) > 1 else 1
+            soma_region = soma_region & (soma_region == main_val)
+            soma_out_2[cell_region] = soma_region[cell_region] * cell_num
+    return soma_out_2
+
+def clean_neurites_from_soma(cell_mask: np.ndarray, soma_out_2: np.ndarray):
+    """
+    Cleans the neurite regions from the soma by masking out the soma from the neurite mask.
+
+    Parameters:
+    ----------
+    cell_mask : np.ndarray
+        A mask of the cells.
+    soma_out_2 : np.ndarray
+        A mask of the cleaned soma regions.
+
+    Returns:
+    -------
+    np.ndarray
+        A cleaned mask of the neurite regions.
+    """
+    neurites_out_2 = np.zeros_like(cell_mask)
+
+    cell_nums = np.unique(cell_mask[cell_mask != 0])
+    binary_soma = soma_out_2 > 0
+
+    # Create a mask for all neurites at once
+    neurites_mask = (~binary_soma) & (cell_mask != 0)
+
+    # Label all neurite regions in one call
+    neurites_labels = label(neurites_mask)
+
+    # Relabel to encode cell number
+    label_factor = 10 ** len(str(cell_nums.max()))
+    neurites_out_2 = np.zeros_like(cell_mask)
+    for cell_num in cell_nums:
+        neurites_out_2[(cell_mask == cell_num) & (neurites_mask > 0)] = (neurites_labels[(cell_mask == cell_num) & (neurites_mask > 0)] * label_factor) + cell_num
+    return neurites_out_2
+
+def infer_soma_neurites(in_seg: np.ndarray, multichannel_input: bool=False, chan: int=0, rad_method: str='method', soma_method: str='method', neurite_method: str='method', method='binary'):
+    """
+    Infers the soma and neurite regions from the input segmentation based on either the binary or isotropic filtering method.
+
+    Parameters:
+    ----------
+    in_seg : np.ndarray
+        The input segmentation mask.
+    multichannel_input : bool
+        Whether the input is a multichannel image.
+    chan : int
+        The channel to use for segmentation if it is a multichannel image.
+    rad_method: str
+        The method used to approximate the radius ('binary' or 'isotropic').
+    soma_method: str
+        The method used to approximate the soma ('binary' or 'isotropic').
+    neurite_method: str
+        The method used to approximate the neurites ('binary' or 'isotropic').
+    method : str
+        The optional method to used for all unassigned methods ('binary' or 'isotropic') (optional).
+
+    Returns:
+    -------
+    np.ndarray
+        A stack of the inferred soma and neurite regions.
+    """
+    ###################
+    # EXTRACT
+    ###################  
+
+    if (rad_method == 'method'):
+        rad_method = method
+    if (soma_method == 'method'):
+        soma_method = method
+    if (neurite_method == 'method'):
+        neurite_method = method
+
+    cell_mask = select_cellmask_from_img(in_seg, multichannel_input=multichannel_input, chan=chan)
+
+    ###################
+    # PRE_PROCESSING
+    ################### 
+    radii_mask = find_radius(cell_mask, rad_method)
+
+    ###################
+    # CORE_PROCESSING
+    ###################
+    soma_initial = infer_soma_from_mask(cell_mask, radii_mask, soma_method)
+
+    neurites_initial = infer_neurites_from_mask(cell_mask, radii_mask, soma_initial, neurite_method)
+
+    ###################
+    # POST_PROCESSING
+    ################### 
+    soma_cleaned = clean_soma_from_neurites(cell_mask, neurites_initial)
+
+    neurites_cleaned = clean_neurites_from_soma(cell_mask, soma_cleaned)
+
+    ###################
+    # POST_POST_PROCESSING
+    ################### 
+    soma_neurites = np.stack([soma_cleaned, neurites_cleaned])
+    
+    return soma_neurites
