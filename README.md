@@ -21,7 +21,7 @@
 
 ```
 pip install infer-subc
-pip install infer-subc
+pip install organelle-segmenter-plugin
 ```
 
 We recommend installing and using these packages in a Python environment (e.g., conda). A list of setup steps are included in [env_create.sh](./env_create.sh).
