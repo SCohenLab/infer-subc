@@ -442,17 +442,23 @@ def export_tiff_AICS(
     print(f"saved file AICS {out_name}")
     return out_name
 
+
+
+####################################
+##### SAMPLE DATA STUFF BELOW  #####
+####################################
+
 def sample_dirs(create: bool = False) -> None:
     """ Creates the directories needed to successfully run
     infer-subc using the sample data folder """
 
     if create:
-        sd_path = (Path(os.getcwd()).parents[1]/"sample_data")
+        sd_path = (Path(os.getcwd()).parents[0]/"sample_data")
 
         # Checker for if the sample data folder exists
         if sd_path.exists():
 
-            for ct in ["neuron_1","astrocyte","neuron_2","iPSC"]:
+            for ct in ["pri-neuron","pri-astrocyte","iNeuron","iPSC"]:
                 # first check if cell type folder exists, if not raise error
                 if not (sd_path/f"example_{ct}").exists():
                     raise ValueError(f'example_{ct} folder does not exist in the intended directory')
@@ -461,23 +467,26 @@ def sample_dirs(create: bool = False) -> None:
                 ct_path = (sd_path/f"example_{ct}")
 
                 # create subfolders if not created already
-                for sub in ["raw","seg"]:
+                for sub in ["raw", "seg", "edit_seg", "final_seg", "quant"]:
                     if not (ct_path/sub).exists():
                         Path.mkdir(ct_path/sub)
-                        print(f"making {ct_path/sub}")
+                        print(f"Making directory: {ct_path/sub}")
+                    else:
+                        print(f"Directory already exists: {ct_path/sub}")
 
         # if the sample data folder does not exist raise error
         else:
             raise ValueError('Sample data folder does not exist in the intended directory,' \
             ' please attempt to reclone the repository.')
 
+
 def sample_input(cell_type: Union[str, None]) -> tuple[Path, str, Path, Path]:
     """
     automatically sets the necessary paths for sample data if cell_type is
-    set equal to "neuron_1", "astrocyte", "neuron_2" or "iPSC" for the notebooks in part 1.
+    set equal to "pri-neuron", "pri-astrocyte", "iNeuron" or "iPSC" for the notebooks in part 1.
     They are compatible with notebooks 1.1a, 1.1b, 1.1c and 1.1d respectively.
     """
-    cell_type_list = ["neuron_1","astrocyte","neuron_2","iPSC"]
+    cell_type_list = ["pri-neuron","pri-astrocyte","iNeuron","iPSC"]
     
     if cell_type in cell_type_list:
         data_root_path = Path(os.getcwd()).parents[1] / "sample_data" /  f"example_{cell_type}"
@@ -494,42 +503,128 @@ def sample_input(cell_type: Union[str, None]) -> tuple[Path, str, Path, Path]:
 
         return data_root_path, im_type, in_data_path, out_data_path
     else:
-        raise ValueError('Sample data file type must be "neuron_1", "astroctye", "neuron_2" or "iPSC"')
+        raise ValueError('Sample data file type must be "pri-neuron", "pri-astrocyte", "iNeuron" or "iPSC"')
     
-def sample_input_quant(cell_type: Union[str, None]) -> tuple[Path, str, Path, Path, Path]:
+
+def sample_input_QC(cell_type: Union[str, None]) -> tuple[Path, Path, str, str, Path, Path, List, List, Dict]:
+    """
+    automatically sets the necessary paths for sample data if cell_type is
+    set equal to "pri-neuron", "pri-astrocyte", "iNeuron" or "iPSC".
+    This is used for the quality_check_segmentation notebook in part 1 
+    """
+    cell_type_list = ["pri-neuron","pri-astrocyte","iNeuron","iPSC"]
+    
+    if cell_type in cell_type_list:
+        data_root_path = Path(os.getcwd()).parents[1] / "sample_data" /  f"example_{cell_type}"
+
+        # Specify the file type of the sample data
+        raw_im_type = ".tiff"
+        seg_im_type = ".tiff"
+
+        ## Specify which subfolder that contains the input data and the input data 
+        raw_data_path = data_root_path / "raw"
+        seg_data_path = data_root_path / "seg"
+
+
+        ## Specify the output folder to save the segmentation outputs if.
+        ## If its not already created, the code below will creat it for you
+        edit_loc = data_root_path / "edit_seg"
+        fulldataset_loc = data_root_path / "final_seg"
+
+        # the specific settings for each set of sample data
+        if cell_type == "pri-neuron":
+            suffixes_list = ['masks_A', 'lyso', 'mito', 'golgi', 'perox', 'ER', 'LD']
+            channels_list = [None, 3, 4, 2, 5, 1, 0, None]
+            multichannel_dict = {'masks_A': ['nuc', 'cell']}
+        if cell_type == "pri-astrocyte":
+            suffixes_list = ['masks_B', 'lyso', 'mito', 'golgi', 'perox', 'ER', 'LD']
+            channels_list = [None, 3, 4, 2, 5, 1, 0]
+            multichannel_dict = {'masks_B': ['nuc', 'cell']}
+        if cell_type == "iNeuron":
+            suffixes_list = ['masks_C', 'lyso', 'mito', 'golgi', 'perox', 'ER', 'LD', 'soma_neurites']
+            channels_list = [None, 4, 3, 2, 1, 0, 6, None]
+            multichannel_dict = {'masks_C': ['nuc', 'cell'], 'soma_neurites': ['soma', 'neurites']}
+        if cell_type == "iPSC":
+            suffixes_list = ['masks_D', 'lyso', 'mito', 'golgi', 'perox', 'ER', 'LD']
+            channels_list = [None, 2, 3, 4, 5, 6, 0, None]
+            multichannel_dict = {'masks_D': ['nuc', 'cell']}
+
+        return raw_data_path, seg_data_path, raw_im_type, seg_im_type, edit_loc, fulldataset_loc, suffixes_list, channels_list, multichannel_dict
+    else:
+        raise ValueError('Sample data file type must be "pri-neuron", "pri-astrocyte", "iNeuron" or "iPSC"')
+    
+
+def sample_input_quant(cell_type: Union[str, None]) -> tuple[Path, str, str, Path, Path, Path]:
     """
     automatically sets the necessary paths for sample data if cell_type in the quantification
-    notebook is set equal to "neuron_1", "astrocyte", "neuron_2" or "iPSC".
+    notebook is set equal to "pri-neuron", "pri-astrocyte", "iNeuron" or "iPSC".
     """
-    cell_type_list = ["neuron_1","astrocyte","neuron_2","iPSC"]
+    cell_type_list = ["pri-neuron","pri-astrocyte","iNeuron","iPSC"]
     
     if cell_type in cell_type_list:
 
-        sd_fol = Path(os.getcwd()).parents[1] / "sample_data"
-
-        data_root_path = sd_fol / "example_quant"
+        data_root_path = Path(os.getcwd()).parents[1] / "sample_data" / f"example_{cell_type}"
 
         # Specify the file type of the sample data
         raw_img_type = ".tiff"
+        seg_im_type = ".tiff"
 
         ## Specify which subfolder that contains the input data and the input data file extension
         raw_data_path = data_root_path / "raw"
 
         ## Specify the location of the segmentations.
-        seg_data_path = data_root_path / "seg"
+        seg_data_path = data_root_path / "final_seg"
 
         # Where to output the quantification
         quant_data_path = data_root_path / "quant"
 
-        return data_root_path, raw_img_type, raw_data_path, seg_data_path, quant_data_path
+        return data_root_path, raw_img_type, seg_im_type, raw_data_path, seg_data_path, quant_data_path
     else:
-        raise ValueError('Sample data file type must be "neuron_1", "astroctye", "neuron_2" or "iPSC"')
+        raise ValueError('Sample data file type must be "pri-neuron", "pri-astrocyte", "iNeuron" or "iPSC"')
     
+
+def sample_quant_settings(cell_type: Union[str, None]) -> tuple[List, List, List, str, str]:
+    """
+    automatically sets the necessary paths for sample data if cell_type in the quantification
+    notebook is set equal to "pri-neuron", "pri-astrocyte", "iNeuron" or "iPSC".
+    """
+    cell_type_list = ["pri-neuron","pri-astrocyte","iNeuron","iPSC"]
+    
+    if cell_type in cell_type_list:
+        # the specific settings for each set of sample data
+        if cell_type == "pri-neuron":
+            org_names = ['lyso', 'mito', 'golgi', 'perox', 'ER', 'LD']
+            channels_list = [None, 3, 4, 2, 5, 1, 0, None]
+            regions_list = ['nuc', 'cell']
+            mask_name = 'cell'
+        if cell_type == "pri-astrocyte":
+            org_names = ['lyso', 'mito', 'golgi', 'perox', 'ER', 'LD']
+            channels_list = [None, 3, 4, 2, 5, 1, 0]
+            regions_list = ['nuc', 'cell']
+            mask_name = 'cell'
+        if cell_type == "iNeuron":
+            org_names = ['lyso', 'mito', 'golgi', 'perox', 'ER', 'LD', 'soma_neurites']
+            channels_list = [None, 4, 3, 2, 1, 0, 6, None]
+            regions_list = ['nuc', 'cell', 'soma', 'neurites']
+            mask_name = 'soma'
+        if cell_type == "iPSC":
+            org_names = ['lyso', 'mito', 'golgi', 'perox', 'ER', 'LD']
+            channels_list = [None, 2, 3, 4, 5, 6, 0, None]
+            regions_list = ['nuc', 'cell']
+            mask_name = 'cell'
+
+        suffix_sep = ""
+
+        return org_names, channels_list, regions_list, mask_name, suffix_sep
+    else:
+        raise ValueError('Sample data file type must be "pri-neuron", "pri-astrocyte", "iNeuron" or "iPSC"')
+
+
 def create_quant(create: bool):
     """ function that creates the quantification subfolder for the sample data"""
     if create:
         # quantification folder
-        qfol = (Path(os.getcwd()).parents[1] / "sample_data" / "example_quant")
+        qfol = (Path(os.getcwd()).parents[0] / "sample_data" / "quant")
 
         # check if quantification folder exists
         if not qfol.exists():
@@ -538,18 +633,20 @@ def create_quant(create: bool):
             Path.mkdir(qfol)
             
             # create sub folders
-            for sub in ["raw", "seg","edit_seg", "quant"]:
+            # for sub in ["raw", "seg", "edit_seg", "quant"]:
+            for sub in ["quant"]:
                 Path.mkdir(qfol / sub)
                 print(f"making {qfol / sub}")
         else:
             print("Quantification subfolder has already been created")
 
+
 def copy_raw(copy_list: list):
     """ function that copies specified sample data images to quant folder"""
 
-    sd_fol = Path(os.getcwd()).parents[1] / "sample_data"
+    sd_fol = Path(os.getcwd()).parents[0] / "sample_data"
 
-    sd_list = ['neuron_1', 'astrocyte', 'neuron_2', 'iPSC']
+    sd_list = ['pri-neuron', 'pri-astrocyte', 'iNeuron', 'iPSC']
 
     if len(set(copy_list) - set(sd_list)):
         print(f"The following entries are not applicable sample data types and will not be copied over: {[*set(copy_list) - set(sd_list)]}")

@@ -3,7 +3,7 @@
         "category": "extraction",
         "function": "select_channel_from_raw",
         "parameter_values": {
-            "chan": 3
+            "chan": 4
         },
         "parent": 0
     },
@@ -20,10 +20,10 @@
         "category": "core",
         "function": "dot_filter_3",
         "parameter_values": {
-            "dot_cutoff_1": 0.1,
+            "dot_cutoff_1": 0.08,
             "dot_cutoff_2": 0.0,
             "dot_cutoff_3": 0.0,
-            "dot_scale_1": 0.01,
+            "dot_scale_1": 1.5,
             "dot_scale_2": 0.0,
             "dot_scale_3": 0.0,
             "method": "3D"
@@ -38,7 +38,7 @@
             "filament_cutoff_2": 0.01,
             "filament_cutoff_3": 0.0,
             "filament_scale_1": 1.0,
-            "filament_scale_2": 0.1,
+            "filament_scale_2": 0.05,
             "filament_scale_3": 0.0,
             "method": "3D"
         },
@@ -65,7 +65,18 @@
     },
     "7": {
         "category": "postpostprocessing",
-        "function": "label_uint16",
-        "parent": 6
+        "function": "label_declump",
+        "parameter_values": {
+            "declump": false,
+            "iterations": 1,
+            "min_size": 0,
+            "open": false,
+            "sigma": 1.0,
+            "thresh_adj": 1.0
+        },
+        "parent": [
+            1,
+            6
+        ]
     }
 }
