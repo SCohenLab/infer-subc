@@ -15,6 +15,7 @@ from infer_subc.organelles import *
 from infer_subc.quantification.morphology import get_morphology_metrics
 from infer_subc.quantification.batch import load_existing_keys_csv, append_atomic_csv
 from infer_subc.core.file_io import export_inferred_organelle
+from infer_subc.quantification.skeletonization import create_skel, get_skeleton_metrics
 
 
 
@@ -405,6 +406,8 @@ def get_interaction_metrics(source_file_path: str,
                              scale: Union[tuple, None]=None,
                              splitter: str="X",
                              include_morpho:bool=True,
+                             include_skel:bool=True,
+                             all_skel_tab:bool=True,
                              include_interaction_degrees:bool=True,
                              include_dist:bool=True, 
                              dist_centering_obj: Union[str, None]=None,
@@ -414,7 +417,7 @@ def get_interaction_metrics(source_file_path: str,
                              dist_zernike_degrees: Union[int, None]=9) -> Union[dict, pd.DataFrame, pd.DataFrame, np.ndarray, pd.DataFrame]:
    
     """
-    Quantify organelle interaction metrics including morphology, distribution, and degree of interactions for a image or region
+    Quantify organelle interaction metrics including morphology, skeletonization, distribution, and degree of interactions for a image or region
     (e.g., cell) within an image.
     
     Parameters
@@ -451,6 +454,10 @@ def get_interaction_metrics(source_file_path: str,
         Name of the region to use as the mask for analysis; if not specified, the entire image will be quantified.
     include_morpho : bool, default=True
         Whether to compute morphology metrics for each interaction site.
+    include_skel : bool, default=True
+            Whether to compute skeleton metrics for each interaction site. (if include_morpho = FALSE, then skeletonization is not performed)
+    all_skel_tab : bool, default=True
+        Whether to output all skeleton-related tables (including branch and node tables) or just the main skeleton metrics table from the get_skeleton_metrics() function
     channel_axis : int, default=0
         The index of the channel dimension axis in the intensity image.
     include_interaction_degrees : bool, default=True
@@ -480,6 +487,8 @@ def get_interaction_metrics(source_file_path: str,
         If include_morpho=False, this will only include the interaction site metrics calculated in the
         infer_subc.quantification.interactions.create_interaction_sites() function, including which organelles are involved in each site
         and if they are in higher order interaction sites; it will not list morphology metrics for each interaction site.
+    skel_final_combo : pd.DataFrame
+        Combined skeleton metrics for all interaction sites of each interaction type.
     dist_final_combo : pd.DataFrame or None
         XY and Z distribution metrics for each interaction site (if include_dist=True)
     degree_img : np.ndarray or None
@@ -537,6 +546,11 @@ def get_interaction_metrics(source_file_path: str,
 
     # collect interaction metric tabs
     morph_combo_tabs = []
+    skel_arr_imgs = {}
+    # additional skeleton tables if include_skel and all_skel_tab are both True
+    branch_tabs = []
+    node_tabs = []
+    
     dist_combo_tabs = []
     XY_bins_imgs = []
     XY_wedges_imgs = []
@@ -571,7 +585,65 @@ def get_interaction_metrics(source_file_path: str,
             inter_tab = pd.merge(inter_tab, morpho_metrics, how='right', on=['object', 'ID', 'mask_name'])
             inter_tab['in_higher_order'] = inter_tab['in_higher_order'].astype(bool) # force to boolean type
         
-        morph_combo_tabs.append(inter_tab)
+        # run get_skeleton_metrics function to add skeleton quantification if organelle is in include_skel list
+        if include_skel:
+            skel_arr = create_skel(inter_obj)
+            if np.sum(skel_arr.astype(bool))>1:
+                if all_skel_tab:
+                        branch_table, node_table, skel_metrics = get_skeleton_metrics(org_skel_arr=skel_arr,
+                                                            seg_name=overlap_ID, 
+                                                            segmentation=inter_obj,
+                                                            mask=mask,
+                                                            mask_name=mask_name,
+                                                            scale=scale,
+                                                            output_all_tables = True)
+                        
+                        branch_table.insert(0, "branch_id", branch_table.index)
+                        branch_table = branch_table.reset_index(drop=True)
+                        branch_table.insert(0, "object", overlap_ID)
+                        branch_table.insert(0, "scale", str(scale))
+                        branch_table.insert(0, column="mask_name", value=mask_name)
+                        branch_table = branch_table.rename(columns={"skel_obj_id": "ID"})
+
+                        node_table.insert(0, "object", overlap_ID)
+                        node_table.insert(0, "scale", str(scale))
+                        node_table.insert(0, column="mask_name", value=mask_name)
+                        node_table = node_table.rename(columns={"obj_id": "ID"})
+
+                        branch_tabs.append(branch_table)
+                        node_tabs.append(node_table)
+                else:
+                        skel_metrics = get_skeleton_metrics(org_skel_arr=skel_arr,
+                                                            seg_name=overlap_ID, 
+                                                            segmentation=inter_obj,
+                                                            mask=mask,
+                                                            mask_name=mask_name,
+                                                            scale=scale,
+                                                            output_all_tables = False)
+                        
+                        skel_metrics.rename(columns={'label':'ID'}, inplace=True)
+            else:
+                print(f"Skeletonization will not be carried out for {overlap_ID} because less than two voxels are present in the skeleton array")
+                skel_arr = None
+            skel_arr_imgs[overlap_ID] = skel_arr
+            
+            # Rename skeleton metric columns to distingush from morphology metrics
+            skel_cols = [col for col in skel_metrics.columns[:6]]
+            for i in skel_metrics.columns[6:]:
+                skel_cols.append("skel_" + i)
+            skel_metrics.columns = skel_cols
+
+            # dropping list related measurements as they do not add interpretability and cause tables to be very tall and difficult to read
+            skel_drop = ['skel_branch_ids',
+                    'skel_brh_type_0_id',
+                    'skel_brh_type_1_ids',
+                    'skel_brh_type_2_ids',
+                    'skel_brh_type_3_ids',
+                    'skel_point_ids']
+            
+            inter_tab = pd.merge(inter_tab, skel_metrics.drop(columns=skel_drop), on=['mask_name','scale','object', 'ID'], validate='one_to_one')
+   
+        morph_combo_tabs.append(inter_tab)     
 
         # measure interaction site distibutions
         #### TODO: UPDATE CODE ONCE RENE IS DONE ####
@@ -624,7 +696,7 @@ def get_interaction_metrics(source_file_path: str,
         degree_img = None
         degree_tab = None
         
-    return inter_sites, morph_final_combo, dist_final_combo, degree_img, degree_tab
+    return inter_sites, morph_final_combo, dist_final_combo, degree_img, degree_tab, skel_arr_imgs, branch_tabs, node_tabs
 
 
 
@@ -642,6 +714,8 @@ def batch_process_interactions_quant(dataset_name: str,
                                       seg_suffix:Union[str, None]=None,
                                       int_splitter:str="X",
                                       include_morpho:bool=True,
+                                      include_skel:bool=True,
+                                      all_skel_tab:bool=False,
                                       include_interaction_degrees:bool=True,
                                       include_dist:bool=True, 
                                       dist_centering_obj: Union[str, None]=None,
@@ -653,7 +727,7 @@ def batch_process_interactions_quant(dataset_name: str,
                                       export_interaction_sites:bool=True):
     """
     Batch process interaction quantification for a single dataset (e.g., images collected on the same data). 
-    Morphology, distribution, and degree of interaction metrics analysis are all optionally available. 
+    Morphology, skeletonization, distribution, and degree of interaction metrics analysis are all optionally available. 
     Interaction site segmentations and degree of interaction images can also be exported.
     
     Parameters:
@@ -694,6 +768,10 @@ def batch_process_interactions_quant(dataset_name: str,
         Whether to compute morphology metrics
     include_morpho : bool, default=True
         Whether to compute morphology metrics for each interaction site
+    include_skel : bool, default=True
+        Whether to compute skeletonization metrics for each interaction site (if include_morpho = FALSE, then skeletonization is not performed)
+    all_skel_tab : bool, default=False
+        Whether to export all branch and node table metrics in addition to skeleton object metrics
     include_interaction_degrees : bool, default=True
         Whether to compute interaction degree analysis
     include_dist : bool, default=True
@@ -764,6 +842,7 @@ def batch_process_interactions_quant(dataset_name: str,
 
     int_degree_img_path = quant_path / "interaction_degree_images"
     interaction_sites_path = quant_path / "interaction_site_segmentations"
+    int_skel_img_path = quant_path / "interaction_site_skeleton_images"
 
 
     # list of organelle segmentation and masks files to collect from each image
@@ -812,7 +891,7 @@ def batch_process_interactions_quant(dataset_name: str,
             else:
                 scale_tup = None
 
-            inter_dict, morph_tab, dist_tab, int_degree_img, int_degree_tab = get_interaction_metrics(source_file_path=img_f,
+            inter_dict, morph_tab, dist_tab, int_degree_img, int_degree_tab, skel_arr_dict, int_branch_tab, int_node_tab = get_interaction_metrics(source_file_path=img_f,
                                                                                                     list_obj_names=organelle_names,
                                                                                                     list_obj_segs=organelles,
                                                                                                     list_intensity_img=intensities,
@@ -822,6 +901,7 @@ def batch_process_interactions_quant(dataset_name: str,
                                                                                                     splitter=int_splitter,
                                                                                                     scale=scale_tup,
                                                                                                     include_morpho=include_morpho,
+                                                                                                    include_skel=include_skel,
                                                                                                     include_interaction_degrees=include_interaction_degrees,
                                                                                                     include_dist=include_dist, 
                                                                                                     dist_centering_obj=dist_centering_obj,
@@ -849,6 +929,27 @@ def batch_process_interactions_quant(dataset_name: str,
                         if inter_site_cnt<=1:
                             warnings.warn(f"Some of the interaction site images already exist for {meta_dict['file_name'].stem} in {interaction_sites_path}. They will not be overwritten.", UserWarning)
             del inter_dict  # free up memory
+
+            if include_skel:
+                # save the interaction site skeleton images
+                for skel_name, skel_img in skel_arr_dict.items():
+                    if skel_img is not None:
+                        if not (Path(int_skel_img_path)/f"{meta_dict['file_name'].stem}-{skel_name}-skel.tiff").exists():
+                            export_inferred_organelle(skel_img, f"{skel_name}-skel", meta_dict, int_skel_img_path)
+                        else:
+                            warnings.warn(f"The {meta_dict['file_name'].stem}-{skel_name}-skel.tiff image already exists in {int_skel_img_path}. It will not be overwritten.")
+                del skel_arr_dict  # free up memory
+
+                if all_skel_tab:
+                    branch_tab_path = quant_path / f"{dataset_name}_branch_metrics.csv"
+                    node_table_path = quant_path / f"{dataset_name}_node_metrics.csv"
+                    int_branch_tab.insert(loc=0,column='dataset',value=dataset_name)
+                    append_atomic_csv(branch_tab_path, int_branch_tab)
+                    del int_branch_tab  # free up memory
+
+                    int_node_tab.insert(loc=0,column='dataset',value=dataset_name)
+                    append_atomic_csv(node_table_path, int_node_tab)
+                    del int_node_tab  # free up memory
            
             # save the distribution table data per image directly to csv
             if include_dist:
@@ -1070,14 +1171,14 @@ def batch_interactions_summary_stats(out_prefix: str,
     degree_df = pd.concat(int_degree, axis=0, join='outer') if int_degree else None
 
     # list all possible interaction site combinations
-    all_pos = _all_combos(organelle_names, splitter)
+    all_pos = all_combos(organelle_names, splitter)
 
     ################################################
     # Summarize interactions count & morphology data
     ################################################
     if morph_df is not None:
         ### calculate interaction count/volume & summarize per organelle object for all interaction sites
-        per_org_summary = _perorg_interactions_cnt(interaction_morpho_df=morph_df, 
+        per_org_summary = perorg_interactions_cnt(interaction_morpho_df=morph_df, 
                                                    org_list=organelle_names,
                                                    splitter=splitter)
 
@@ -1122,6 +1223,26 @@ def batch_interactions_summary_stats(out_prefix: str,
         morph_cols = ["SA_to_volume_ratio", "equivalent_diameter", "extent", "euler_number", "solidity", "axis_major_length"] + list(morph_df.filter(regex=".*intensity.*").columns)
         morph_ag_func_standard = ['mean', 'median', 'std']
 
+        # check if skeletonization metrics are included in the data by looking for any column names that start with "skel_"
+        include_skel = any(col.startswith('skel_') for col in morph_df.columns)
+
+        if include_skel:
+            skel_cols = ["skel_total_length",
+                        "skel_abs_punc_count",
+                        "skel_ep_count",
+                        "skel_jn_count",
+                        "skel_node_count",
+                        "skel_brh_count"]
+            skel_cols_2 = ["skel_brh_type_0_tot",
+                        "skel_brh_type_1_tot",
+                        "skel_brh_type_2_tot",
+                        "skel_brh_type_3_tot",
+                        "skel_comp_count",
+                        "skel_ave_jn_deg",
+                        "skel_max_deg",
+                        "skel_mean_brh_str",
+                        "skel_width"]
+
         # summarize counts of interaction sites per image
         tab1 = morph_df[morph_group_by + ['ID']].groupby(morph_group_by).agg(['count'])
         tab1.rename(columns={'ID': 'sites'}, inplace=True)
@@ -1137,6 +1258,12 @@ def batch_interactions_summary_stats(out_prefix: str,
         tab5 = morph_df[morph_group_by+morph_cols].groupby(morph_group_by).agg(morph_ag_func_standard)
         inter_sum_tab = pd.merge(inter_sum_tab, tab4, 'outer', on=morph_group_by)
         inter_sum_tab = pd.merge(inter_sum_tab, tab5, 'outer', on=morph_group_by)
+
+        if include_skel:
+            tab6 = morph_df[morph_group_by + skel_cols].groupby(morph_group_by).agg(['sum'] + morph_ag_func_standard)
+            tab7 = morph_df[morph_group_by + skel_cols_2].groupby(morph_group_by).agg(morph_ag_func_standard)
+            inter_sum_tab = pd.merge(inter_sum_tab, tab6, 'outer', on=morph_group_by)
+            inter_sum_tab = pd.merge(inter_sum_tab, tab7, 'outer', on=morph_group_by)
 
         # Get mask_name and corresponding volume column per group & calculate volume fraction
         mask_names = morph_df.groupby(morph_group_by)['mask_name'].first()
@@ -1164,6 +1291,54 @@ def batch_interactions_summary_stats(out_prefix: str,
             inter_sum_tab.loc[single_site_mask, (col, 'std')] = np.nan
 
         inter_sum_tab.sort_index(inplace=True)
+
+        if include_skel:
+            # a temporary table used to calculate the average node degree, fusion score, fission score, connectivity, and heterogeneity for each organelle per cell
+            # these measurements are inspired by the mitograph quantification metrics, but adapted to be more generalizable to different organelles
+            skel_ff = morph_df.assign(sum_jnxdeg = lambda x: x['skel_ave_jn_deg'] * x['skel_jn_count'],
+                                    is_punc = lambda df: (df['skel_type'] == "Punctate").astype(int),
+                                    is_rod = lambda df: (df['skel_type'] == "Rod").astype(int),
+                                    is_iso_cycle = lambda df: (df['skel_type'] == "Isolated Cycle").astype(int),
+                                    is_network = lambda df: (df['skel_type'] == "Network").astype(int)).groupby(morph_group_by).agg({
+                'label': 'count',
+                'volume': ['mean','std'],
+                'skel_total_length': ['max','sum','mean','std'],
+                'skel_brh_count': ['sum','mean','std'],
+                'skel_abs_punc_count': ['sum'],
+                'skel_ep_count': 'sum',
+                'skel_jn_count': ['sum'],
+                'skel_node_count': ['sum','mean','std'],
+                'sum_jnxdeg': 'sum',
+                'skel_width': ['mean','std'],
+                'is_punc': 'sum',
+                'is_rod': 'sum',
+                'is_iso_cycle': 'sum',
+                'is_network': 'sum'
+            }).assign(
+                punctate_count = lambda df: df['is_punc'],
+                rod_count = lambda df: df['is_rod'],
+                iso_cycle_count = lambda df: df['is_iso_cycle'],
+                network_count = lambda df: df['is_network'],
+                skel_avg_node_deg = lambda df: (df['sum_jnxdeg','sum'] + df['skel_ep_count','sum']) / df['skel_node_count','sum'],
+                skel_fusion_score = lambda df: (df['skel_total_length','max']/df['skel_total_length','sum']) + 
+                    (df['skel_total_length','sum']/df['skel_brh_count','sum']) + df['skel_avg_node_deg'],
+                skel_fission_score = lambda df: (df['label','count']/df['skel_total_length','sum']) + 
+                    (df['skel_node_count','sum']/df['skel_total_length','sum']) + (df['skel_brh_count','sum']/df['skel_total_length','sum']),
+                skel_connectivity = lambda df: df['skel_fusion_score']/df['skel_fission_score'],
+                skel_heterogeneity = lambda df: (df['skel_node_count','std']/df['skel_node_count','mean']) + 
+                    (df['skel_brh_count','std']/df['skel_brh_count','mean']) +
+                    (df['skel_total_length','std']/df['skel_total_length','mean']) +
+                    (df['volume','std']/df['volume','mean']) +
+                    (df['skel_width','std']/df['skel_width','mean']) +
+                    df['skel_avg_node_deg']
+            )
+
+            # columns from the fusion/fission table to add to the morphology summary table
+            skel_sum_metrics = ["punctate_count", "rod_count", "iso_cycle_count", "network_count",
+                "skel_avg_node_deg", "skel_fusion_score", "skel_fission_score", "skel_connectivity", "skel_heterogeneity"]
+
+            # merge these additional metrics back into the org_summary table
+            inter_sum_tab = pd.merge(inter_sum_tab, skel_ff[skel_sum_metrics], on=morph_group_by, how='outer')
 
         # export before unstacking
         if (Path(out_path) / f"{out_prefix}_interaction_morphology_summarystats.csv").exists():

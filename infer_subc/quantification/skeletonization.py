@@ -23,9 +23,9 @@ from infer_subc.quantification.stats import *
 
 def create_skel(segmentation: np.ndarray) -> np.ndarray:
     """
-    A function that skeletonizes the organelle segmentation. This function aslo generates punctate objects 
-    for the round organelle objects that lack a skeleton. This function is based off of skimage's skeletonize 
-    function. More information about said function can be found here 
+    A function that skeletonizes the organelle segmentation. This function also generates punctate objects 
+    for the round organelle objects and declumped organelles only if they lack a skeleton. This function is
+    based off of skimage's skeletonize function. More information about said function can be found here 
     https://scikit-image.org/docs/0.25.x/api/skimage.morphology.html#skimage.morphology.skeletonize
 
     Parameters
@@ -469,7 +469,7 @@ class Skeleton:
             image_out[coords_idxs] = i + 1
         return image_out
 
-    def path_means(self):
+    def branch_means(self):
         """Compute the mean pixel value along each path.
 
         Returns
@@ -481,7 +481,7 @@ class Skeleton:
         lengths = np.diff(self.paths.indptr)
         return sums / lengths
 
-    def path_stdev(self):
+    def branch_stdev(self):
         """Compute the standard deviation of values along each path.
 
         Returns
@@ -492,7 +492,7 @@ class Skeleton:
         data = self.paths.data
         sumsq = np.add.reduceat(data * data, self.paths.indptr[:-1])
         lengths = np.diff(self.paths.indptr)
-        means = self.path_means()
+        means = self.branch_means()
         return np.sqrt(np.clip(sumsq/lengths - means*means, 0, None))
 
     def prune_paths(self, indices: npt.ArrayLike) -> 'Skeleton':
@@ -537,9 +537,9 @@ class Skeleton:
         """Array representation of the skeleton path labels."""
         return self.path_label_image()
 
-def get_branch_ids(skel: Skeleton) -> np.ndarray:
+def get_obj_ids(skel: Skeleton) -> np.ndarray:
     """
-    A function that returns a np.ndarray (int) of branch IDs for each branch in the skeleton object.
+    A function that returns a np.ndarray (int) of object IDs for each branch in the skeleton object.
 
     Parameters
     ------------
@@ -548,11 +548,11 @@ def get_branch_ids(skel: Skeleton) -> np.ndarray:
 
     Returns
     -------------
-    Array of branch IDs
+    Array of object IDs per branch in the skeleton graph. This is used to assign the original segmentation labels to the skeleton branches.
     """
     # checker to see if all path points and nodes come from the same object (per branch)
-    if not np.any(skel.path_stdev()):
-        return skel.path_means().astype(int)
+    if not np.any(skel.branch_stdev()):
+        return skel.branch_means().astype(int)
     else:
         raise ValueError("at least one branch spans across multiple different organelle objects")
 
@@ -569,41 +569,41 @@ def get_skel_branch(skel: Skeleton) -> pd.DataFrame:
 
     Branch table measurements:
     ------------------------
-    'skel-obj-id',
-    'point-id-src',
-    'point-id-dst',
+    'skel_obj_id',
+    'point_id_src',
+    'point_id_dst',
     'deg_src',
     'deg_dst',
-    'branch-length',
-    'branch-type',
-    'image-coord-src-0',
-    'image-coord-src-1',
-    'image-coord-src-2',
-    'image-coord-dst-0',
-    'image-coord-dst-1',
-    'image-coord-dst-2',
-    'coord-src-0',
-    'coord-src-1',
-    'coord-src-2',
-    'coord-dst-0',
-    'coord-dst-1',
-    'coord-dst-2',
-    'euclidean-distance',
-    'str-prop'
+    'branch_length',
+    'branch_type',
+    'image_coord_src_0',
+    'image_coord_src_1',
+    'image_coord_src_2',
+    'image_coord_dst_0',
+    'image_coord_dst_1',
+    'image_coord_dst_2',
+    'coord_src_0',
+    'coord_src_1',
+    'coord_src_2',
+    'coord_dst_0',
+    'coord_dst_1',
+    'coord_dst_2',
+    'euclidean_distance',
+    'str_prop'
 
     Returns
     -------------
     pandas dataframe of containing measurements (columns) for each branch (rows) in the skeleton 
     """
     summary = {}
-    summary['skel-obj-id'] = get_branch_ids(skel)
+    summary['skel_obj_id'] = get_obj_ids(skel)
     ndim = skel.coordinates.shape[1]
     
     endpoints_src = skel.paths.indices[skel.paths.indptr[:-1]]
     endpoints_dst = skel.paths.indices[skel.paths.indptr[1:] - 1]
 
-    summary['point-id-src'] = endpoints_src
-    summary['point-id-dst'] = endpoints_dst
+    summary['point_id_src'] = endpoints_src
+    summary['point_id_dst'] = endpoints_dst
     deg_src = skel.correct_degrees[endpoints_src]
     deg_dst = skel.correct_degrees[endpoints_dst]
     summary['deg_src'] = deg_src
@@ -613,25 +613,25 @@ def get_skel_branch(skel: Skeleton) -> pd.DataFrame:
     kind[(deg_src == 1) | (deg_dst == 1)] = 1  # tip-junction
     kind[(deg_src == 1) & (deg_dst == 1)] = 0  # tip-tip
     kind[endpoints_src == endpoints_dst] = 3  # cycle
-    summary['branch-type'] = kind
+    summary['branch_type'] = kind
     for i in range(ndim):  # keep loops separate for best insertion order
-        summary[f'image-coord-src-{i}'] = skel.coordinates[endpoints_src, i]
+        summary[f'image_coord_src_{i}'] = skel.coordinates[endpoints_src, i]
     for i in range(ndim):
-        summary[f'image-coord-dst-{i}'] = skel.coordinates[endpoints_dst, i]
+        summary[f'image_coord_dst_{i}'] = skel.coordinates[endpoints_dst, i]
     coords_real_src = skel.coordinates[endpoints_src] * skel.spacing
     for i in range(ndim):
-        summary[f'coord-src-{i}'] = coords_real_src[:, i]
+        summary[f'coord_src_{i}'] = coords_real_src[:, i]
     coords_real_dst = skel.coordinates[endpoints_dst] * skel.spacing
     for i in range(ndim):
-        summary[f'coord-dst-{i}'] = coords_real_dst[:, i]
+        summary[f'coord_dst_{i}'] = coords_real_dst[:, i]
         
-    summary['branch-length'] = skel.branch_lengths()
-    summary['euclidean-distance'] = (
+    summary['branch_length'] = skel.branch_lengths()
+    summary['euclidean_distance'] = (
             np.sqrt((coords_real_dst - coords_real_src)**2
                     @ np.ones(ndim))
             )
 
-    summary['str-prop'] = summary['euclidean-distance'] / summary['branch-length']
+    summary['str_prop'] = summary['euclidean_distance'] / summary['branch_length']
     return pd.DataFrame(summary).rename_axis('branch_id')
 
 def get_skel_node(skel: Skeleton) -> pd.DataFrame:
@@ -646,17 +646,17 @@ def get_skel_node(skel: Skeleton) -> pd.DataFrame:
 
     Branch table measurements:
     ------------------------
-    'point-id',
-    'node-type',
+    'point_id',
+    'node_type',
     'connectivity',
-    'image-coord-0',
-    'image-coord-1',
-    'image-coord-2',
-    'coord-0',
-    'coord-1',
-    'coord-2',
-    'branch-ids',
-    'obj-id'
+    'image_coord_0',
+    'image_coord_1',
+    'image_coord_2',
+    'coord_0',
+    'coord_1',
+    'coord_2',
+    'branch_ids',
+    'obj_id'
 
     Returns
     -------------
@@ -686,17 +686,17 @@ def get_skel_node(skel: Skeleton) -> pd.DataFrame:
             node_lab += [f"{i}-way"]
         
     node_table_data = {
-        "point-id": node_list,
-        "node-type": np.array(node_lab)[skel.correct_degrees[node_list]],
+        "point_id": node_list,
+        "node_type": np.array(node_lab)[skel.correct_degrees[node_list]],
         "connectivity": skel.correct_degrees[node_list],
-        "image-coord-0": skel.coordinates[node_list,0],
-        "image-coord-1": skel.coordinates[node_list,1],
-        "image-coord-2": skel.coordinates[node_list,2],
-        "coord-0": skel.coordinates[node_list,0] * skel.spacing[0],
-        "coord-1": skel.coordinates[node_list,1] * skel.spacing[1],
-        "coord-2": skel.coordinates[node_list,2] * skel.spacing[2],
-        "branch-ids": [node2branches[point] for point in node_list],
-        'obj-id': [int(skel.pixel_values[point]) for point in node_list]
+        "image_coord_0": skel.coordinates[node_list,0],
+        "image_coord_1": skel.coordinates[node_list,1],
+        "image_coord_2": skel.coordinates[node_list,2],
+        "coord_0": skel.coordinates[node_list,0] * skel.spacing[0],
+        "coord_1": skel.coordinates[node_list,1] * skel.spacing[1],
+        "coord_2": skel.coordinates[node_list,2] * skel.spacing[2],
+        "branch_ids": [node2branches[point] for point in node_list],
+        'obj_id': [int(skel.pixel_values[point]) for point in node_list]
     }
 
     return pd.DataFrame(node_table_data)
@@ -851,35 +851,36 @@ def get_skel_obj(skel: Skeleton, segmentation: np.ndarray) -> pd.DataFrame:
 
     Branch table measurements:
     ------------------------
-    'obj-id',
-    'skel-type',
-    'skel-type-num',
-    'brh-count',
-    'branch-ids',
-    'min-brh-length',
-    'max-brh-length',
-    'ave-brh-length',
-    'sd-brh-length',
-    'med-brh-length',
-    'total-length',
-    'brh-type-0-tot',
-    'brh-type-0-id',
-    'brh-type-1-tot',
-    'brh-type-1-ids',
-    'brh-type-2-tot',
-    'brh-type-2-ids',
-    'brh-type-3-tot',
-    'brh-type-3-ids',
-    'comp-count',
-    'node-count',
-    'ep-count',
-    'jn-count',
-    'ave-jn-deg',
-    'max-deg',
-    'point-ids',
-    'mean-brh-str'
-    'med-brh-str'
-    'sd-brh-str'
+    'obj_id',
+    'skel_type',
+    'skel_type_num',
+    'brh_count',
+    'branch_ids',
+    'min_brh_length',
+    'max_brh_length',
+    'ave_brh_length',
+    'sd_brh_length',
+    'med_brh_length',
+    'total_length',
+    'brh_type_0_tot',
+    'brh_type_0_id',
+    'brh_type_1_tot',
+    'brh_type_1_ids',
+    'brh_type_2_tot',
+    'brh_type_2_ids',
+    'brh_type_3_tot',
+    'brh_type_3_ids',
+    'comp_count',
+    'node_count',
+    'abs_punc_count',
+    'ep_count',
+    'jn_count',
+    'ave_jn_deg',
+    'max_deg',
+    'point_ids',
+    'mean_brh_str'
+    'med_brh_str'
+    'sd_brh_str'
     'width'
 
 
@@ -969,35 +970,36 @@ def get_skel_obj(skel: Skeleton, segmentation: np.ndarray) -> pd.DataFrame:
     #### GENERATE SKELETON OBJECT TABLE ####
 
     skel_table_data = {
-            "obj-id": obj_list,
-            "skel-type": obj_type,
-            "skel-type-num": obj_type_n,
-            "brh-count": count_b,
-            "branch-ids": [obj2branch[obj] for obj in obj_list],
-            "min-brh-length": [np.min(obj_bl[obj]) if len(obj_bl[obj]) != 0 else np.nan for obj in obj_list],
-            "max-brh-length": [np.max(obj_bl[obj]) if len(obj_bl[obj]) != 0 else np.nan for obj in obj_list],
-            "ave-brh-length": [np.mean(obj_bl[obj])for obj in obj_list],
-            "sd-brh-length": [np.std(obj_bl[obj]) for obj in obj_list],
-            "med-brh-length": [np.median(obj_bl[obj])for obj in obj_list],
-            "total-length": sum_bl,
-            "brh-type-0-tot": [len(brh_tlist[0][obj]) for obj in obj_list],
-            "brh-type-0-id": [brh_tlist[0][obj] for obj in obj_list],
-            "brh-type-1-tot": [len(brh_tlist[1][obj]) for obj in obj_list],
-            "brh-type-1-ids": [brh_tlist[1][obj] for obj in obj_list],
-            "brh-type-2-tot": [len(brh_tlist[2][obj]) for obj in obj_list],
-            "brh-type-2-ids": [brh_tlist[2][obj] for obj in obj_list],
-            "brh-type-3-tot": count_cyc,
-            "brh-type-3-ids": [brh_tlist[3][obj] for obj in obj_list],
-            "comp-count": comp_arr,
-            "node-count": [np.count_nonzero((skel.correct_degrees[skel.pixel_values == i]) != 2) for i in obj_list],
-            'ep-count': [np.count_nonzero((skel.correct_degrees[skel.pixel_values == i]) == 1) for i in obj_list],
-            'jn-count' : [np.count_nonzero((skel.correct_degrees[skel.pixel_values == i]) > 2) for i in obj_list],
-            'ave-jn-deg' : [np.mean(skel.correct_degrees[(skel.pixel_values == i) & (skel.correct_degrees > 2)]) for i in obj_list],
-            'max-deg' : [np.max(skel.correct_degrees[skel.pixel_values == i]) for i in obj_list],
-            "point-ids": [np.arange(skel.graph.shape[0])[skel.pixel_values == i] for i in obj_list],
-            "mean-brh-str": [np.mean(obj_str[obj]) for obj in obj_list],
-            "med-brh-str": [np.median(obj_str[obj]) for obj in obj_list],
-            "sd-brh-str": [np.std(obj_str[obj]) for obj in obj_list],
+            "obj_id": obj_list,
+            "skel_type": obj_type,
+            "skel_type_num": obj_type_n,
+            "brh_count": count_b,
+            "branch_ids": [obj2branch[obj] for obj in obj_list],
+            "min_brh_length": [np.min(obj_bl[obj]) if len(obj_bl[obj]) != 0 else np.nan for obj in obj_list],
+            "max_brh_length": [np.max(obj_bl[obj]) if len(obj_bl[obj]) != 0 else np.nan for obj in obj_list],
+            "ave_brh_length": [np.mean(obj_bl[obj])for obj in obj_list],
+            "sd_brh_length": [np.std(obj_bl[obj]) for obj in obj_list],
+            "med_brh_length": [np.median(obj_bl[obj])for obj in obj_list],
+            "total_length": sum_bl,
+            "brh_type_0_tot": [len(brh_tlist[0][obj]) for obj in obj_list],
+            "brh_type_0_id": [brh_tlist[0][obj] for obj in obj_list],
+            "brh_type_1_tot": [len(brh_tlist[1][obj]) for obj in obj_list],
+            "brh_type_1_ids": [brh_tlist[1][obj] for obj in obj_list],
+            "brh_type_2_tot": [len(brh_tlist[2][obj]) for obj in obj_list],
+            "brh_type_2_ids": [brh_tlist[2][obj] for obj in obj_list],
+            "brh_type_3_tot": count_cyc,
+            "brh_type_3_ids": [brh_tlist[3][obj] for obj in obj_list],
+            "comp_count": comp_arr,
+            "node_count": [np.count_nonzero((skel.correct_degrees[skel.pixel_values == i]) != 2) for i in obj_list],
+            'abs_punc_count': [np.count_nonzero((skel.correct_degrees[skel.pixel_values == i]) == 0) for i in obj_list],
+            'ep_count': [np.count_nonzero((skel.correct_degrees[skel.pixel_values == i]) == 1) for i in obj_list],
+            'jn_count' : [np.count_nonzero((skel.correct_degrees[skel.pixel_values == i]) > 2) for i in obj_list],
+            'ave_jn_deg' : [np.mean(skel.correct_degrees[(skel.pixel_values == i) & (skel.correct_degrees > 2)]) for i in obj_list],
+            'max_deg' : [np.max(skel.correct_degrees[skel.pixel_values == i]) for i in obj_list],
+            "point_ids": [np.arange(skel.graph.shape[0])[skel.pixel_values == i] for i in obj_list],
+            "mean_brh_str": [np.mean(obj_str[obj]) for obj in obj_list],
+            "med_brh_str": [np.median(obj_str[obj]) for obj in obj_list],
+            "sd_brh_str": [np.std(obj_str[obj]) for obj in obj_list],
             "width": widths}
     
     return pd.DataFrame(skel_table_data)
@@ -1076,9 +1078,9 @@ def get_skeleton_metrics(org_skel_arr: np.ndarray,
     if output_all_tables:
         branch_table = get_skel_branch(org_skel)
         node_table = get_skel_node(org_skel)
-        return branch_table, node_table, skel_table.rename(columns={"obj-id": "label"})
+        return branch_table, node_table, skel_table.rename(columns={"obj_id": "label"})
     else:
-        return skel_table.rename(columns={"obj-id": "label"})
+        return skel_table.rename(columns={"obj_id": "label"})
     
 def fission_score(skel: Skeleton) -> float:
 

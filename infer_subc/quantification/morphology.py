@@ -10,8 +10,9 @@ from skimage.measure import regionprops_table, marching_cubes, mesh_surface_area
 from infer_subc.core.img import *
 from infer_subc.organelles import * 
 from infer_subc.utils.batch import list_image_files, find_segmentation_tiff_files
-from infer_subc.core.file_io import read_czi_image, read_tiff_image
+from infer_subc.core.file_io import read_czi_image, read_tiff_image, export_inferred_organelle
 from infer_subc.quantification.batch import append_atomic_csv, load_existing_keys_csv
+from infer_subc.quantification.skeletonization import create_skel, get_skeleton_metrics
 
 
 def surface_area_from_props(labels: np.ndarray,
@@ -204,7 +205,9 @@ def get_org_morphology(source_file_path: str,
                         list_region_names: Union[List[str], None]=None,
                         list_region_segs: Union[List[np.ndarray], None]=None,
                         mask_name: Union[str, None]=None,
-                        scale: Union[tuple,None] = None):
+                        scale: Union[tuple,None] = None,
+                        include_skel: Union[List[str], None] = [],
+                        all_skel_tab: bool = False):
     """
     Measure the amount, size, and shape of multiple organelles from a single cell
 
@@ -237,6 +240,11 @@ def get_org_morphology(source_file_path: str,
         Name of the region to use as the mask for analysis; if not specified, the entire image will be quantified.
     scale: Union[tuple,None] = None
         a tuple that contains the real world dimensions for each dimension in the image (Z, Y, X)
+    include_skel: Union[List[str], None]
+             List of 3D organelle segmentation arrays to be skeletonized in addition to morphology metrics.
+             The names should match those included in list_obj_names. If no skeletonization is to be included, specify [] (empty list).
+    all_skel_tab: bool
+        Whether to output all skeleton tables (True) or just the skeleton metrics table (False).
 
     Returns:
     ----------
@@ -277,6 +285,10 @@ def get_org_morphology(source_file_path: str,
 
     # empty list to collect a morphology data for each organelle
     org_tabs = []
+    skel_arr_imgs = {}
+    # additional skeleton tables if include_skel and all_skel_tab are both True
+    branch_tabs = []
+    node_tabs = []
 
     # loop through the list of organelles and run the get_morphology_metrics function
     for j, target in enumerate(list_obj_names):        
@@ -295,6 +307,61 @@ def get_org_morphology(source_file_path: str,
                                             mask=mask,
                                             mask_name=mask_name,
                                             scale=scale)
+        
+        # run get_skeleton_metrics function to add skeleton quantification if organelle is in include_skel list
+        if target in include_skel:
+            skel_arr = create_skel(org_obj)
+            if np.sum(skel_arr.astype(bool))>1:
+                if all_skel_tab:
+                    skel_branch_table, skel_node_table, skel_metrics = get_skeleton_metrics(org_skel_arr=skel_arr,
+                                                        seg_name=target, 
+                                                        segmentation=org_obj,
+                                                        mask=mask,
+                                                        mask_name=mask_name,
+                                                        scale=scale,
+                                                        output_all_tables = True)
+                    
+                    skel_branch_table.insert(0, "branch_id", skel_branch_table.index)
+                    skel_branch_table = skel_branch_table.reset_index(drop=True)
+                    skel_branch_table.insert(0, "object", target)
+                    skel_branch_table.insert(0, "scale", str(scale))
+                    skel_branch_table.insert(0, column="mask_name", value=mask_name)
+                    skel_branch_table = skel_branch_table.rename(columns={"skel_obj_id": "label"})
+                    branch_tabs.append(skel_branch_table)
+
+                    skel_node_table.insert(0, "object", target)
+                    skel_node_table.insert(0, "scale", str(scale))
+                    skel_node_table.insert(0, column="mask_name", value=mask_name)
+                    skel_node_table = skel_node_table.rename(columns={"obj_id": "label"})
+                    node_tabs.append(skel_node_table)
+                else:
+                    skel_metrics = get_skeleton_metrics(org_skel_arr=skel_arr,
+                                                        seg_name=target, 
+                                                        segmentation=org_obj,
+                                                        mask=mask,
+                                                        mask_name=mask_name,
+                                                        scale=scale,
+                                                        output_all_tables = False)
+                
+            else:
+                print(f"Skeletonization will not be carried out for {target} because less than two voxels are present in the skeleton array")
+                skel_arr = None
+            skel_arr_imgs[target] = skel_arr
+            # Rename skeleton metric columns to distingush from morphology metrics
+            skel_cols = [col for col in skel_metrics.columns[:6]]
+            for i in skel_metrics.columns[6:]:
+                skel_cols.append("skel_" + i)
+            skel_metrics.columns = skel_cols
+
+            # dropping list related measurements as they do not add interpretability and cause tables to be very tall and difficult to read
+            skel_drop = ['skel_branch_ids',
+                'skel_brh_type_0_id',
+                'skel_brh_type_1_ids',
+                'skel_brh_type_2_ids',
+                'skel_brh_type_3_ids',
+                'skel_point_ids']
+
+            org_metrics = pd.merge(org_metrics, skel_metrics.drop(columns=skel_drop), on=['mask_name','scale','object', 'label'], validate='one_to_one')
 
         # add table to list above
         org_tabs.append(org_metrics)
@@ -304,8 +371,15 @@ def get_org_morphology(source_file_path: str,
 
     # add a new column to list the name of the image these data are derived from 
     final_org_tab.insert(loc=0,column='image_name',value=source_file_path.stem)
-    
-    return final_org_tab
+
+    if include_skel and all_skel_tab:
+        final_branch_tab = pd.concat(branch_tabs)
+        final_branch_tab.insert(0, "image_name", source_file_path.stem)
+        final_node_tab = pd.concat(node_tabs)
+        final_node_tab.insert(0, "image_name", source_file_path.stem)
+        return final_org_tab, final_branch_tab, final_node_tab, skel_arr_imgs
+    else:
+        return final_org_tab, skel_arr_imgs
 
 
 # batch process organelle morphology quantification for multiple cells from a single experiment
@@ -320,6 +394,8 @@ def batch_process_org_morph(dataset_name: str,
                              region_names: Union[List[str], None]=None,
                              mask_name: Union[str, None]=None,
                              use_scale:bool=True,
+                             include_skel: Union[List[str], None] = [],
+                             all_skel_tab: bool = False,
                              seg_suffix:Union[str, None]=None):
     """  
     batch process segmentation quantification (morphology, distribution, contacts); this function is currently optimized to process images from one file folder per image type (e.g., raw, segmentation)
@@ -354,6 +430,11 @@ def batch_process_org_morph(dataset_name: str,
         If None, the entire image will be quantified.
     use_scale: bool=True
         Whether to apply scaling to the quantitative data; scaled data will be in real world units (e.g., microns) rather than pixels/voxels
+    include_skel: Union[List[str], None]
+        List of 3D organelle segmentation arrays to be skeletonized in addition to morphology metrics.
+        The names should match those included in list_obj_names. If no skeletonization is to be included, specify [] (empty list).
+    all_skel_tab: bool
+        Whether to output all skeleton tables (True) or just the skeleton metrics table (False).
     seg_suffix:Union[str, None]=None
         Any additional text that is included in the segmentation tiff files between the file stem and the segmentation suffix, not including the initial "-"
 
@@ -427,19 +508,58 @@ def batch_process_org_morph(dataset_name: str,
             else:
                 scale = None
 
-            org_metrics = get_org_morphology(source_file_path=img_f,
-                                                list_obj_names=organelle_names,
-                                                list_obj_segs=organelles,
-                                                list_intensity_img=intensities, 
-                                                list_region_names=region_names,
-                                                list_region_segs=regions, 
-                                                mask_name=mask_name,
-                                                scale=scale)
+            if include_skel and all_skel_tab:
+                org_metrics, branch_table, node_table, skel_dict_arr = get_org_morphology(source_file_path=img_f,
+                                                    list_obj_names=organelle_names,
+                                                    list_obj_segs=organelles,
+                                                    list_intensity_img=intensities,
+                                                    list_region_names=region_names,
+                                                    list_region_segs=regions,
+                                                    mask_name=mask_name,
+                                                    scale=scale,
+                                                    include_skel=include_skel,
+                                                    all_skel_tab=all_skel_tab)
+                # save the morphology (or labels only) table data per image directly to csv
+                org_metrics.insert(loc=0,column='dataset',value=dataset_name)
+                append_atomic_csv(morpho_path, org_metrics)
+                del org_metrics  # free up memory
+
+                # save branch and node tables if skeletonization is included
+                branch_path = quant_path / f"{dataset_name}_skeleton_branch_data.csv"
+                node_path = quant_path / f"{dataset_name}_skeleton_node_data.csv"
+                append_atomic_csv(branch_path, branch_table)
+                append_atomic_csv(node_path, node_table)
+                del branch_table, node_table  # free up memory
+
+                org_metrics, skel_dict_arr = get_org_morphology(source_file_path=img_f,
+                                                    list_obj_names=organelle_names,
+                                                    list_obj_segs=organelles,
+                                                    list_intensity_img=intensities, 
+                                                    list_region_names=region_names,
+                                                    list_region_segs=regions, 
+                                                    mask_name=mask_name,
+                                                    scale=scale,
+                                                    include_skel=include_skel)
+
+                # save the morphology table data per image directly to csv
+                org_metrics.insert(loc=0,column='dataset',value=dataset_name)
+                append_atomic_csv(morpho_path, org_metrics)
+                del org_metrics  # free up memory
             
             # save the morphology table data per image directly to csv
             org_metrics.insert(loc=0,column='dataset',value=dataset_name)
             append_atomic_csv(morpho_path, org_metrics)
             del org_metrics  # free up memory
+
+            if include_skel:
+             # save the skeleton images
+                for skel_name, skel_img in skel_arr_dict.items():
+                    if skel_img is not None:
+                        if not (Path(img_f)/f"{meta_dict['file_name'].stem}-{skel_name}-skeleton.tiff").exists():
+                            export_inferred_organelle(skel_img, f"{skel_name}-skeleton", meta_dict, img_f)
+                        else:
+                            warnings.warn(f"Some of the skeleton images already exist for {meta_dict['file_name'].stem} in {img_f}. They will not be overwritten.", UserWarning)
+                del skel_arr_dict  # free up memory
 
             end2 = time.time()
             print(f"Completed quantification of {meta_dict['file_name']} in {(end2-img_start)/60} mins.")
@@ -505,7 +625,29 @@ def batch_org_morph_summary_stats(csv_path_list: List[str],
     ###################
     group_by = ['dataset', 'image_name', 'mask_name', 'scale', 'object']
     sharedcolumns = ["SA_to_volume_ratio", "equivalent_diameter", "extent", "euler_number", "solidity", "axis_major_length"]
+    
+    # check if skeletonization metrics are included in the data by looking for any column names that start with "skel_"
+    include_skel = any(col.startswith('skel_') for col in org_df.columns)
+
+    # add skeleton metrics to the shared columns if they are included in the data
+    if include_skel:
+        skel_cols = ["skel_total_length",
+                    "skel_abs_punc_count",
+                    "skel_ep_count",
+                    "skel_jn_count",
+                    "skel_node_count",
+                    "skel_brh_count"]
+        skel_cols_2 = ["skel_brh_type_0_tot",
+                            "skel_brh_type_1_tot",
+                            "skel_brh_type_2_tot",
+                                "skel_brh_type_3_tot",
+                            "skel_comp_count",
+                            "skel_ave_jn_deg",
+                            "skel_max_deg",
+                            "skel_mean_brh_str",
+                            "skel_width"]
     ag_func_standard = ['mean', 'median', 'std']
+
 
     ###################
     # summarize shared measurements between org_df and contacts_df
@@ -516,11 +658,68 @@ def batch_org_morph_summary_stats(csv_path_list: List[str],
     tab3 = org_df[group_by + sharedcolumns].groupby(group_by).agg(ag_func_standard)
     org_summary = pd.merge(tab1, tab2, 'outer', on=group_by)
     org_summary = pd.merge(org_summary, tab3, 'outer', on=group_by)
+    if include_skel:
+        tab4 = org_df[group_by + skel_cols].groupby(group_by).agg(['sum'] + ag_func_standard)
+        tab5 = org_df[group_by + skel_cols_2].groupby(group_by).agg(ag_func_standard)
+        org_summary = pd.merge(org_summary, tab4, 'outer', on=group_by)
+        org_summary = pd.merge(org_summary, tab5, 'outer', on=group_by)
 
     # Get mask_name and corresponding volume column per group & calculate volume fraction
     mask_names = org_df.groupby(group_by)['mask_name'].first()
     mask_volume_data = org_df.groupby(group_by).first().apply(lambda row: row[f"{mask_names.loc[row.name]}_volume"], axis=1)
     org_summary.insert(org_summary.columns.get_loc(('volume', 'sum')) + 1, ('volume', 'fraction'), org_summary[('volume', 'sum')]/mask_volume_data)
+
+    ###################
+    # additional skeleton summarization inspired by mitograph measurments (if skeletonization is included)
+    ###################
+
+    if include_skel:
+        # a temporary table used to calculate the average node degree, fusion score, fission score, connectivity, and heterogeneity for each organelle per cell
+        # these measurements are inspired by the mitograph quantification metrics, but adapted to be more generalizable to different organelles
+        skel_ff = org_df.assign(sum_jnxdeg = lambda x: x['skel_ave_jn_deg'] * x['skel_jn_count'],
+                                is_punc = lambda df: (df['skel_type'] == "Punctate").astype(int),
+                                is_rod = lambda df: (df['skel_type'] == "Rod").astype(int),
+                                is_iso_cycle = lambda df: (df['skel_type'] == "Isolated Cycle").astype(int),
+                                is_network = lambda df: (df['skel_type'] == "Network").astype(int)).groupby(group_by).agg({
+            'label': 'count',
+            'volume': ['mean','std'],
+            'skel_total_length': ['max','sum','mean','std'],
+            'skel_brh_count': ['sum','mean','std'],
+            'skel_abs_punc_count': ['sum'],
+            'skel_ep_count': 'sum',
+            'skel_jn_count': ['sum'],
+            'skel_node_count': ['sum','mean','std'],
+            'sum_jnxdeg': 'sum',
+            'skel_width': ['mean','std'],
+            'is_punc': 'sum',
+            'is_rod': 'sum',
+            'is_iso_cycle': 'sum',
+            'is_network': 'sum'
+        }).assign(
+            punctate_count = lambda df: df['is_punc'],
+            rod_count = lambda df: df['is_rod'],
+            iso_cycle_count = lambda df: df['is_iso_cycle'],
+            network_count = lambda df: df['is_network'],
+            skel_avg_node_deg = lambda df: (df['sum_jnxdeg','sum'] + df['skel_ep_count','sum']) / df['skel_node_count','sum'],
+            skel_fusion_score = lambda df: (df['skel_total_length','max']/df['skel_total_length','sum']) + 
+                (df['skel_total_length','sum']/df['skel_brh_count','sum']) + df['skel_avg_node_deg'],
+            skel_fission_score = lambda df: (df['label','count']/df['skel_total_length','sum']) + 
+                (df['skel_node_count','sum']/df['skel_total_length','sum']) + (df['skel_brh_count','sum']/df['skel_total_length','sum']),
+            skel_connectivity = lambda df: df['skel_fusion_score']/df['skel_fission_score'],
+            skel_heterogeneity = lambda df: (df['skel_node_count','std']/df['skel_node_count','mean']) + 
+                (df['skel_brh_count','std']/df['skel_brh_count','mean']) +
+                (df['skel_total_length','std']/df['skel_total_length','mean']) +
+                (df['volume','std']/df['volume','mean']) +
+                (df['skel_width','std']/df['skel_width','mean']) +
+                df['skel_avg_node_deg']
+        )
+
+        # columns from the fusion/fission table to add to the morphology summary table
+        skel_sum_metrics = ["punctate_count", "rod_count", "iso_cycle_count", "network_count",
+            "skel_avg_node_deg", "skel_fusion_score", "skel_fission_score", "skel_connectivity", "skel_heterogeneity"]
+
+        # merge these additional metrics back into the org_summary table
+        org_summary = pd.merge(org_summary, skel_ff[skel_sum_metrics], on=group_by, how='outer')
 
     ###################
     # fill gaps & NA values
