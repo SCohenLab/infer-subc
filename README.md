@@ -176,7 +176,7 @@ The installation of the `organelle-segmenter-plugin` package is required for thi
 
 *Continue to the Quality Check section explained below **BEFORE** moving on to Part 2 – Organelle Quantification.*
 
-### <ins>Segmentation Instructions - Option B:</ins> [Jupyter Notebooks](/infer-subc/notebooks/part_1_segmentation_workflows/) 📚
+### <ins>Segmentation Instructions - Option B:</ins> [Jupyter Notebooks](./notebooks/part_1_segmentation_workflows/) 📚
 We have supplied the same analysis methods available in the Napari plugin in Jupyter Notebook format. The primary purpose of the Jupyter notebooks is to walk step-by-step through each of the segmentation workflows, linking the underlying code to each step in the segmentation workflows. We hope these notebooks provide a more easily accessible resource for those who are new to Python image analysis or a more flexible platform for customization.
 
 *The Jupyter Notebooks can be used in a similar fashion as the Napari plugin: 1) optimize segementation settings for each workflow; 2) batch process multiple segmentation workflows simultaneously on a set of images.*
