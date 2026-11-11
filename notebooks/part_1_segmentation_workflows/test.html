@@ -44,6 +44,18 @@
 <body>
     <h1>Interactive Data Explorer</h1>
     <p>Load data, choose a comparison, and click a volcano point to see its individual values.</p>
+    <div class="controls">
+        <label>Sample dataset
+            <select id="sample-dataset">
+                <option value="" selected disabled>Choose a sample dataset</option>
+                <option value="study">Rhoads, et al., 2025 data</option>
+                <option value="fictional">Fictional example</option>
+            </select>
+        </label>
+        <button id="reload-sample" type="button" disabled>Reload sample</button>
+    </div>
+    <details>
+    <summary>Load local files instead</summary>
     <h2>Table S1 and individual cell data</h2>
     <div class="controls">
         <label>Table S1 workbook
@@ -56,7 +68,6 @@
             <input id="naive-file" type="file" accept=".csv,text/csv">
         </label>
         <button id="load-study" type="button">Load study files</button>
-        <button id="load-study-example" type="button">Load bundled study</button>
     </div>
     <h2>Example CSV format</h2>
     <div class="controls">
@@ -67,8 +78,8 @@
             <input id="statistics-file" type="file" accept=".csv,text/csv">
         </label>
         <button id="load-files" type="button">Load selected files</button>
-        <button id="load-example" type="button">Load bundled example</button>
     </div>
+    </details>
     <div class="controls">
         <label>Comparison
             <select id="comparison" disabled></select>
@@ -77,8 +88,8 @@
             <select id="feature" disabled></select>
         </label>
     </div>
-    <p id="status" role="status" aria-live="polite">Select the study files, or load an example.</p>
-    <p>Bundled-data buttons require this page to be served over HTTP. When opening the HTML directly, select files from <code>sample-stats-input</code>. Files are processed in your browser; libraries require an internet connection. Triangles indicate bounded q-values; their plotted height is the reported bound, not an exact value.</p>
+    <p id="status" role="status" aria-live="polite">Choose a sample dataset or load local files.</p>
+    <p>Sample datasets load from the infer-subc GitHub repository and require internet access, as do the plotting libraries. Local files are processed in your browser. Triangles indicate bounded q-values; their plotted height is the reported bound, not an exact value.</p>
     <div class="container">
         <div class="plot-card"><div id="volcano-plot" class="plot"></div></div>
         <div class="plot-card"><div id="replicate-plot" class="plot"></div></div>
@@ -86,6 +97,7 @@
     <script>
         const measurementsInput = document.getElementById('measurements-file');
         const statisticsInput = document.getElementById('statistics-file');
+        const sampleSelect = document.getElementById('sample-dataset');
         const comparisonSelect = document.getElementById('comparison');
         const featureSelect = document.getElementById('feature');
         const status = document.getElementById('status');
@@ -361,6 +373,8 @@
                 if (typeof Plotly === 'undefined' || typeof Papa === 'undefined') {
                     throw new Error('Plotly or the CSV parser could not load. Check your internet connection and reload the page.');
                 }
+                comparisonSelect.disabled = true;
+                featureSelect.disabled = true;
                 setStatus('Loading data...');
                 const data = await getData();
                 if (version !== loadVersion) return;
@@ -386,25 +400,17 @@
         }
 
         document.getElementById('load-files').addEventListener('click', () => loadData(async () => {
+            sampleSelect.selectedIndex = 0;
+            document.getElementById('reload-sample').disabled = true;
             if (!measurementsInput.files.length || !statisticsInput.files.length) {
                 throw new Error('Select both the measurements and statistics CSV files.');
             }
             const [raw, stats] = await Promise.all([measurementsInput.files[0].text(), statisticsInput.files[0].text()]);
             return prepareData(raw, stats);
         }));
-        document.getElementById('load-example').addEventListener('click', () => loadData(async () => {
-            if (location.protocol === 'file:') {
-                throw new Error('The bundled example requires HTTP. Select both CSV files manually or serve this folder over HTTP.');
-            }
-            const paths = ['sample-stats-input/sample_measurements.csv', 'sample-stats-input/sample_statistics.csv'];
-            const [raw, stats] = await Promise.all(paths.map(async path => {
-                const response = await fetch(path);
-                if (!response.ok) throw new Error(`Could not load ${path} (HTTP ${response.status}).`);
-                return response.text();
-            }));
-            return prepareData(raw, stats);
-        }));
         document.getElementById('load-study').addEventListener('click', () => loadData(async () => {
+            sampleSelect.selectedIndex = 0;
+            document.getElementById('reload-sample').disabled = true;
             if (typeof XLSX === 'undefined') throw new Error('The workbook reader could not load. Check your internet connection and reload the page.');
             const workbook = document.getElementById('workbook-file').files[0];
             const astro = document.getElementById('astrocyte-file').files[0];
@@ -413,22 +419,48 @@
             const [buffer, astroText, naiveText] = await Promise.all([workbook.arrayBuffer(), astro.text(), naive.text()]);
             return prepareStudy(buffer, astroText, naiveText);
         }));
-        document.getElementById('load-study-example').addEventListener('click', () => loadData(async () => {
-            if (typeof XLSX === 'undefined') throw new Error('The workbook reader could not load. Check your internet connection and reload the page.');
-            if (location.protocol === 'file:') throw new Error('The bundled study requires HTTP. Select the three study files manually or serve this folder over HTTP.');
-            const paths = [
-                'sample-stats-input/CELL-REPORTS-D-24-06725_tableS1.xlsx',
-                'sample-stats-input/20240722_NvA-untr_fp-metrics.csv',
-                'sample-stats-input/20250110_N_uncVcon_ctrls_fp-metrics.csv'
-            ];
-            const responses = await Promise.all(paths.map(async path => {
-                const response = await fetch(path);
-                if (!response.ok) throw new Error(`Could not load ${path} (HTTP ${response.status}).`);
-                return response;
-            }));
-            const [buffer, astroText, naiveText] = await Promise.all([responses[0].arrayBuffer(), responses[1].text(), responses[2].text()]);
-            return prepareStudy(buffer, astroText, naiveText);
-        }));
+        const sampleDataUrl = 'https://raw.githubusercontent.com/SCohenLab/infer-subc/4195e1dfc418b0babe7b1a9c2c3f0f53f150a4b0/notebooks/part_1_segmentation_workflows/sample-stats-input/';
+
+        async function fetchSample(name) {
+            let response;
+            try {
+                response = await fetch(sampleDataUrl + name);
+            } catch (error) {
+                throw new Error(`Could not download ${name}. Check your internet connection and try again.`);
+            }
+            if (!response.ok) throw new Error(`Could not download ${name} (HTTP ${response.status}).`);
+            return response;
+        }
+
+        function loadSample() {
+            const selected = sampleSelect.value;
+            document.getElementById('reload-sample').disabled = !selected;
+            loadData(async () => {
+                if (selected === 'fictional') {
+                    const responses = await Promise.all([
+                        fetchSample('sample_measurements.csv'),
+                        fetchSample('sample_statistics.csv')
+                    ]);
+                    const [raw, stats] = await Promise.all(responses.map(response => response.text()));
+                    return prepareData(raw, stats);
+                }
+                if (selected === 'study') {
+                    if (typeof XLSX === 'undefined') throw new Error('The workbook reader could not load. Check your internet connection and reload the page.');
+                    const responses = await Promise.all([
+                        fetchSample('CELL-REPORTS-D-24-06725_tableS1.xlsx'),
+                        fetchSample('20240722_NvA-untr_fp-metrics.csv'),
+                        fetchSample('20250110_N_uncVcon_ctrls_fp-metrics.csv')
+                    ]);
+                    const [buffer, astroText, naiveText] = await Promise.all([
+                        responses[0].arrayBuffer(), responses[1].text(), responses[2].text()
+                    ]);
+                    return prepareStudy(buffer, astroText, naiveText);
+                }
+                throw new Error('Unknown sample dataset.');
+            });
+        }
+        sampleSelect.addEventListener('change', loadSample);
+        document.getElementById('reload-sample').addEventListener('click', loadSample);
         comparisonSelect.addEventListener('change', () => renderComparison().catch(error => setStatus(error.message, true)));
         featureSelect.addEventListener('change', () => {
             const group = comparisons[Number(comparisonSelect.value)];

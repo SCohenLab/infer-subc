@@ -3,14 +3,25 @@
 These fictional files contain three conditions, six independent samples per
 condition, four measurements, and two comparisons against control.
 
-Open `../test.html` in a browser. To explore the study, select the Table S1
-workbook, `20240722_NvA-untr_fp-metrics.csv` for neuron vs astrocyte, and
-`20250110_N_uncVcon_ctrls_fp-metrics.csv` for neuron vs astrocyte-naive
-neuron, then click **Load study files**. Choose a comparison and click a
-point in the volcano plot to see individual cell values. The first feature
-is displayed initially. Use the metric selector to reach points that overlap
-on the volcano plot. The files are read locally; Plotly, the CSV parser,
-and the workbook reader load from CDNs and require an internet connection.
+Open `../test.html` in a browser and select **Rhoads, et al., 2025 data** or
+**Fictional example** from the **Sample dataset** dropdown. The sample files
+download directly from the infer-subc GitHub repository, including when opening
+the HTML file directly. The sample URLs are pinned to repository revision
+`4195e1dfc418b0babe7b1a9c2c3f0f53f150a4b0` to keep the files consistent;
+update that revision in the HTML if the published sample data changes.
+An internet connection is required for the sample files and the plotting, CSV,
+and workbook libraries. Use **Reload sample** to retry a failed download.
+
+Choose a comparison and click a point in the volcano plot to see individual
+cell values. The first feature is displayed initially. Use the metric selector
+to reach points that overlap on the volcano plot.
+
+To load local files instead, expand **Load local files instead**. For the
+study, select the Table S1 workbook, `20240722_NvA-untr_fp-metrics.csv` for
+neuron vs astrocyte, and `20250110_N_uncVcon_ctrls_fp-metrics.csv` for neuron
+vs astrocyte-naive neuron, then click **Load study files**. For the fictional
+CSV format, select `sample_measurements.csv` and `sample_statistics.csv` and
+click **Load selected files**. Local files are processed in the browser.
 
 The study loader is specific to the Table S1 layout and these two CSVs:
 it uses `cell_type` (Neuron/Astrocyte) in the first CSV and
@@ -25,15 +36,6 @@ Hover to see the original bound. Missing q-values or rank differences are
 excluded and counted. Missing, NA, NaN and infinite cell values are excluded
 from the bars and dots, with per-group exclusion counts shown on the chart.
 Colors use the workbook's significance flags, not recalculated statistics.
-
-To try the fictional CSV format instead, select `sample_measurements.csv` and
-`sample_statistics.csv` and click **Load selected files**.
-
-Alternatively, run `py -m http.server 8000` from the directory containing
-`test.html`, open `http://localhost:8000/test.html`, and click **Load bundled
-study** or **Load bundled example**. Browsers do not allow these buttons to
-fetch local files when the HTML is opened directly, so use the file selectors
-in that case.
 
 ## Sample measurements
 
