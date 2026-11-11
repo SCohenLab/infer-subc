@@ -176,12 +176,12 @@ The installation of the `organelle-segmenter-plugin` package is required for thi
 
 *Continue to the Quality Check section explained below **BEFORE** moving on to Part 2 – Organelle Quantification.*
 
-### <ins>Segmentation Instructions - Option B:</ins> [Jupyter Notebooks](./notebooks/part_1_segmentation_workflows/) 📚
+### <ins>Segmentation Instructions - Option B:</ins> [Jupyter Notebooks](./notebooks/) 📚
 We have supplied the same analysis methods available in the Napari plugin in Jupyter Notebook format. The primary purpose of the Jupyter notebooks is to walk step-by-step through each of the segmentation workflows, linking the underlying code to each step in the segmentation workflows. We hope these notebooks provide a more easily accessible resource for those who are new to Python image analysis or a more flexible platform for customization.
 
 *The Jupyter Notebooks can be used in a similar fashion as the Napari plugin: 1) optimize segementation settings for each workflow; 2) batch process multiple segmentation workflows simultaneously on a set of images.*
 
-1. Download the setup notebook (1.0) and the segmentation workflow notebooks (1.1-1.8) needed for your analysis. All segmentation workflow notebook can be found in this repository under `notebooks`>[`part_1_segmentation_workflows`](/infer-subc/notebooks/part_1_segmentation_workflows/).
+1. Download the setup notebook (1.0) and the segmentation workflow notebooks (1.1-1.8) needed for your analysis. All segmentation workflow notebook can be found in this repository under `notebooks`>[`part_1_segmentation_workflows`](./infer-subc/notebooks/part_1_segmentation_workflows/).
 2. Work through notebook [1.0_image_setup](/infer-subc/notebooks/part_1_segmentation_workflows/1.0_image_setup.ipynb) to ensure your images are compatible with the current infer-subc file readering and information extraction approaches. Any necessary updates needed for your images can be tested and implemented here. The steps presented in this notebook will be used to open raw files and read metadata in all other part 1 notebooks.
 3. Use notebooks 1.1 through 1.8 to determine the appropriate segmentation settings for your images (*tip: we recommend typing segmentation settings one a variety of images/experimental conditions to assess robustness and refine settings as needed before batch processing*). The settings implemented in these notebooks will be used as a reference when setting up batch processing in the next step.
 4. After you have determined the optimal segmentation settings for each desired workflow, work through the [batch_process_segmentation](/infer-subc/notebooks/part_1_segmentation_workflows/batch_process_segmentations.ipynb) notebook to batch process a series of images (all from the same folder).
