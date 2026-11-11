@@ -3,16 +3,37 @@
 These fictional files contain three conditions, six independent samples per
 condition, four measurements, and two comparisons against control.
 
-Open `../test.html` in a browser, select the two CSV files, and click
-**Load selected files**. Choose a comparison and click a point in the volcano
-plot to see its sample values. The first feature is displayed initially.
-The files are read locally; Plotly and the CSV parser load from CDNs and
-therefore require an internet connection.
+Open `../test.html` in a browser. To explore the study, select the Table S1
+workbook, `20240722_NvA-untr_fp-metrics.csv` for neuron vs astrocyte, and
+`20250110_N_uncVcon_ctrls_fp-metrics.csv` for neuron vs astrocyte-naive
+neuron, then click **Load study files**. Choose a comparison and click a
+point in the volcano plot to see individual cell values. The first feature
+is displayed initially. Use the metric selector to reach points that overlap
+on the volcano plot. The files are read locally; Plotly, the CSV parser,
+and the workbook reader load from CDNs and require an internet connection.
+
+The study loader is specific to the Table S1 layout and these two CSVs:
+it uses `cell_type` (Neuron/Astrocyte) in the first CSV and
+`media_condition` (Conditioned/Unconditioned) in the second. The conditioned
+group corresponds to the neuron control and the unconditioned group to the
+astrocyte-naive neuron. `dataset` and `image_name` identify individual cells.
+The plot uses the workbook's mean rank difference as reported, with neuron
+control minus the other group, and its reported q-value. An upward triangle
+plots a `<` q-value at its bound, so the true -log10(q) is higher; a downward
+triangle plots a `>` q-value at its bound, so the true -log10(q) is lower.
+Hover to see the original bound. Missing q-values or rank differences are
+excluded and counted. Missing, NA, NaN and infinite cell values are excluded
+from the bars and dots, with per-group exclusion counts shown on the chart.
+Colors use the workbook's significance flags, not recalculated statistics.
+
+To try the fictional CSV format instead, select `sample_measurements.csv` and
+`sample_statistics.csv` and click **Load selected files**.
 
 Alternatively, run `py -m http.server 8000` from the directory containing
 `test.html`, open `http://localhost:8000/test.html`, and click **Load bundled
-example**. Browsers do not allow that button to fetch local files when the HTML
-is opened directly, so use the file selectors in that case.
+study** or **Load bundled example**. Browsers do not allow these buttons to
+fetch local files when the HTML is opened directly, so use the file selectors
+in that case.
 
 ## Sample measurements
 
@@ -38,7 +59,9 @@ each combination of these and `feature` must be unique.
 - `n_reference`, `n_comparison`: non-missing sample counts.
 - `mean_reference`, `mean_comparison`: means of the corresponding measurements.
 - `log2_fold_change`: `log2(mean_comparison / mean_reference)`, used for the
-  volcano x-axis. A positive value means the comparison mean is higher.
+  illustrative effect size. A positive value means the comparison mean is higher.
+- `mean_rank_difference`: mean rank of reference minus mean rank of comparison,
+  used for the volcano x-axis.
 - `u_statistic`: Mann-Whitney U for the comparison condition (the first
   argument to the test).
 - `p_value`: two-sided Mann-Whitney U p-value.
@@ -51,7 +74,7 @@ within each comparison**, across all four features. The sample sizes, means,
 test statistics and p-values were calculated from the measurements file; numeric
 values are rounded for display.
 
-The explorer uses `-log10(p_adjusted_bh)` for its y-axis and identifies
+For the fictional CSV format, the explorer uses `-log10(p_adjusted_bh)` for its y-axis and identifies
 significant points with a horizontal line at `-log10(0.10) = 1`. Hover text
 shows the selected comparison and both p-values. Bars display means calculated
 from the loaded samples, not the means in the statistics file. The explorer uses
