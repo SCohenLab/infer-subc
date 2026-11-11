@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Data Explorer</title>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 30px auto;
+            padding: 0 20px;
+            max-width: 1500px;
+            color: #111827;
+            background: #f8f9fa;
+        }
+        h1 { margin-bottom: 5px; font-size: 1.875rem; }
+        p { color: #4b5563; line-height: 1.5; }
+        .controls, .plot-card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .controls { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; }
+        label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; }
+        input, select, button { font: inherit; max-width: 100%; }
+        select, button { padding: 8px; }
+        button { cursor: pointer; }
+        #status { min-height: 1.5em; margin: 12px 0; }
+        #status.error { color: #b91c1c; }
+        .container { display: flex; flex-wrap: wrap; gap: 20px; }
+        .plot-card { flex: 1 1 450px; min-width: 0; }
+        .plot { width: 100%; height: 550px; }
+        @media (max-width: 600px) {
+            body { margin: 16px auto; padding: 0 12px; }
+            .plot { height: 450px; }
+        }
+    </style>
+</head>
+<body>
+    <h1>Interactive Data Explorer</h1>
+    <p>Load the measurement and statistics CSV files, choose a comparison, and click a volcano point to see its sample values.</p>
+    <div class="controls">
+        <label>Sample measurements CSV
+            <input id="measurements-file" type="file" accept=".csv,text/csv">
+        </label>
+        <label>Statistics CSV
+            <input id="statistics-file" type="file" accept=".csv,text/csv">
+        </label>
+        <button id="load-files" type="button">Load selected files</button>
+        <button id="load-example" type="button">Load bundled example</button>
+        <label>Comparison
+            <select id="comparison" disabled></select>
+        </label>
+    </div>
+    <p id="status" role="status" aria-live="polite">Select both files or load the bundled example.</p>
+    <p>The example button requires this page to be served over HTTP. When opening the HTML directly, select the two files from the <code>sample-stats-input</code> folder instead. CSV data stays in your browser; the plotting libraries require an internet connection.</p>
+    <div class="container">
+        <div class="plot-card"><div id="volcano-plot" class="plot"></div></div>
+        <div class="plot-card"><div id="replicate-plot" class="plot"></div></div>
+    </div>
+    <script>
+        const measurementsInput = document.getElementById('measurements-file');
+        const statisticsInput = document.getElementById('statistics-file');
+        const comparisonSelect = document.getElementById('comparison');
+        const status = document.getElementById('status');
+        const volcanoDiv = document.getElementById('volcano-plot');
+        const replicateDiv = document.getElementById('replicate-plot');
+        let measurements = [];
+        let comparisons = [];
+        let activeRows = [];
+        let loadVersion = 0;
+        const plotConfig = { responsive: true };
+
+        function setStatus(message, isError = false) {
+            status.textContent = message;
+            status.classList.toggle('error', isError);
+        }
+
+        function escapeText(value) {
+            return String(value).replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[char]);
+        }
+
+        function parseCsv(text, name, required) {
+            const parsed = Papa.parse(text, { header: true, skipEmptyLines: 'greedy' });
+            if (parsed.errors.length) {
+                throw new Error(`${name}: ${parsed.errors[0].message}`);
+            }
+            const headers = parsed.meta.fields || [];
+            if (headers.some(header => !header) || new Set(headers).size !== headers.length) {
+                throw new Error(`${name}: column names must be nonempty and unique.`);
+            }
+            const missing = required.filter(header => !headers.includes(header));
+            if (missing.length) throw new Error(`${name}: missing columns: ${missing.join(', ')}.`);
+            if (!parsed.data.length) throw new Error(`${name}: no data rows found.`);
+            return { rows: parsed.data, headers };
+        }
+
+        function numberField(value, context) {
+            if (value === undefined || value.trim() === '' || !Number.isFinite(Number(value))) {
+                throw new Error(`${context} must be a finite number.`);
+            }
+            return Number(value);
+        }
+
+        function prepareData(measurementsText, statisticsText) {
+            const raw = parseCsv(measurementsText, 'Measurements', ['sample_id', 'condition']);
+            const stats = parseCsv(statisticsText, 'Statistics', [
+                'feature', 'reference_condition', 'comparison_condition',
+                'log2_fold_change', 'p_value', 'p_adjusted_bh'
+            ]);
+            const sampleIds = new Set();
+            const conditions = new Set();
+            raw.rows.forEach((row, index) => {
+                if (!row.sample_id.trim() || !row.condition.trim()) {
+                    throw new Error(`Measurements row ${index + 2}: sample_id and condition are required.`);
+                }
+                if (sampleIds.has(row.sample_id)) throw new Error(`Duplicate sample_id: ${row.sample_id}.`);
+                sampleIds.add(row.sample_id);
+                conditions.add(row.condition);
+            });
+            const byComparison = new Map();
+            const seen = new Set();
+            stats.rows.forEach((row, index) => {
+                const context = `Statistics row ${index + 2}`;
+                const { feature, reference_condition: reference, comparison_condition: comparison } = row;
+                if (!feature.trim() || !reference.trim() || !comparison.trim()) {
+                    throw new Error(`${context}: feature and both conditions are required.`);
+                }
+                if (!raw.headers.includes(feature) || feature === 'sample_id' || feature === 'condition') {
+                    throw new Error(`${context}: feature "${feature}" is not a measurement column.`);
+                }
+                if (reference === comparison || !conditions.has(reference) || !conditions.has(comparison)) {
+                    throw new Error(`${context}: conditions must be different and present in the measurements.`);
+                }
+                const key = JSON.stringify([reference, comparison]);
+                const featureKey = JSON.stringify([reference, comparison, feature]);
+                if (seen.has(featureKey)) throw new Error(`${context}: duplicate feature and comparison.`);
+                seen.add(featureKey);
+                const foldChange = numberField(row.log2_fold_change, `${context} log2_fold_change`);
+                const p = numberField(row.p_value, `${context} p_value`);
+                const adjusted = numberField(row.p_adjusted_bh, `${context} p_adjusted_bh`);
+                if (p < 0 || p > 1 || adjusted <= 0 || adjusted > 1) {
+                    throw new Error(`${context}: p_value must be in [0, 1] and p_adjusted_bh in (0, 1]. Zero adjusted p-values cannot be plotted on a log axis.`);
+                }
+                if (!byComparison.has(key)) byComparison.set(key, { reference, comparison, rows: [] });
+                byComparison.get(key).rows.push({ feature, foldChange, p, adjusted });
+            });
+            const features = new Set(stats.rows.map(row => row.feature));
+            raw.rows.forEach((row, index) => {
+                features.forEach(feature => {
+                    if (row[feature].trim() !== '') numberField(row[feature], `Measurements row ${index + 2}, ${feature}`);
+                });
+            });
+            for (const group of byComparison.values()) {
+                for (const row of group.rows) {
+                    for (const condition of [group.reference, group.comparison]) {
+                        if (!raw.rows.some(sample => sample.condition === condition && sample[row.feature].trim() !== '')) {
+                            throw new Error(`No values for "${row.feature}" in condition "${condition}".`);
+                        }
+                    }
+                }
+            }
+            return { measurements: raw.rows, comparisons: Array.from(byComparison.values()) };
+        }
+
+        async function renderReplicates(row, group) {
+            const groups = [group.reference, group.comparison];
+            const colors = ['#2563eb', '#dc2626'];
+            const traces = [];
+            groups.forEach((condition, groupIndex) => {
+                const samples = measurements.filter(sample => sample.condition === condition && sample[row.feature].trim() !== '');
+                const values = samples.map(sample => Number(sample[row.feature]));
+                const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+                traces.push({
+                    type: 'bar', x: [groupIndex], y: [mean], width: 0.6,
+                    marker: { color: colors[groupIndex], opacity: 0.25 },
+                    name: `${condition} mean`, customdata: [escapeText(condition)],
+                    hovertemplate: '%{customdata}<br>Mean: %{y:.4g}<extra></extra>'
+                });
+                traces.push({
+                    type: 'scattergl', mode: 'markers',
+                    x: values.map((_, index) => groupIndex + (values.length === 1 ? 0 : (index / (values.length - 1) - 0.5) * 0.36)),
+                    y: values, customdata: samples.map(sample => [escapeText(sample.sample_id), escapeText(condition)]),
+                    marker: { color: colors[groupIndex], size: 9, opacity: 0.8 },
+                    name: `${condition} samples`,
+                    hovertemplate: 'Sample: %{customdata[0]}<br>Condition: %{customdata[1]}<br>Value: %{y:.4g}<extra></extra>'
+                });
+            });
+            await Plotly.react(replicateDiv, traces, {
+                title: { text: `Sample values: ${escapeText(row.feature)}` },
+                xaxis: { title: { text: 'Condition' }, tickvals: [0, 1], ticktext: groups.map(escapeText), range: [-0.6, 1.6] },
+                yaxis: { title: { text: escapeText(row.feature) }, rangemode: 'tozero' },
+                showlegend: false, margin: { t: 70, r: 25, b: 80, l: 75 }
+            }, plotConfig);
+        }
+
+        async function renderComparison() {
+            const group = comparisons[Number(comparisonSelect.value)];
+            activeRows = group.rows;
+            const labels = activeRows.map(row => escapeText(row.feature));
+            const comparisonLabel = `${escapeText(group.comparison)} vs ${escapeText(group.reference)}`;
+            await Plotly.react(volcanoDiv, [{
+                type: 'scattergl', mode: 'markers',
+                x: activeRows.map(row => row.foldChange),
+                y: activeRows.map(row => -Math.log10(row.adjusted)),
+                text: labels,
+                customdata: activeRows.map(row => [row.p, row.adjusted]),
+                marker: {
+                    size: 10,
+                    color: activeRows.map(row => row.adjusted <= 0.1 ? (row.foldChange >= 0 ? '#ef4444' : '#3b82f6') : '#9ca3af')
+                },
+                hovertemplate: `<b>%{text}</b><br>${comparisonLabel}<br>Log2 fold change: %{x:.4g}<br>Raw p: %{customdata[0]:.4g}<br>BH-adjusted p: %{customdata[1]:.4g}<extra></extra>`
+            }], {
+                title: { text: `Volcano plot: ${comparisonLabel}` },
+                xaxis: { title: { text: 'Log2 fold change' }, zeroline: true },
+                yaxis: { title: { text: '-log10(BH-adjusted p-value)' }, rangemode: 'tozero' },
+                shapes: [{ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 1, y1: 1, line: { color: '#6b7280', dash: 'dash' } }],
+                hovermode: 'closest', margin: { t: 70, r: 25, b: 75, l: 75 }
+            }, plotConfig);
+            volcanoDiv.removeAllListeners('plotly_click');
+            volcanoDiv.on('plotly_click', event => {
+                const point = event.points[0];
+                if (point && activeRows[point.pointNumber]) {
+                    renderReplicates(activeRows[point.pointNumber], group).catch(error => setStatus(error.message, true));
+                }
+            });
+            await renderReplicates(activeRows[0], group);
+            setStatus(`${activeRows.length} features loaded. Bars show sample means; dots show individual values. Dashed line: FDR 10%.`);
+        }
+
+        async function loadData(getTexts) {
+            const version = ++loadVersion;
+            try {
+                if (typeof Plotly === 'undefined' || typeof Papa === 'undefined') {
+                    throw new Error('Plotly or the CSV parser could not load. Check your internet connection and reload the page.');
+                }
+                setStatus('Loading data...');
+                const [rawText, statsText] = await getTexts();
+                if (version !== loadVersion) return;
+                const data = prepareData(rawText, statsText);
+                measurements = data.measurements;
+                comparisons = data.comparisons;
+                comparisonSelect.replaceChildren();
+                comparisons.forEach((group, index) => {
+                    comparisonSelect.add(new Option(`${group.comparison} vs ${group.reference}`, String(index)));
+                });
+                comparisonSelect.disabled = false;
+                await renderComparison();
+            } catch (error) {
+                if (version !== loadVersion) return;
+                comparisonSelect.disabled = true;
+                comparisonSelect.replaceChildren();
+                if (typeof Plotly !== 'undefined') {
+                    Plotly.purge(volcanoDiv);
+                    Plotly.purge(replicateDiv);
+                }
+                setStatus(error.message, true);
+            }
+        }
+
+        document.getElementById('load-files').addEventListener('click', () => loadData(async () => {
+            if (!measurementsInput.files.length || !statisticsInput.files.length) {
+                throw new Error('Select both the measurements and statistics CSV files.');
+            }
+            return Promise.all([measurementsInput.files[0].text(), statisticsInput.files[0].text()]);
+        }));
+        document.getElementById('load-example').addEventListener('click', () => loadData(async () => {
+            if (location.protocol === 'file:') {
+                throw new Error('The bundled example requires HTTP. Select both CSV files manually or serve this folder over HTTP.');
+            }
+            const paths = ['sample-stats-input/sample_measurements.csv', 'sample-stats-input/sample_statistics.csv'];
+            return Promise.all(paths.map(async path => {
+                const response = await fetch(path);
+                if (!response.ok) throw new Error(`Could not load ${path} (HTTP ${response.status}).`);
+                return response.text();
+            }));
+        }));
+        comparisonSelect.addEventListener('change', () => renderComparison().catch(error => setStatus(error.message, true)));
+        if (typeof Plotly === 'undefined' || typeof Papa === 'undefined') {
+            setStatus('Plotly or the CSV parser could not load. Check your internet connection and reload the page.', true);
+        }
+    </script>
+</body>
+</html>
