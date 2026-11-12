@@ -6,12 +6,12 @@
 # For another supported PyTorch wheel, for example: CUDA=cu126 bash create_cellpose_env.sh
 set -euo pipefail
 
-ENV_NAME="infer-subc-cellpose3"
+ENV_NAME="cellpose"
 CUDA="${CUDA:-cu128}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 
-conda create -y -n "$ENV_NAME" python=3.12 pip
+# conda create -y -n "$ENV_NAME" python=3.12 pip
 PY=(conda run --no-capture-output -n "$ENV_NAME" python)
 
 # Install a GPU-enabled PyTorch build before installing Cellpose.
